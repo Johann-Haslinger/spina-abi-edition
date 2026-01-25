@@ -18,7 +18,7 @@ import type {
 
 export class LocalSubjectRepository implements SubjectRepository {
   async list(): Promise<Subject[]> {
-    return db.subjects.orderBy('createdAtMs').toArray()
+    return db.subjects.orderBy('name').toArray()
   }
 
   async get(id: string): Promise<Subject | undefined> {
@@ -26,12 +26,11 @@ export class LocalSubjectRepository implements SubjectRepository {
   }
 
   async create(input: SubjectCreateInput): Promise<Subject> {
-    const now = Date.now()
     const row: Subject = {
       id: newId(),
       name: input.name.trim(),
       color: input.color,
-      createdAtMs: now,
+      iconEmoji: input.iconEmoji?.trim() || undefined,
     }
     await db.subjects.add(row)
     return row
@@ -45,6 +44,9 @@ export class LocalSubjectRepository implements SubjectRepository {
       ...current,
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.iconEmoji !== undefined
+        ? { iconEmoji: patch.iconEmoji?.trim() || undefined }
+        : {}),
     }
 
     await db.subjects.put(next)
@@ -79,7 +81,6 @@ export class LocalTopicRepository implements TopicRepository {
   }
 
   async create(input: TopicCreateInput): Promise<Topic> {
-    const now = Date.now()
     const existing = await this.listBySubject(input.subjectId)
     const maxIdx = existing.reduce((m, t) => Math.max(m, t.orderIndex), -1)
 
@@ -88,7 +89,7 @@ export class LocalTopicRepository implements TopicRepository {
       subjectId: input.subjectId,
       name: input.name.trim(),
       orderIndex: maxIdx + 1,
-      createdAtMs: now,
+      iconEmoji: input.iconEmoji?.trim() || undefined,
     }
     await db.topics.add(row)
     return row
@@ -102,6 +103,9 @@ export class LocalTopicRepository implements TopicRepository {
       ...current,
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.orderIndex !== undefined ? { orderIndex: patch.orderIndex } : {}),
+      ...(patch.iconEmoji !== undefined
+        ? { iconEmoji: patch.iconEmoji?.trim() || undefined }
+        : {}),
     }
 
     await db.topics.put(next)
@@ -136,7 +140,6 @@ export class LocalFolderRepository implements FolderRepository {
   }
 
   async create(input: FolderCreateInput): Promise<Folder> {
-    const now = Date.now()
     const existing = await this.listByTopic(input.topicId)
     const maxIdx = existing.reduce((m, f) => Math.max(m, f.orderIndex), -1)
 
@@ -146,7 +149,7 @@ export class LocalFolderRepository implements FolderRepository {
       parentFolderId: input.parentFolderId,
       name: input.name.trim(),
       orderIndex: maxIdx + 1,
-      createdAtMs: now,
+      iconEmoji: input.iconEmoji?.trim() || undefined,
     }
     await db.folders.add(row)
     return row
@@ -163,6 +166,9 @@ export class LocalFolderRepository implements FolderRepository {
         ? { parentFolderId: patch.parentFolderId }
         : {}),
       ...(patch.orderIndex !== undefined ? { orderIndex: patch.orderIndex } : {}),
+      ...(patch.iconEmoji !== undefined
+        ? { iconEmoji: patch.iconEmoji?.trim() || undefined }
+        : {}),
     }
 
     await db.folders.put(next)

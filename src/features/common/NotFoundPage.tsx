@@ -7,7 +7,7 @@ export function NotFoundPage() {
         Seite nicht gefunden
       </h1>
       <p className="text-sm text-slate-400">
-        Der Link ist ungültig oder die Seite existiert noch nicht.
+        Der Link ist ungültig oder die Seite existiert nicht.
       </p>
       <Link
         to="/dashboard"

@@ -1,8 +1,8 @@
 import { Clock, StopCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { useActiveSessionStore } from '../stores/activeSessionStore'
-import { useSubjectsStore } from '../stores/subjectsStore'
-import { useTopicsStore } from '../stores/topicsStore'
+import { useActiveSessionStore } from '../../stores/activeSessionStore'
+import { useSubjectsStore } from '../../stores/subjectsStore'
+import { useTopicsStore } from '../../stores/topicsStore'
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60)

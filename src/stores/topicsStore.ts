@@ -7,8 +7,16 @@ type TopicsState = {
   loadingBySubject: Record<string, boolean>
   errorBySubject: Record<string, string | undefined>
   refreshBySubject: (subjectId: string) => Promise<void>
-  createTopic: (input: { subjectId: string; name: string }) => Promise<Topic>
-  renameTopic: (id: string, subjectId: string, name: string) => Promise<Topic>
+  createTopic: (input: {
+    subjectId: string
+    name: string
+    iconEmoji?: string
+  }) => Promise<Topic>
+  renameTopic: (
+    id: string,
+    subjectId: string,
+    patch: { name?: string; iconEmoji?: string | undefined },
+  ) => Promise<Topic>
   deleteTopic: (id: string, subjectId: string) => Promise<void>
   moveTopic: (
     subjectId: string,
@@ -45,14 +53,14 @@ export const useTopicsStore = create<TopicsState>((set, get) => ({
     }
   },
 
-  createTopic: async ({ subjectId, name }) => {
-    const created = await topicRepo.create({ subjectId, name })
+  createTopic: async ({ subjectId, name, iconEmoji }) => {
+    const created = await topicRepo.create({ subjectId, name, iconEmoji })
     await get().refreshBySubject(subjectId)
     return created
   },
 
-  renameTopic: async (id, subjectId, name) => {
-    const updated = await topicRepo.update(id, { name })
+  renameTopic: async (id, subjectId, patch) => {
+    const updated = await topicRepo.update(id, patch)
     await get().refreshBySubject(subjectId)
     return updated
   },

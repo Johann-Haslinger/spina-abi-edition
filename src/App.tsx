@@ -1,9 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './app/AppShell'
-import { DashboardPage } from './pages/DashboardPage.tsx'
-import { NotFoundPage } from './pages/NotFoundPage.tsx'
-import { SubjectPage } from './pages/SubjectPage.tsx'
-import { TopicPage } from './pages/TopicPage.tsx'
+import { DashboardPage } from './features/dashboard'
+import { NotFoundPage } from './features/common'
+import { SubjectPage, TopicPage } from './features/collection'
 
 export default function App() {
   return (

@@ -1,7 +1,7 @@
 import { BookOpen, CalendarDays } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import clsx from 'clsx'
-import { ActiveSessionBanner } from './ActiveSessionBanner'
+import { ActiveSessionBanner } from '../features/session'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   clsx(

@@ -3,33 +3,39 @@ import type { Asset, AssetFile, AssetType, Folder, Subject, Topic } from '../dom
 export type SubjectCreateInput = {
   name: string
   color: string
+  iconEmoji?: string
 }
 
 export type SubjectUpdateInput = {
   name?: string
   color?: string
+  iconEmoji?: string | undefined
 }
 
 export type TopicCreateInput = {
   subjectId: string
   name: string
+  iconEmoji?: string
 }
 
 export type TopicUpdateInput = {
   name?: string
   orderIndex?: number
+  iconEmoji?: string | undefined
 }
 
 export type FolderCreateInput = {
   topicId: string
   parentFolderId?: string
   name: string
+  iconEmoji?: string
 }
 
 export type FolderUpdateInput = {
   name?: string
   parentFolderId?: string | undefined
   orderIndex?: number
+  iconEmoji?: string | undefined
 }
 
 export type AssetCreateInput = {

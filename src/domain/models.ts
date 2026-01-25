@@ -6,7 +6,7 @@ export type Subject = {
   id: Id
   name: string
   color: string
-  createdAtMs: number
+  iconEmoji?: string
 }
 
 export type Topic = {
@@ -14,7 +14,7 @@ export type Topic = {
   subjectId: Id
   name: string
   orderIndex: number
-  createdAtMs: number
+  iconEmoji?: string
 }
 
 export type Folder = {
@@ -23,7 +23,7 @@ export type Folder = {
   parentFolderId?: Id
   name: string
   orderIndex: number
-  createdAtMs: number
+  iconEmoji?: string
 }
 
 export type Asset = {

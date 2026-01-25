@@ -8,10 +8,14 @@ type SubjectsState = {
   loading: boolean
   error?: string
   refresh: () => Promise<void>
-  createSubject: (input: { name: string; color?: string }) => Promise<Subject>
+  createSubject: (input: {
+    name: string
+    color?: string
+    iconEmoji?: string
+  }) => Promise<Subject>
   updateSubject: (
     id: string,
-    patch: { name?: string; color?: string },
+    patch: { name?: string; color?: string; iconEmoji?: string | undefined },
   ) => Promise<Subject>
   deleteSubject: (id: string) => Promise<void>
 }
@@ -40,6 +44,7 @@ export const useSubjectsStore = create<SubjectsState>((set, get) => ({
     const created = await subjectRepo.create({
       name: input.name,
       color: input.color ?? defaultColor,
+      iconEmoji: input.iconEmoji,
     })
     await get().refresh()
     return created

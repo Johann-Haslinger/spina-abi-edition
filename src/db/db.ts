@@ -18,6 +18,15 @@ export class AbiDb extends Dexie {
       assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
       assetFiles: 'assetId',
     })
+
+    
+    this.version(2).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+    })
   }
 }
 

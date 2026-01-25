@@ -11,8 +11,13 @@ type FoldersState = {
     topicId: string
     parentFolderId?: string
     name: string
+    iconEmoji?: string
   }) => Promise<Folder>
-  renameFolder: (id: string, topicId: string, name: string) => Promise<Folder>
+  renameFolder: (
+    id: string,
+    topicId: string,
+    patch: { name?: string; iconEmoji?: string | undefined },
+  ) => Promise<Folder>
   deleteFolder: (id: string, topicId: string) => Promise<void>
 }
 
@@ -44,14 +49,14 @@ export const useFoldersStore = create<FoldersState>((set, get) => ({
     }
   },
 
-  createFolder: async ({ topicId, parentFolderId, name }) => {
-    const created = await folderRepo.create({ topicId, parentFolderId, name })
+  createFolder: async ({ topicId, parentFolderId, name, iconEmoji }) => {
+    const created = await folderRepo.create({ topicId, parentFolderId, name, iconEmoji })
     await get().refreshByTopic(topicId)
     return created
   },
 
-  renameFolder: async (id, topicId, name) => {
-    const updated = await folderRepo.update(id, { name })
+  renameFolder: async (id, topicId, patch) => {
+    const updated = await folderRepo.update(id, patch)
     await get().refreshByTopic(topicId)
     return updated
   },
