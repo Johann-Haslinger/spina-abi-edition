@@ -54,6 +54,31 @@ export function ExerciseReviewModal(props: {
     return { totalSeconds, correct, partial, wrong, count: rows.length }
   }, [rows])
 
+  const grouped = useMemo(() => {
+    const byProblem = new Map<number, Map<string, Attempt[]>>()
+    for (const r of rows) {
+      const p = r.problemIdx
+      const l = r.subproblemLabel
+      const sub = byProblem.get(p) ?? new Map<string, Attempt[]>()
+      const arr = sub.get(l) ?? []
+      arr.push(r.attempt)
+      sub.set(l, arr)
+      byProblem.set(p, sub)
+    }
+    const problems = Array.from(byProblem.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([problemIdx, sub]) => ({
+        problemIdx,
+        subproblems: Array.from(sub.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([label, attempts]) => ({
+            label,
+            attempts: attempts.slice().sort((a, b) => b.endedAtMs - a.endedAtMs),
+          })),
+      }))
+    return problems
+  }, [rows])
+
   return (
     <Modal
       open={props.open}
@@ -113,35 +138,60 @@ export function ExerciseReviewModal(props: {
 
         {!loading && !error ? (
           rows.length ? (
-            <div className="max-h-[55vh] space-y-2 overflow-auto pr-1">
-              {rows.map((r) => (
+            <div className="max-h-[55vh] space-y-3 overflow-auto pr-1">
+              {grouped.map((p) => (
                 <div
-                  key={r.attempt.id}
+                  key={p.problemIdx}
                   className="rounded-lg border border-slate-800 bg-slate-950/40 p-3"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-100">
-                        Aufgabe {r.problemIdx}
-                        {r.subproblemLabel}
-                      </div>
-                      <div className="mt-0.5 text-xs text-slate-400">
-                        {formatDuration(r.attempt.seconds)} ·{' '}
-                        {new Date(r.attempt.endedAtMs).toLocaleTimeString()}
-                      </div>
-                    </div>
-                    <ResultBadge result={r.attempt.result} />
+                  <div className="text-sm font-semibold text-slate-100">
+                    Aufgabe {p.problemIdx}
                   </div>
-                  {r.attempt.errorType ? (
-                    <div className="mt-2 text-xs text-rose-200">
-                      Fehler: {r.attempt.errorType}
-                    </div>
-                  ) : null}
-                  {r.attempt.note ? (
-                    <div className="mt-1 text-xs text-slate-200">
-                      Notiz: {r.attempt.note}
-                    </div>
-                  ) : null}
+                  <div className="mt-2 space-y-2">
+                    {p.subproblems.map((sp) => (
+                      <div
+                        key={`${p.problemIdx}:${sp.label}`}
+                        className="rounded-md border border-slate-800 bg-slate-950/30 p-2"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-sm font-semibold text-slate-100">
+                            Teilaufgabe {sp.label}
+                          </div>
+                          <span className="text-xs text-slate-400">
+                            Versuche: {sp.attempts.length}
+                          </span>
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          {sp.attempts.map((a) => (
+                            <div
+                              key={a.id}
+                              className="rounded-md border border-slate-800 bg-slate-950/50 p-2"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-xs text-slate-400">
+                                    {new Date(a.endedAtMs).toLocaleTimeString()} ·{' '}
+                                    {formatDuration(a.seconds)}
+                                  </div>
+                                  {a.errorType ? (
+                                    <div className="mt-1 text-xs text-rose-200">
+                                      Fehler: {a.errorType}
+                                    </div>
+                                  ) : null}
+                                  {a.note ? (
+                                    <div className="mt-1 text-xs text-slate-200">
+                                      Notiz: {a.note}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <ResultBadge result={a.result} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>

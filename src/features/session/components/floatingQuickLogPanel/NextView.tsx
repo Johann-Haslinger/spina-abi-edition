@@ -34,7 +34,7 @@ export function NextView(props: {
           onClick={props.onFinishExercise}
           className="ml-auto rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
         >
-          Übung fertig
+          Übung beenden
         </button>
       </div>
     </div>

@@ -60,7 +60,9 @@ export class AbiDb extends Dexie {
         'id, studySessionId, subproblemId, startedAtMs, endedAtMs, result',
     })
 
-      this.version(4).stores({
+    // v4: Page numbers are viewer-only. Persist exercise-level status and problems.
+    // Data loss is acceptable; we drop the old exercisePages table.
+    this.version(4).stores({
       subjects: 'id, name',
       topics: 'id, subjectId, orderIndex',
       folders: 'id, topicId, parentFolderId, orderIndex',
@@ -74,6 +76,32 @@ export class AbiDb extends Dexie {
       attempts:
         'id, studySessionId, subproblemId, startedAtMs, endedAtMs, result',
     })
+
+    // v5: Clear legacy/invalid study data from pre-refactor schemas.
+    // This avoids "attempts exist but don't show in reviews" due to old rows
+    // that still reference page-based fields (pageId) instead of exerciseId.
+    this.version(5)
+      .stores({
+        subjects: 'id, name',
+        topics: 'id, subjectId, orderIndex',
+        folders: 'id, topicId, parentFolderId, orderIndex',
+        assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+        assetFiles: 'assetId',
+
+        studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+        exercises: 'id, assetId, status',
+        problems: 'id, [exerciseId+idx], exerciseId, idx',
+        subproblems: 'id, [problemId+label], problemId, label',
+        attempts:
+          'id, studySessionId, subproblemId, startedAtMs, endedAtMs, result',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('attempts').clear()
+        await tx.table('subproblems').clear()
+        await tx.table('problems').clear()
+        await tx.table('exercises').clear()
+        await tx.table('studySessions').clear()
+      })
   }
 }
 

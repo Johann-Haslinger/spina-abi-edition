@@ -20,7 +20,6 @@ export function StudyPage() {
 
   const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId)
   const [pageNumber, setPageNumber] = useState(1)
-  const [finishExerciseOpen, setFinishExerciseOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
 
   const {
@@ -194,6 +193,12 @@ export function StudyPage() {
               onStartAttempt={startAttempt}
               onCancelAttempt={cancelAttempt}
               onSaveAttempt={async ({ result, note, errorType }) => {
+                if (!active) throw new Error('Keine aktive Session')
+                await ensureStudySession({
+                  subjectId: active.subjectId,
+                  topicId: active.topicId,
+                  startedAtMs: active.startedAtMs,
+                })
                 await logAttempt({
                   assetId: guardState.asset.id,
                   problemIdx,
@@ -212,7 +217,7 @@ export function StudyPage() {
               onMarkProgress={() => setReviewOpen(true)}
               onFinishExercise={async () => {
                 await setExerciseStatus(guardState.asset.id, 'covered')
-                setFinishExerciseOpen(true)
+                setReviewOpen(true)
               }}
             />
           </>
@@ -258,37 +263,6 @@ export function StudyPage() {
         />
       ) : null}
 
-      <Modal
-        open={finishExerciseOpen}
-        title="Übung fertig?"
-        onClose={() => setFinishExerciseOpen(false)}
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setFinishExerciseOpen(false)}
-              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-            >
-              Abbrechen
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFinishExerciseOpen(false)
-                navigate(-1)
-              }}
-              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-            >
-              Zurück zur Liste
-            </button>
-          </>
-        }
-      >
-        <div className="text-sm text-slate-300">
-          Als nächstes bauen wir hier die „Nächste Übung“-Empfehlung (basierend
-          auf: noch nie bearbeitet / lange her / unvollständig).
-        </div>
-      </Modal>
     </div>
   )
 }

@@ -11,6 +11,7 @@ export function ReviewView(props: {
   const [note, setNote] = useState('')
   const [errorType, setErrorType] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const showError = useMemo(() => result !== 'correct', [result])
 
@@ -61,17 +62,26 @@ export function ReviewView(props: {
         />
       </label>
 
+      {saveError ? (
+        <div className="rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
+          Speichern fehlgeschlagen: {saveError}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={async () => {
             setSaving(true)
+            setSaveError(null)
             try {
               await props.onSave({
                 result,
                 note: note.trim() || undefined,
                 errorType: showError ? errorType.trim() || undefined : undefined,
               })
+            } catch (e) {
+              setSaveError(e instanceof Error ? e.message : 'Fehler')
             } finally {
               setSaving(false)
             }
