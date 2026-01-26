@@ -51,6 +51,7 @@ export type StudySession = {
   subjectId: Id
   topicId: Id
   startedAtMs: number
+  plannedDurationMs?: number
   endedAtMs?: number
 }
 

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 export function Modal(props: {
   open: boolean
@@ -11,8 +12,8 @@ export function Modal(props: {
   const { open, title, onClose, children, footer } = props
   if (!open) return null
 
-  return (
-    <div className="fixed inset-0 z-50">
+  const node = (
+    <div className="fixed inset-0 z-10000">
       <div
         className="absolute inset-0 bg-black/60"
         onClick={onClose}
@@ -41,5 +42,10 @@ export function Modal(props: {
       </div>
     </div>
   )
+
+  // Use a portal so the modal is never clipped by ancestors
+  // (e.g. headers with backdrop-filter/overflow contexts).
+  if (typeof document === 'undefined') return node
+  return createPortal(node, document.body)
 }
 

@@ -9,7 +9,12 @@ import type {
 } from '../../domain/models'
 
 export interface StudySessionRepository {
-  create(input: { subjectId: string; topicId: string; startedAtMs: number }): Promise<StudySession>
+  create(input: {
+    subjectId: string
+    topicId: string
+    startedAtMs: number
+    plannedDurationMs?: number
+  }): Promise<StudySession>
   end(id: string, endedAtMs: number): Promise<void>
   get(id: string): Promise<StudySession | undefined>
 }

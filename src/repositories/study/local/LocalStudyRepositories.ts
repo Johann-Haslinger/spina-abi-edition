@@ -14,12 +14,14 @@ export class LocalStudySessionRepository implements StudySessionRepository {
     subjectId: string
     topicId: string
     startedAtMs: number
+    plannedDurationMs?: number
   }): Promise<StudySession> {
     const row: StudySession = {
       id: newId(),
       subjectId: input.subjectId,
       topicId: input.topicId,
       startedAtMs: input.startedAtMs,
+      plannedDurationMs: input.plannedDurationMs,
     }
     await db.studySessions.add(row)
     return row

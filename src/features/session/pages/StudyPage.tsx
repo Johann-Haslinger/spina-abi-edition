@@ -67,6 +67,7 @@ export function StudyPage() {
       subjectId: active.subjectId,
       topicId: active.topicId,
       startedAtMs: active.startedAtMs,
+      plannedDurationMs: active.plannedDurationMs,
     })
   }, [guardState.kind, active, ensureStudySession])
 
@@ -198,6 +199,7 @@ export function StudyPage() {
                   subjectId: active.subjectId,
                   topicId: active.topicId,
                   startedAtMs: active.startedAtMs,
+                  plannedDurationMs: active.plannedDurationMs,
                 })
                 await logAttempt({
                   assetId: guardState.asset.id,

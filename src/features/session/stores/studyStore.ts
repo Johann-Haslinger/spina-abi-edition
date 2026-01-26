@@ -19,6 +19,7 @@ type StudyState = {
     subjectId: string
     topicId: string
     startedAtMs: number
+    plannedDurationMs?: number
   }) => Promise<string>
 
   setProblemIdx: (idx: number) => void
@@ -50,10 +51,15 @@ export const useStudyStore = create<StudyState>((set, get) => ({
   subproblemLabel: 'a',
   exerciseStatusByAssetId: {},
 
-  ensureStudySession: async ({ subjectId, topicId, startedAtMs }) => {
+  ensureStudySession: async ({ subjectId, topicId, startedAtMs, plannedDurationMs }) => {
     const existing = get().studySessionId
     if (existing) return existing
-    const created = await studySessionRepo.create({ subjectId, topicId, startedAtMs })
+    const created = await studySessionRepo.create({
+      subjectId,
+      topicId,
+      startedAtMs,
+      plannedDurationMs,
+    })
     set({ studySessionId: created.id })
     return created.id
   },

@@ -7,8 +7,8 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Asset, AssetType, Folder } from '../../../domain/models'
 import { downloadBlob, openBlobInNewTab } from '../../../lib/blob'
 import { exerciseRepo } from '../../../repositories'
-import { useAssetsStore } from '../../../stores/assetsStore'
 import { useActiveSessionStore } from '../../../stores/activeSessionStore'
+import { useAssetsStore } from '../../../stores/assetsStore'
 import { useFoldersStore } from '../../../stores/foldersStore'
 import { useSubjectsStore } from '../../../stores/subjectsStore'
 import { useTopicsStore } from '../../../stores/topicsStore'
@@ -17,9 +17,9 @@ import {
   SessionSummaryModal,
   type SessionSummaryState,
 } from '../../session/modals/SessionSummaryModal'
+import { AssetItem } from './components/AssetItem'
 import { FilterChip } from './components/FilterChip'
 import { FolderTree } from './components/FolderTree'
-import { AssetItem } from './components/AssetItem'
 import { UploadAssetModal } from './modals/UploadAssetModal'
 import { UpsertFolderModal } from './modals/UpsertFolderModal'
 
@@ -156,7 +156,7 @@ export function TopicPage() {
   async function openAsset(asset: Asset) {
     if (asset.type === 'exercise') {
       if (active) navigate(`/study/${asset.id}`)
-      else navigate(`/exercise/${asset.id}`)
+      else navigate(`/assets/${asset.id}`)
       return
     }
     const file = await getFile(asset.id)
