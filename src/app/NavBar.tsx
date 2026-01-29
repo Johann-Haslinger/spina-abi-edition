@@ -13,7 +13,7 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 export function NavBar() {
   return (
-    <header className="backdrop-blur">
+    <header className="fixed inset-x-0 top-0 z-50">
       <div className="mx-auto grid max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-3">
         <div className="justify-self-start flex font-semibold items-center gap-3 text-xl">
           Spina

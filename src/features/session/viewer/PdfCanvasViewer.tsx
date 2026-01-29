@@ -1,185 +1,246 @@
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react'
-import { pdfjs } from './pdfjs'
-import type { PDFDocumentProxy } from 'pdfjs-dist'
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { pdfjs } from './pdfjs';
 
 type PdfCanvasViewerProps = {
-  data: Uint8Array
-  pageNumber: number
-  onPageNumberChange: (next: number) => void
-  className?: string
-}
+  data: Uint8Array;
+  pageNumber: number;
+  onPageNumberChange: (next: number) => void;
+  accentColor?: string;
+};
 
-type Pan = { x: number; y: number }
+type Point = { x: number; y: number };
 
 export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
-  const { data, pageNumber, onPageNumberChange } = props
+  const { data, onPageNumberChange } = props;
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const containerRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
+  const pageRefs = useRef<Array<HTMLDivElement | null>>([]);
 
-  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
-  const [numPages, setNumPages] = useState<number | null>(null)
-  const [scale, setScale] = useState(1.25)
-  const [pan, setPan] = useState<Pan>({ x: 0, y: 0 })
-  const [drag, setDrag] = useState<{ active: boolean; startX: number; startY: number; base: Pan }>(
-    { active: false, startX: 0, startY: 0, base: { x: 0, y: 0 } },
-  )
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
+  const [numPages, setNumPages] = useState<number | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
+
+  const [viewScale, setViewScale] = useState(1.25);
+  const renderScale = 1.6;
+
+  const [docLoading, setDocLoading] = useState(false);
+  const [hasRenderedOnce, setHasRenderedOnce] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [pan, setPan] = useState<Point>({ x: 16, y: 16 });
+  const [isInteracting, setIsInteracting] = useState(false);
+  const didInitialCenterRef = useRef(false);
+
+  const renderViewportByPageRef = useRef<Array<{ width: number; height: number } | null>>([]);
+
+  const pointersRef = useRef<Map<number, Point>>(new Map());
+  const gestureRef = useRef<
+    | null
+    | {
+        kind: 'pan';
+        startPan: Point;
+        startPointer: Point;
+      }
+    | {
+        kind: 'pinch';
+        startPan: Point;
+        startRatio: number;
+        startDistance: number;
+        startMid: Point;
+        contentAtMid: Point;
+      }
+  >(null);
+
+  const ratio = viewScale / renderScale;
+  const gridSizePx = Math.max(10, Math.round(34 * ratio));
+  const gridDotColor = hexToRgba(props.accentColor, 0.32) ?? 'rgba(0,0,0,0.18)';
 
   useEffect(() => {
-    let cancelled = false
-    const dataCopy = data.slice(0) 
-    const task = pdfjs.getDocument({ data: dataCopy })
-    setLoading(true)
-    setError(null)
-    setNumPages(null)
-    setDoc(null)
+    let cancelled = false;
+    const dataCopy = data.slice(0);
+    const task = pdfjs.getDocument({ data: dataCopy });
+    setDocLoading(true);
+    setError(null);
+    setNumPages(null);
+    setDoc(null);
+    setHasRenderedOnce(false);
+    setLayoutReady(false);
+    didInitialCenterRef.current = false;
     task.promise
       .then((doc) => {
-        if (cancelled) return
-        setDoc(doc)
-        setNumPages(doc.numPages)
+        if (cancelled) return;
+        setDoc(doc);
+        setNumPages(doc.numPages);
       })
       .catch((e) => {
-        if (cancelled) return
-        setError(e instanceof Error ? e.message : 'PDF Fehler')
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : 'PDF Fehler');
       })
       .finally(() => {
-        if (cancelled) return
-        setLoading(false)
-      })
+        if (cancelled) return;
+        setDocLoading(false);
+      });
 
     return () => {
-      cancelled = true
-    }
-  }, [data])
+      cancelled = true;
+    };
+  }, [data]);
 
-  useEffect(() => {
-    setPan({ x: 0, y: 0 })
-  }, [pageNumber, scale])
+  const pageNumbers = useMemo(() => {
+    const n = numPages ?? 0;
+    return Array.from({ length: n }, (_, idx) => idx + 1);
+  }, [numPages]);
 
   useLayoutEffect(() => {
-    let cancelled = false
+    let cancelled = false;
+    async function run() {
+      if (!doc) return;
+      if (!numPages) return;
+      if (layoutReady) return;
+      const el = containerRef.current;
+      if (!el) return;
+
+      // Measure widths (without rendering) so we can center BEFORE first render.
+      let maxW = 0;
+      for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+        const page = await doc.getPage(pageNumber);
+        if (cancelled) return;
+        const vp = page.getViewport({ scale: renderScale });
+        if (vp.width > maxW) maxW = vp.width;
+      }
+
+      const padX = 16 * 2; // matches px-4
+      const contentW = padX + maxW;
+      const rect = el.getBoundingClientRect();
+      setPan((p) => ({ x: (rect.width - contentW * ratio) / 2, y: p.y }));
+
+      didInitialCenterRef.current = true;
+      setLayoutReady(true);
+    }
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, numPages, layoutReady, ratio, renderScale]);
+
+  useLayoutEffect(() => {
+    let cancelled = false;
     async function render() {
-      if (!canvasRef.current) return
-      if (!doc) return
-      setLoading(true)
-      setError(null)
+      if (!doc) return;
+      if (!numPages) return;
+      if (!layoutReady) return;
+      setError(null);
+
       try {
-        const safePage = clamp(pageNumber, 1, doc.numPages)
-        if (safePage !== pageNumber) onPageNumberChange(safePage)
-        const page = await doc.getPage(safePage)
-        if (cancelled) return
+        for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+          const canvas = canvasRefs.current[pageNumber - 1];
+          if (!canvas) continue;
 
-        const viewport = page.getViewport({ scale })
-        const canvas = canvasRef.current
-        const ctx = canvas.getContext('2d')
-        if (!ctx) throw new Error('Canvas context missing')
+          const page = await doc.getPage(pageNumber);
+          if (cancelled) return;
 
-        const dpr = window.devicePixelRatio || 1
-        canvas.width = Math.floor(viewport.width * dpr)
-        canvas.height = Math.floor(viewport.height * dpr)
-        canvas.style.width = `${Math.floor(viewport.width)}px`
-        canvas.style.height = `${Math.floor(viewport.height)}px`
+          const viewport = page.getViewport({ scale: renderScale });
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas context missing');
 
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.floor(viewport.width * dpr);
+          canvas.height = Math.floor(viewport.height * dpr);
+          renderViewportByPageRef.current[pageNumber - 1] = {
+            width: viewport.width,
+            height: viewport.height,
+          };
 
-        const renderTask = page.render({ canvasContext: ctx, viewport, canvas })
-        await renderTask.promise
+          // base CSS size (at renderScale). actual display size comes from stage transform ratio.
+          canvas.style.width = `${Math.floor(viewport.width)}px`;
+          canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          const renderTask = page.render({ canvasContext: ctx, viewport, canvas });
+          await renderTask.promise;
+          if (cancelled) return;
+        }
+        if (!cancelled) setHasRenderedOnce(true);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'PDF Render Fehler')
-      } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setError(e instanceof Error ? e.message : 'PDF Render Fehler');
       }
     }
-    void render()
+    void render();
     return () => {
-      cancelled = true
-    }
-  }, [doc, pageNumber, scale, onPageNumberChange])
+      cancelled = true;
+    };
+  }, [doc, numPages, renderScale, layoutReady]);
 
-  function onPointerDown(e: React.PointerEvent) {
-    if (e.button !== 0) return
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    setDrag({ active: true, startX: e.clientX, startY: e.clientY, base: pan })
+  // (initial centering is handled pre-render via layoutReady)
+
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root) return;
+    if (!numPages) return;
+
+    const ratioByPage = new Map<number, number>();
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const page = Number((e.target as HTMLElement).dataset.page ?? '');
+          if (!Number.isFinite(page)) continue;
+          ratioByPage.set(page, e.isIntersecting ? e.intersectionRatio : 0);
+        }
+
+        let bestPage: number | null = null;
+        let bestRatio = 0;
+        for (const [page, r] of ratioByPage.entries()) {
+          if (r > bestRatio) {
+            bestRatio = r;
+            bestPage = page;
+          }
+        }
+        if (!bestPage) return;
+        onPageNumberChange(bestPage);
+      },
+      { root, threshold: [0, 0.2, 0.4, 0.6, 0.8] },
+    );
+
+    for (const el of pageRefs.current) {
+      if (el) obs.observe(el);
+    }
+    return () => obs.disconnect();
+  }, [numPages, onPageNumberChange]);
+
+  function containerPoint(e: { clientX: number; clientY: number }): Point {
+    const el = containerRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  function onPointerMove(e: React.PointerEvent) {
-    if (!drag.active) return
-    const dx = e.clientX - drag.startX
-    const dy = e.clientY - drag.startY
-    setPan({ x: drag.base.x + dx, y: drag.base.y + dy })
+  function contentPointFromContainerPoint(p: Point): Point {
+    return { x: (p.x - pan.x) / ratio, y: (p.y - pan.y) / ratio };
   }
 
-  function onPointerUp(e: React.PointerEvent) {
-    if (!drag.active) return
-    try {
-      ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
-    } catch {
-      // HINT: This can be ignored
-    }
-    setDrag((d) => ({ ...d, active: false }))
+  function setPanToKeepContentPointFixed(content: Point, containerPt: Point, nextRatio: number) {
+    setPan({ x: containerPt.x - nextRatio * content.x, y: containerPt.y - nextRatio * content.y });
+  }
+
+  function clamp(n: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, n));
+  }
+
+  function hexToRgba(hex: string | undefined, alpha: number) {
+    if (!hex) return undefined;
+    const raw = hex.trim().replace('#', '');
+    if (raw.length !== 6) return undefined;
+    const r = parseInt(raw.slice(0, 2), 16);
+    const g = parseInt(raw.slice(2, 4), 16);
+    const b = parseInt(raw.slice(4, 6), 16);
+    if (![r, g, b].every((n) => Number.isFinite(n))) return undefined;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   return (
-    <div className={props.className}>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm text-slate-200">
-          Seite
-          <strong className="text-slate-50">{pageNumber}</strong>
-          <span className="text-slate-400">/</span>
-          <span className="text-slate-300">{numPages ?? '—'}</span>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onPageNumberChange(Math.max(1, pageNumber - 1))}
-          className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700 disabled:opacity-40"
-          disabled={pageNumber <= 1}
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Zurück
-        </button>
-        <button
-          type="button"
-          onClick={() => onPageNumberChange(pageNumber + 1)}
-          className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700 disabled:opacity-40"
-          disabled={numPages !== null && pageNumber >= numPages}
-        >
-          Weiter
-          <ChevronRight className="h-4 w-4" />
-        </button>
-
-        <div className="ml-auto inline-flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setScale((s) => Math.max(0.5, round2(s - 0.25)))}
-            className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-          >
-            <ZoomOut className="h-4 w-4" />
-            Zoom
-          </button>
-          <button
-            type="button"
-            onClick={() => setScale((s) => Math.min(3, round2(s + 0.25)))}
-            className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-          >
-            <ZoomIn className="h-4 w-4" />
-            Zoom
-          </button>
-          <div className="rounded-md bg-slate-900 px-3 py-2 text-sm text-slate-200">
-            {Math.round(scale * 100)}%
-          </div>
-        </div>
-      </div>
-
+    <div className="h-full">
       {error ? (
         <div className="mb-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
           {error}
@@ -188,35 +249,155 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
 
       <div
         ref={containerRef}
-        className="relative h-[70vh] overflow-hidden rounded-xl border border-slate-800 bg-slate-950"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        style={{ touchAction: 'none', cursor: drag.active ? 'grabbing' : 'grab' }}
+        className="relative h-full overflow-hidden"
+        style={{
+          touchAction: 'none',
+          userSelect: 'none',
+          cursor: isInteracting ? 'grabbing' : 'grab',
+          backgroundImage: `radial-gradient(circle at 1px 1px, ${gridDotColor} 1px, transparent 0)`,
+          backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
+          backgroundPosition: `${Math.round(pan.x)}px ${Math.round(pan.y)}px`,
+        }}
+        onWheel={(e) => {
+          e.preventDefault();
+          // zoom with pinch (ctrlKey) or Alt/Cmd; otherwise pan like scroll.
+          const isZoom = e.ctrlKey || e.altKey || e.metaKey;
+          if (!isZoom) {
+            setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+            return;
+          }
+
+          const c = containerPoint(e);
+          const content = contentPointFromContainerPoint(c);
+          const intensity = e.ctrlKey ? 0.004 : 0.0028;
+          const factor = Math.exp(-e.deltaY * intensity);
+          const nextView = clamp(viewScale * factor, 0.6, 3.5);
+          if (nextView === viewScale) return;
+
+          // Update viewScale; ratio updates automatically.
+          // Keep anchor stable by updating pan based on nextRatio.
+          const nextRatio = nextView / renderScale;
+          setViewScale(nextView);
+          setPanToKeepContentPointFixed(content, c, nextRatio);
+        }}
+        onPointerDown={(e) => {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          pointersRef.current.set(e.pointerId, containerPoint(e));
+          setIsInteracting(true);
+
+          const pts = Array.from(pointersRef.current.values());
+          if (pts.length === 1) {
+            gestureRef.current = {
+              kind: 'pan',
+              startPan: pan,
+              startPointer: pts[0],
+            };
+          } else if (pts.length === 2) {
+            const [a, b] = pts;
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            const dist = Math.hypot(b.x - a.x, b.y - a.y);
+            const contentAtMid = contentPointFromContainerPoint(mid);
+            gestureRef.current = {
+              kind: 'pinch',
+              startPan: pan,
+              startRatio: ratio,
+              startDistance: Math.max(1, dist),
+              startMid: mid,
+              contentAtMid,
+            };
+          }
+        }}
+        onPointerMove={(e) => {
+          if (!pointersRef.current.has(e.pointerId)) return;
+          pointersRef.current.set(e.pointerId, containerPoint(e));
+          const pts = Array.from(pointersRef.current.values());
+
+          if (pts.length === 2) {
+            const [a, b] = pts;
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            const dist = Math.hypot(b.x - a.x, b.y - a.y);
+
+            const g = gestureRef.current;
+            if (!g || g.kind !== 'pinch') return;
+            const nextRatio = clamp(
+              g.startRatio * (dist / g.startDistance),
+              0.6 / renderScale,
+              3.5 / renderScale,
+            );
+            const nextView = clamp(nextRatio * renderScale, 0.6, 3.5);
+            setViewScale(nextView);
+            setPanToKeepContentPointFixed(g.contentAtMid, mid, nextRatio);
+            return;
+          }
+
+          if (pts.length === 1) {
+            const g = gestureRef.current;
+            if (!g || g.kind !== 'pan') return;
+            const p = pts[0];
+            const dx = p.x - g.startPointer.x;
+            const dy = p.y - g.startPointer.y;
+            setPan({ x: g.startPan.x + dx, y: g.startPan.y + dy });
+          }
+        }}
+        onPointerUp={(e) => {
+          pointersRef.current.delete(e.pointerId);
+          if (pointersRef.current.size === 0) {
+            setIsInteracting(false);
+            gestureRef.current = null;
+          } else if (pointersRef.current.size === 1) {
+            // continue panning with remaining pointer
+            const p = Array.from(pointersRef.current.values())[0];
+            gestureRef.current = { kind: 'pan', startPan: pan, startPointer: p };
+          }
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch {
+            // ignore
+          }
+        }}
+        onPointerCancel={(e) => {
+          pointersRef.current.delete(e.pointerId);
+          if (pointersRef.current.size === 0) {
+            setIsInteracting(false);
+            gestureRef.current = null;
+          }
+        }}
       >
         <div
           className="absolute left-0 top-0"
-          style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}
+          style={{
+            transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${ratio})`,
+            transformOrigin: '0 0',
+          }}
         >
-          <canvas ref={canvasRef} />
+          <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 py-6">
+            {pageNumbers.map((n) => (
+              <div
+                key={n}
+                ref={(el) => {
+                  pageRefs.current[n - 1] = el;
+                }}
+                data-page={n}
+                className="w-full"
+              >
+                <div className="mx-auto w-fit rounded-md bg-white shadow-2xl">
+                  <canvas
+                    ref={(el) => {
+                      canvasRefs.current[n - 1] = el;
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {loading ? (
-          <div className="absolute inset-0 grid place-items-center text-sm text-slate-400">
+        {!hasRenderedOnce && (docLoading || !layoutReady) ? (
+          <div className="absolute inset-0 grid place-items-center text-sm text-slate-500">
             PDF lädt…
           </div>
         ) : null}
       </div>
     </div>
-  )
+  );
 }
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n))
-}
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100
-}
-

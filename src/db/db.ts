@@ -142,9 +142,10 @@ export class AbiDb extends Dexie {
         await tx
           .table('subjects')
           .toCollection()
-          .modify((s: any) => {
-            if (s?.color && typeof s.color === 'object' && 'toneOrder' in s.color) {
-              delete s.color.toneOrder;
+          .modify((s: { color?: unknown }) => {
+            const c = s.color;
+            if (c && typeof c === 'object' && 'toneOrder' in c) {
+              delete (c as Record<string, unknown>).toneOrder;
             }
           });
       });
