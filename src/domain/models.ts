@@ -1,6 +1,6 @@
-export type Id = string
+export type Id = string;
 
-export type AssetType = 'exercise' | 'note' | 'cheatsheet' | 'file'
+export type AssetType = 'exercise' | 'note' | 'cheatsheet' | 'file';
 
 export const SubjectColorId = {
   Green: 'green',
@@ -8,99 +8,95 @@ export const SubjectColorId = {
   Orange: 'orange',
   Red: 'red',
   DarkBlue: 'darkBlue',
-} as const
+} as const;
 
-export type SubjectColorId = (typeof SubjectColorId)[keyof typeof SubjectColorId]
-
-export type SubjectToneOrder = 'lightTop' | 'darkTop'
+export type SubjectColorId = (typeof SubjectColorId)[keyof typeof SubjectColorId];
 
 export type SubjectColorAssignment = {
-  colorId: SubjectColorId
-  toneOrder: SubjectToneOrder
-}
+  colorId: SubjectColorId;
+};
 
 export type Subject = {
-  id: Id
-  name: string
-  color: SubjectColorAssignment
-  iconEmoji?: string
-}
+  id: Id;
+  name: string;
+  color: SubjectColorAssignment;
+  iconEmoji?: string;
+};
 
 export type Topic = {
-  id: Id
-  subjectId: Id
-  name: string
-  orderIndex: number
-  iconEmoji?: string
-}
+  id: Id;
+  subjectId: Id;
+  name: string;
+  orderIndex: number;
+  iconEmoji?: string;
+};
 
 export type Folder = {
-  id: Id
-  topicId: Id
-  parentFolderId?: Id
-  name: string
-  orderIndex: number
-  iconEmoji?: string
-}
+  id: Id;
+  topicId: Id;
+  parentFolderId?: Id;
+  name: string;
+  orderIndex: number;
+  iconEmoji?: string;
+};
 
 export type Asset = {
-  id: Id
-  subjectId: Id
-  topicId: Id
-  folderId?: Id
-  type: AssetType
-  title: string
-  createdAtMs: number
-}
+  id: Id;
+  subjectId: Id;
+  topicId: Id;
+  folderId?: Id;
+  type: AssetType;
+  title: string;
+  createdAtMs: number;
+};
 
 export type AssetFile = {
-  assetId: Id
-  mimeType: string
-  originalName: string
-  sizeBytes: number
-  blob: Blob
-}
+  assetId: Id;
+  mimeType: string;
+  originalName: string;
+  sizeBytes: number;
+  blob: Blob;
+};
 
-export type ExercisePageStatus = 'unknown' | 'partial' | 'captured' | 'covered'
+export type ExercisePageStatus = 'unknown' | 'partial' | 'captured' | 'covered';
 
 export type StudySession = {
-  id: Id
-  subjectId: Id
-  topicId: Id
-  startedAtMs: number
-  plannedDurationMs?: number
-  endedAtMs?: number
-}
+  id: Id;
+  subjectId: Id;
+  topicId: Id;
+  startedAtMs: number;
+  plannedDurationMs?: number;
+  endedAtMs?: number;
+};
 
 export type Exercise = {
-  id: Id
-  assetId: Id
-  status: ExercisePageStatus
-}
+  id: Id;
+  assetId: Id;
+  status: ExercisePageStatus;
+};
 
 export type Problem = {
-  id: Id
-  exerciseId: Id
-  idx: number
-}
+  id: Id;
+  exerciseId: Id;
+  idx: number;
+};
 
 export type Subproblem = {
-  id: Id
-  problemId: Id
-  label: string
-}
+  id: Id;
+  problemId: Id;
+  label: string;
+};
 
-export type AttemptResult = 'correct' | 'partial' | 'wrong'
+export type AttemptResult = 'correct' | 'partial' | 'wrong';
 
 export type Attempt = {
-  id: Id
-  studySessionId: Id
-  subproblemId: Id
-  startedAtMs: number
-  endedAtMs: number
-  seconds: number
-  result: AttemptResult
-  note?: string
-  errorType?: string
-}
-
+  id: Id;
+  studySessionId: Id;
+  subproblemId: Id;
+  startedAtMs: number;
+  endedAtMs: number;
+  seconds: number;
+  result: AttemptResult;
+  note?: string;
+  errorType?: string;
+};

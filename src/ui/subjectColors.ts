@@ -1,16 +1,13 @@
-import { SubjectColorId, type SubjectColorAssignment } from '../domain/models'
+import { SubjectColorId, type SubjectColorAssignment } from '../domain/models';
 
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark';
 
-export type SubjectColorTones = {
-  lightHex: string
-  darkHex: string
-}
+export type SubjectColorHex = string;
 
 export type SubjectColorOption = {
-  id: SubjectColorId
-  name: string
-}
+  id: SubjectColorId;
+  name: string;
+};
 
 export const subjectColorOptions: SubjectColorOption[] = [
   { id: SubjectColorId.Green, name: 'Grün' },
@@ -18,28 +15,25 @@ export const subjectColorOptions: SubjectColorOption[] = [
   { id: SubjectColorId.Orange, name: 'Orange' },
   { id: SubjectColorId.Red, name: 'Rot' },
   { id: SubjectColorId.DarkBlue, name: 'Dunkelblau' },
-]
+];
 
-export const SUBJECT_COLOR_PALETTES: Record<ThemeMode, Record<SubjectColorId, SubjectColorTones>> =
-  {
-    light: {
-      [SubjectColorId.Green]: { lightHex: '#86EFAC', darkHex: '#16A34A' },
-      [SubjectColorId.LightBlue]: { lightHex: '#93C5FD', darkHex: '#2563EB' },
-      [SubjectColorId.Orange]: { lightHex: '#E6D7B0', darkHex: '#E98226' },
-      [SubjectColorId.Red]: { lightHex: '#E8C6D6', darkHex: '#E12F25' },
-      [SubjectColorId.DarkBlue]: { lightHex: '#E8E9DB', darkHex: '#1C65CB' },
-    },
-    dark: {
-      [SubjectColorId.Green]: { lightHex: '#22C55E', darkHex: '#14532D' },
-      [SubjectColorId.LightBlue]: { lightHex: '#3B82F6', darkHex: '#1E3A8A' },
-      [SubjectColorId.Orange]: { lightHex: '#F97316', darkHex: '#7C2D12' },
-      [SubjectColorId.Red]: { lightHex: '#FB7185', darkHex: '#881337' },
-      [SubjectColorId.DarkBlue]: { lightHex: '#60A5FA', darkHex: '#172554' },
-    },
-  }
+export const SUBJECT_COLORS: Record<ThemeMode, Record<SubjectColorId, SubjectColorHex>> = {
+  light: {
+    [SubjectColorId.Green]: '#16A34A',
+    [SubjectColorId.LightBlue]: '#2563EB',
+    [SubjectColorId.Orange]: '#E98226',
+    [SubjectColorId.Red]: '#E12F25',
+    [SubjectColorId.DarkBlue]: '#1C65CB',
+  },
+  dark: {
+    [SubjectColorId.Green]: '#22C55E',
+    [SubjectColorId.LightBlue]: '#3B82F6',
+    [SubjectColorId.Orange]: '#F97316',
+    [SubjectColorId.Red]: '#FB7185',
+    [SubjectColorId.DarkBlue]: '#60A5FA',
+  },
+};
 
 export const DEFAULT_SUBJECT_COLOR: SubjectColorAssignment = {
   colorId: SubjectColorId.DarkBlue,
-  toneOrder: 'lightTop',
-}
-
+};
