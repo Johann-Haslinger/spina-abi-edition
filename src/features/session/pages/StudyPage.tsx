@@ -27,6 +27,7 @@ export function StudyPage() {
     attemptStartedAtMs,
     problemIdx,
     subproblemLabel,
+    bindToSession,
     ensureStudySession,
     setProblemIdx,
     setSubproblemLabel,
@@ -40,8 +41,13 @@ export function StudyPage() {
   } = useStudyStore()
 
   useEffect(() => {
-    reset()
-  }, [active?.startedAtMs, active?.subjectId, active?.topicId, reset])
+    if (!active) return
+    bindToSession({
+      subjectId: active.subjectId,
+      topicId: active.topicId,
+      startedAtMs: active.startedAtMs,
+    })
+  }, [active, bindToSession])
 
 
   const guardState = useMemo(() => {

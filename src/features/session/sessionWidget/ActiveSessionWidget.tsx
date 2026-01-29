@@ -1,7 +1,7 @@
 import { GripVertical } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IoStop } from 'react-icons/io5';
-import { useNavigate } from 'react-router-dom';
+import { matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { studySessionRepo } from '../../../repositories';
 import { useActiveSessionStore, type ActiveSession } from '../../../stores/activeSessionStore';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
@@ -15,6 +15,7 @@ import { formatDuration, getElapsedMs } from './utils';
 export function ActiveSessionWidget(props: { active: ActiveSession }) {
   const { active } = props;
   const navigate = useNavigate();
+  const location = useLocation();
   const { end } = useActiveSessionStore();
   const { studySessionId, reset } = useStudyStore();
   const subjectColor = useSubjectAccentColor(active.subjectId);
@@ -24,10 +25,15 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   const nowMs = useSessionClock(active);
   const { subjectName, topicName } = useSessionNames(active);
 
+  const isAssetOrStudyPage =
+    !!matchPath('/study/:assetId', location.pathname) ||
+    !!matchPath('/assets/:assetId', location.pathname) ||
+    !!matchPath('/subjects/:subjectId/topics/:topicId/:assetId', location.pathname);
+
   const { containerRef, pos, gripProps } = useDraggablePosition({
-    width: 380,
-    initialTop: 76,
-    initialRight: 16,
+    width: 200,
+    initialTop: 12,
+    initialRight: 12,
     padding: 8,
   });
 
@@ -65,7 +71,10 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
       style={{ left: pos.x, top: pos.y }}
     >
       <div className="rounded-full overflow-hidden bg-white">
-        <div style={{ backgroundColor: subjectColor + '4D' }} className="w-full h-full">
+        <div
+          style={{ backgroundColor: isAssetOrStudyPage ? subjectColor : subjectColor + '4D' }}
+          className="w-full h-full"
+        >
           <div className="flex items-stretch p-1.5">
             <button
               style={{ backgroundColor: subjectColor }}
@@ -161,7 +170,9 @@ function useDraggablePosition(input: {
   const [pos, setPos] = useState(() => {
     const w = input.width;
     const x =
-      typeof window === 'undefined' ? 16 : Math.max(16, window.innerWidth - w - input.initialRight);
+      typeof window === 'undefined'
+        ? input.padding
+        : Math.max(input.padding, window.innerWidth - w - input.initialRight);
     return { x, y: input.initialTop };
   });
 

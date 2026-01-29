@@ -1,5 +1,6 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
+import { LastVisitedRedirect } from './app/LastVisitedRedirect';
 import { AssetPage, CollectionPage, SubjectPage, TopicPage } from './features/collection';
 import { NotFoundPage } from './features/common';
 import { DashboardPage } from './features/dashboard';
@@ -9,7 +10,7 @@ export const router = createBrowserRouter([
   {
     element: <AppShell />,
     children: [
-      { path: '/', element: <Navigate to="/dashboard" replace /> },
+      { path: '/', element: <LastVisitedRedirect /> },
       { path: '/dashboard', element: <DashboardPage />, handle: { crumb: 'dashboard' } },
       { path: '/collection', element: <CollectionPage />, handle: { crumb: 'collection' } },
       { path: '/subjects/:subjectId', element: <SubjectPage />, handle: { crumb: 'subject' } },
