@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { AutoBreadcrumbs } from '../../../components/AutoBreadcrumbs'
+import { PageHeader } from '../../../components/PageHeader'
 import type { Topic } from '../../../domain/models'
 import { useActiveSessionStore } from '../../../stores/activeSessionStore'
 import { useSubjectsStore } from '../../../stores/subjectsStore'
@@ -11,7 +13,9 @@ import { UpsertTopicModal } from './modals/UpsertTopicModal'
 export function SubjectPage() {
   const { subjectId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { active, start } = useActiveSessionStore()
+  const from = (location.state as { from?: string } | null)?.from
 
   const { subjects, loading: subjectsLoading, refresh: refreshSubjects } =
     useSubjectsStore()
@@ -52,27 +56,26 @@ export function SubjectPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-50">
-            {subject ? `${subject.iconEmoji ? subject.iconEmoji + ' ' : ''}${subject.name}` : 'Fach'}
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Themen sind die Einheit für Sessions & Analytics.
-          </p>
-        </div>
+      <PageHeader
+        breadcrumb={<AutoBreadcrumbs />}
+        title={
+          subject ? `${subject.iconEmoji ? subject.iconEmoji + ' ' : ''}${subject.name}` : 'Fach'
+        }
+        actions={
+          <button
+            type="button"
+            onClick={() => {
+              setCreateOpen(true)
+            }}
+            className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+          >
+            Thema anlegen
+          </button>
+        }
+      />
 
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard')}
-          className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-        >
-          Zurück
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
-        <div className="text-sm font-semibold text-slate-200">Themen</div>
+      <div>
+        
 
         {subjectsLoading || topicsLoading ? (
           <div className="mt-3 text-sm text-slate-400">Lade…</div>
@@ -84,18 +87,7 @@ export function SubjectPage() {
               </div>
             ) : null}
 
-            <div className="mt-4 flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateOpen(true)
-                }}
-                className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-              >
-                Thema anlegen
-              </button>
-            </div>
-
+            
             {topics.length === 0 ? (
               <div className="mt-4 text-sm text-slate-400">
                 Noch keine Themen. Lege z.B. „Analysis“, „Stochastik“, „Vektoren“
@@ -110,6 +102,7 @@ export function SubjectPage() {
                     topic={t}
                     index={i}
                     total={topics.length}
+                    from={from}
                     onStartSession={(tid) => {
                       if (
                         active &&
@@ -120,7 +113,9 @@ export function SubjectPage() {
                         return
                       }
                       start({ subjectId, topicId: tid })
-                      navigate(`/subjects/${subjectId}/topics/${tid}`)
+                      navigate(`/subjects/${subjectId}/topics/${tid}`, {
+                        state: { from },
+                      })
                     }}
                     onMove={(tid, dir) => void moveTopic(subjectId, tid, dir)}
                     onEdit={(topic) => {

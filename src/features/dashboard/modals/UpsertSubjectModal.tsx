@@ -8,6 +8,7 @@ import { resolveSubjectGradient } from '../../../ui/subjectColorResolvers'
 export function UpsertSubjectModal(props: {
   open: boolean
   mode: 'create' | 'edit'
+  subject?: Subject
   initial?: { name: string; color: Subject['color']; iconEmoji?: string }
   onClose: () => void
   onSave: (input: {
@@ -15,6 +16,7 @@ export function UpsertSubjectModal(props: {
     color: Subject['color']
     iconEmoji?: string
   }) => Promise<void> | void
+  onDelete?: () => Promise<void> | void
 }) {
   const defaultColor = DEFAULT_SUBJECT_COLOR
 
@@ -27,6 +29,7 @@ export function UpsertSubjectModal(props: {
   const [color, setColor] = useState<Subject['color']>(defaultColor)
   const [iconEmoji, setIconEmoji] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!props.open) return
@@ -54,30 +57,64 @@ export function UpsertSubjectModal(props: {
     }
   }
 
+  async function deleteSubject() {
+    if (props.mode !== 'edit' || !props.onDelete) return
+    const subjectName = props.subject?.name ?? (name.trim() || 'dieses Fach')
+    if (
+      !window.confirm(
+        `Fach „${subjectName}“ wirklich löschen? (Themen/Assets werden mit gelöscht)`,
+      )
+    )
+      return
+
+    setDeleting(true)
+    try {
+      await props.onDelete()
+      props.onClose()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <Modal
       open={props.open}
       title={title}
       onClose={props.onClose}
       footer={
-        <>
-          <button
-            type="button"
-            onClick={props.onClose}
-            className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-            disabled={saving}
-          >
-            Abbrechen
-          </button>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"
-            disabled={saving || !name.trim()}
-          >
-            Speichern
-          </button>
-        </>
+        <div className="flex w-full items-center justify-between gap-3">
+          {props.mode === 'edit' && props.onDelete ? (
+            <button
+              type="button"
+              onClick={() => void deleteSubject()}
+              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+              disabled={saving || deleting}
+            >
+              Löschen
+            </button>
+          ) : (
+            <span />
+          )}
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={props.onClose}
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
+              disabled={saving || deleting}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"
+              disabled={saving || deleting || !name.trim()}
+            >
+              Speichern
+            </button>
+          </div>
+        </div>
       }
     >
       <div className="space-y-4">

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useParams } from 'react-router-dom'
+import { AutoBreadcrumbs } from '../../../../components/AutoBreadcrumbs'
 import type { Asset } from '../../../../domain/models'
 import { assetRepo } from '../../../../repositories'
 import { ErrorPage } from '../../../common/ErrorPage'
@@ -8,7 +9,7 @@ import { ExerciseAssetView } from '../views/ExerciseAssetView'
 
 export function AssetPage() {
   const { assetId } = useParams()
-  const navigate = useNavigate()
+  useLocation()
 
   const { asset, loading, error } = useAsset(assetId)
 
@@ -30,16 +31,10 @@ export function AssetPage() {
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
+          <AutoBreadcrumbs />
           <h1 className="truncate text-2xl font-semibold text-slate-50">{a.title}</h1>
           <p className="mt-1 text-sm text-slate-400">Asset</p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-        >
-          Zurück
-        </button>
       </div>
 
       {a.type === 'exercise' ? (

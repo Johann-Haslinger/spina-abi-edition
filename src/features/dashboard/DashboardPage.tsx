@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PageHeader } from '../../components/PageHeader'
 import type { Subject } from '../../domain/models'
 import { useSubjectsStore } from '../../stores/subjectsStore'
 import { SubjectItem } from './components/SubjectItem'
@@ -27,23 +28,18 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-50">Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Starte mit Fächern und Themen. Danach kommen Assets/Uploads und
-            Sessions.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={openCreate}
-          className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-        >
-          Fach anlegen
-        </button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        actions={
+          <button
+            type="button"
+            onClick={openCreate}
+            className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+          >
+            Fach anlegen
+          </button>
+        }
+      />
 
       <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
         <div className="flex items-center justify-between gap-3">
@@ -70,21 +66,12 @@ export function DashboardPage() {
             Noch keine Fächer. Lege dein erstes Fach an (z.B. Mathe).
           </div>
         ) : (
-          <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <ul className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
             {subjects.map((s) => (
               <SubjectItem
                 key={s.id}
                 subject={s}
                 onEdit={openEdit}
-                onDelete={(subject) => {
-                  if (
-                    window.confirm(
-                      `Fach „${subject.name}“ wirklich löschen? (Themen/Assets werden mit gelöscht)`,
-                    )
-                  ) {
-                    void deleteSubject(subject.id)
-                  }
-                }}
               />
             ))}
           </ul>
@@ -94,6 +81,7 @@ export function DashboardPage() {
       <UpsertSubjectModal
         open={modalOpen}
         mode={editing ? 'edit' : 'create'}
+        subject={editing ?? undefined}
         initial={
           editing
             ? {
@@ -111,6 +99,13 @@ export function DashboardPage() {
             await createSubject(input)
           }
         }}
+        onDelete={
+          editing
+            ? async () => {
+                await deleteSubject(editing.id)
+              }
+            : undefined
+        }
       />
     </div>
   )

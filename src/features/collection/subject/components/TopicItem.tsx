@@ -7,17 +7,20 @@ export function TopicItem(props: {
   topic: Topic
   index: number
   total: number
+  from?: string
   onStartSession: (topicId: string) => void
   onMove: (topicId: string, direction: 'up' | 'down') => void
   onEdit: (topic: Topic) => void
   onDelete: (topic: Topic) => void
 }) {
-  const { subjectId, topic: t, index, total, onStartSession, onMove, onEdit, onDelete } = props
+  const { subjectId, topic: t, index, total, from, onStartSession, onMove, onEdit, onDelete } =
+    props
 
   return (
     <li className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2">
       <Link
         to={`/subjects/${subjectId}/topics/${t.id}`}
+        state={from ? { from } : null}
         className="min-w-0 truncate text-sm font-semibold text-slate-50 hover:underline"
       >
         {t.iconEmoji ? `${t.iconEmoji} ` : ''}

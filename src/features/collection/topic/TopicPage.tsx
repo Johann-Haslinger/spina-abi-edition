@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { AutoBreadcrumbs } from '../../../components/AutoBreadcrumbs'
 import type { Asset, AssetType, Folder } from '../../../domain/models'
 import { downloadBlob, openBlobInNewTab } from '../../../lib/blob'
 import { exerciseRepo } from '../../../repositories'
@@ -108,10 +109,18 @@ export function TopicPage() {
 
   const [sessionSummary, setSessionSummary] = useState<SessionSummaryState | null>(null)
   useEffect(() => {
-    const s = (location.state as { sessionSummary?: SessionSummaryState } | null)?.sessionSummary
+    const state = location.state as
+      | { sessionSummary?: SessionSummaryState; from?: string }
+      | null
+    const s = state?.sessionSummary
     if (!s) return
     setSessionSummary(s)
-    navigate(location.pathname, { replace: true, state: null })
+    const nextState = state ? { ...state } : null
+    if (nextState) delete nextState.sessionSummary
+    navigate(location.pathname, {
+      replace: true,
+      state: nextState && Object.keys(nextState).length > 0 ? nextState : null,
+    })
   }, [location.state, location.pathname, navigate])
 
   const filteredAssets = useMemo(() => {
@@ -155,8 +164,13 @@ export function TopicPage() {
 
   async function openAsset(asset: Asset) {
     if (asset.type === 'exercise') {
-      if (active) navigate(`/study/${asset.id}`)
-      else navigate(`/assets/${asset.id}`)
+      const navState = {
+        from: (location.state as { from?: string } | null)?.from,
+        subjectId,
+        topicId,
+      }
+      if (active) navigate(`/study/${asset.id}`, { state: navState })
+      else navigate(`/assets/${asset.id}`, { state: navState })
       return
     }
     const file = await getFile(asset.id)
@@ -192,6 +206,7 @@ export function TopicPage() {
 
       <div className="flex items-start justify-between gap-4">
         <div>
+          <AutoBreadcrumbs />
           <div className="text-xs font-semibold text-slate-400">
             {subject?.iconEmoji ? `${subject.iconEmoji} ` : ''}
             {subject?.name ?? 'Fach'}
@@ -204,14 +219,6 @@ export function TopicPage() {
             Folder sind nur Organisation (keine Logik).
           </p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => navigate(`/subjects/${subjectId}`)}
-          className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-        >
-          Zurück
-        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

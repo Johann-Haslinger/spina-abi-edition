@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { PageHeader } from '../../components/PageHeader'
 import type { Subject } from '../../domain/models'
 import { useSubjectsStore } from '../../stores/subjectsStore'
 import { SubjectItem } from '../dashboard/components/SubjectItem'
@@ -27,19 +28,18 @@ export function CollectionPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex pt-16 items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold text-black dark:text-white">Sammlung</h1>
-        </div>
-
-        <button
-          type="button"
-          onClick={openCreate}
-          className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-        >
-          Fach anlegen
-        </button>
-      </div>
+        <PageHeader
+          title="Sammlung"
+          actions={
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+            >
+              Fach anlegen
+            </button>
+          }
+        />
 
       <div >
     
@@ -56,21 +56,12 @@ export function CollectionPage() {
             Noch keine Fächer. Lege dein erstes Fach im Dashboard an.
           </div>
         ) : (
-          <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <ul className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
             {subjects.map((s) => (
               <SubjectItem
                 key={s.id}
                 subject={s}
                 onEdit={openEdit}
-                onDelete={(subject) => {
-                  if (
-                    window.confirm(
-                      `Fach „${subject.name}“ wirklich löschen? (Themen/Assets werden mit gelöscht)`,
-                    )
-                  ) {
-                    void deleteSubject(subject.id)
-                  }
-                }}
               />
             ))}
           </ul>
@@ -80,6 +71,7 @@ export function CollectionPage() {
       <UpsertSubjectModal
         open={modalOpen}
         mode={editing ? 'edit' : 'create'}
+        subject={editing ?? undefined}
         initial={
           editing
             ? {
@@ -97,6 +89,13 @@ export function CollectionPage() {
             await createSubject(input)
           }
         }}
+        onDelete={
+          editing
+            ? async () => {
+                await deleteSubject(editing.id)
+              }
+            : undefined
+        }
       />
     </div>
   )

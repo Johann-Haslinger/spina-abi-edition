@@ -8,9 +8,31 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html,
 body {
   height: 100%;
+  width: 100%;
+  overscroll-behavior-x: auto;
+  overscroll-behavior-y: none;
+  touch-action: pan-x pan-y;
+}
+
+#root {
+  min-height: 100%;
+  width: 100%;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }
 
 input,
