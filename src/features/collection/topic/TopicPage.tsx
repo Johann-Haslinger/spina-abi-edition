@@ -1,37 +1,34 @@
-import {
-  FileUp,
-  FolderPlus,
-} from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { AutoBreadcrumbs } from '../../../components/AutoBreadcrumbs'
-import type { Asset, AssetType, Folder } from '../../../domain/models'
-import { downloadBlob, openBlobInNewTab } from '../../../lib/blob'
-import { exerciseRepo } from '../../../repositories'
-import { useActiveSessionStore } from '../../../stores/activeSessionStore'
-import { useAssetsStore } from '../../../stores/assetsStore'
-import { useFoldersStore } from '../../../stores/foldersStore'
-import { useSubjectsStore } from '../../../stores/subjectsStore'
-import { useTopicsStore } from '../../../stores/topicsStore'
-import { NotFoundPage } from '../../common/NotFoundPage'
+import { FileUp, FolderPlus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { AutoBreadcrumbs } from '../../../components/AutoBreadcrumbs';
+import type { Asset, AssetType, Folder } from '../../../domain/models';
+import { downloadBlob, openBlobInNewTab } from '../../../lib/blob';
+import { exerciseRepo } from '../../../repositories';
+import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useAssetsStore } from '../../../stores/assetsStore';
+import { useFoldersStore } from '../../../stores/foldersStore';
+import { useSubjectsStore } from '../../../stores/subjectsStore';
+import { useTopicsStore } from '../../../stores/topicsStore';
+import { NotFoundPage } from '../../common/NotFoundPage';
 import {
   SessionSummaryModal,
   type SessionSummaryState,
-} from '../../session/modals/SessionSummaryModal'
-import { AssetItem } from './components/AssetItem'
-import { FilterChip } from './components/FilterChip'
-import { FolderTree } from './components/FolderTree'
-import { UploadAssetModal } from './modals/UploadAssetModal'
-import { UpsertFolderModal } from './modals/UpsertFolderModal'
+} from '../../session/modals/SessionSummaryModal';
+import { AssetItem } from './components/AssetItem';
+import { FilterChip } from './components/FilterChip';
+import { FolderTree } from './components/FolderTree';
+import { UploadAssetModal } from './modals/UploadAssetModal';
+import { UpsertFolderModal } from './modals/UpsertFolderModal';
 
 export function TopicPage() {
-  const { subjectId, topicId } = useParams()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { active } = useActiveSessionStore()
+  const { subjectId, topicId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { active } = useActiveSessionStore();
 
-  const { subjects, refresh: refreshSubjects } = useSubjectsStore()
-  const { topicsBySubject, refreshBySubject } = useTopicsStore()
+  const { subjects, refresh: refreshSubjects } = useSubjectsStore();
+  const { topicsBySubject, refreshBySubject } = useTopicsStore();
   const {
     foldersByTopic,
     loadingByTopic,
@@ -40,7 +37,7 @@ export function TopicPage() {
     createFolder,
     renameFolder,
     deleteFolder,
-  } = useFoldersStore()
+  } = useFoldersStore();
 
   const {
     assetsByTopic,
@@ -50,116 +47,111 @@ export function TopicPage() {
     createWithFile,
     deleteAsset,
     getFile,
-  } = useAssetsStore()
+  } = useAssetsStore();
 
   useEffect(() => {
-    void refreshSubjects()
-  }, [refreshSubjects])
+    void refreshSubjects();
+  }, [refreshSubjects]);
 
   useEffect(() => {
-    if (subjectId) void refreshBySubject(subjectId)
-  }, [subjectId, refreshBySubject])
+    if (subjectId) void refreshBySubject(subjectId);
+  }, [subjectId, refreshBySubject]);
 
   useEffect(() => {
-    if (topicId) void refreshByTopic(topicId)
-  }, [topicId, refreshByTopic])
+    if (topicId) void refreshByTopic(topicId);
+  }, [topicId, refreshByTopic]);
 
   useEffect(() => {
-    if (topicId) void refreshAssetsByTopic(topicId)
-  }, [topicId, refreshAssetsByTopic])
+    if (topicId) void refreshAssetsByTopic(topicId);
+  }, [topicId, refreshAssetsByTopic]);
 
-  const subject = useMemo(
-    () => subjects.find((s) => s.id === subjectId),
-    [subjects, subjectId],
-  )
+  const subject = useMemo(() => subjects.find((s) => s.id === subjectId), [subjects, subjectId]);
 
   const topic = useMemo(() => {
-    if (!subjectId) return undefined
-    return (topicsBySubject[subjectId] ?? []).find((t) => t.id === topicId)
-  }, [topicsBySubject, subjectId, topicId])
+    if (!subjectId) return undefined;
+    return (topicsBySubject[subjectId] ?? []).find((t) => t.id === topicId);
+  }, [topicsBySubject, subjectId, topicId]);
 
   const folders = useMemo(
-    () => (topicId ? foldersByTopic[topicId] ?? [] : []),
+    () => (topicId ? (foldersByTopic[topicId] ?? []) : []),
     [foldersByTopic, topicId],
-  )
-  const foldersLoading = topicId ? (loadingByTopic[topicId] ?? false) : false
-  const foldersError = topicId ? errorByTopic[topicId] : undefined
+  );
+  const foldersLoading = topicId ? (loadingByTopic[topicId] ?? false) : false;
+  const foldersError = topicId ? errorByTopic[topicId] : undefined;
 
-  const [createOpen, setCreateOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const [editOpen, setEditOpen] = useState(false)
-  const [editing, setEditing] = useState<Folder | null>(null)
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<Folder | null>(null);
 
   const assets = useMemo(
-    () => (topicId ? assetsByTopic[topicId] ?? [] : []),
+    () => (topicId ? (assetsByTopic[topicId] ?? []) : []),
     [assetsByTopic, topicId],
-  )
-  const assetsLoading = topicId
-    ? (assetsLoadingByTopic[topicId] ?? false)
-    : false
-  const assetsError = topicId ? assetsErrorByTopic[topicId] : undefined
+  );
+  const assetsLoading = topicId ? (assetsLoadingByTopic[topicId] ?? false) : false;
+  const assetsError = topicId ? assetsErrorByTopic[topicId] : undefined;
 
   const folderNameById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const f of folders) map.set(f.id, f.name)
-    return map
-  }, [folders])
+    const map = new Map<string, string>();
+    for (const f of folders) map.set(f.id, f.name);
+    return map;
+  }, [folders]);
 
-  const [assetFilter, setAssetFilter] = useState<'all' | AssetType>('all')
+  const [assetFilter, setAssetFilter] = useState<'all' | AssetType>('all');
 
-  const [sessionSummary, setSessionSummary] = useState<SessionSummaryState | null>(null)
+  const [sessionSummary, setSessionSummary] = useState<SessionSummaryState | null>(null);
   useEffect(() => {
-    const state = location.state as
-      | { sessionSummary?: SessionSummaryState; from?: string }
-      | null
-    const s = state?.sessionSummary
-    if (!s) return
-    setSessionSummary(s)
-    const nextState = state ? { ...state } : null
-    if (nextState) delete nextState.sessionSummary
+    const state = location.state as { sessionSummary?: SessionSummaryState; from?: string } | null;
+    const s = state?.sessionSummary;
+    if (!s) return;
+    setSessionSummary(s);
+    const nextState = state ? { ...state } : null;
+    if (nextState) delete nextState.sessionSummary;
     navigate(location.pathname, {
       replace: true,
       state: nextState && Object.keys(nextState).length > 0 ? nextState : null,
-    })
-  }, [location.state, location.pathname, navigate])
+    });
+  }, [location.state, location.pathname, navigate]);
 
   const filteredAssets = useMemo(() => {
-    if (assetFilter === 'all') return assets
-    return assets.filter((a) => a.type === assetFilter)
-  }, [assets, assetFilter])
+    if (assetFilter === 'all') return assets;
+    return assets.filter((a) => a.type === assetFilter);
+  }, [assets, assetFilter]);
 
-  const [exerciseStatusByAssetId, setExerciseStatusByAssetId] = useState<Record<string, 'unknown' | 'partial' | 'captured' | 'covered'>>({})
+  const [exerciseStatusByAssetId, setExerciseStatusByAssetId] = useState<
+    Record<string, 'unknown' | 'partial' | 'captured' | 'covered'>
+  >({});
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     async function run() {
-      const exerciseIds = assets.filter((a) => a.type === 'exercise').map((a) => a.id)
+      const exerciseIds = assets.filter((a) => a.type === 'exercise').map((a) => a.id);
       if (exerciseIds.length === 0) {
-        if (!cancelled) setExerciseStatusByAssetId({})
-        return
+        if (!cancelled) setExerciseStatusByAssetId({});
+        return;
       }
       const pairs = await Promise.all(
         exerciseIds.map(async (id) => {
-          const ex = await exerciseRepo.getByAsset(id)
-          return [id, ex?.status ?? 'unknown'] as const
+          const ex = await exerciseRepo.getByAsset(id);
+          return [id, ex?.status ?? 'unknown'] as const;
         }),
-      )
-      if (!cancelled) setExerciseStatusByAssetId(Object.fromEntries(pairs))
+      );
+      if (!cancelled) setExerciseStatusByAssetId(Object.fromEntries(pairs));
     }
-    void run()
+    void run();
     return () => {
-      cancelled = true
-    }
-  }, [assets])
+      cancelled = true;
+    };
+  }, [assets]);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [uploadOpen, setUploadOpen] = useState(false)
-  const [uploadFile, setUploadFile] = useState<File | null>(null)
-  const [uploadType, setUploadType] = useState<AssetType>('exercise')
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadType, setUploadType] = useState<AssetType>('exercise');
 
   function startUpload(type: AssetType) {
-    setUploadType(type)
-    fileInputRef.current?.click()
+    setUploadType(type);
+    fileInputRef.current?.click();
   }
 
   async function openAsset(asset: Asset) {
@@ -168,35 +160,30 @@ export function TopicPage() {
         from: (location.state as { from?: string } | null)?.from,
         subjectId,
         topicId,
-      }
-      if (active) navigate(`/study/${asset.id}`, { state: navState })
-      else navigate(`/assets/${asset.id}`, { state: navState })
-      return
+      };
+      if (active) navigate(`/study/${asset.id}`, { state: navState });
+      else navigate(`${location.pathname.replace(/\/$/, '')}/${asset.id}`, { state: navState });
+      return;
     }
-    const file = await getFile(asset.id)
-    if (!file) return
-    openBlobInNewTab(file.blob)
+    const file = await getFile(asset.id);
+    if (!file) return;
+    openBlobInNewTab(file.blob);
   }
 
   async function downloadAsset(asset: Asset) {
-    const file = await getFile(asset.id)
-    if (!file) return
-    downloadBlob(file.blob, file.originalName)
+    const file = await getFile(asset.id);
+    if (!file) return;
+    downloadBlob(file.blob, file.originalName);
   }
 
-  if (!subjectId || !topicId) return <NotFoundPage />
-  if (subjects.length > 0 && !subject) return <NotFoundPage />
-  if (!topic && (topicsBySubject[subjectId]?.length ?? 0) > 0)
-    return <NotFoundPage />
+  if (!subjectId || !topicId) return <NotFoundPage />;
+  if (subjects.length > 0 && !subject) return <NotFoundPage />;
+  if (!topic && (topicsBySubject[subjectId]?.length ?? 0) > 0) return <NotFoundPage />;
 
   return (
     <div className="space-y-6">
       <SessionSummaryModal
-        key={
-          sessionSummary
-            ? `${sessionSummary.startedAtMs}-${sessionSummary.endedAtMs}`
-            : 'none'
-        }
+        key={sessionSummary ? `${sessionSummary.startedAtMs}-${sessionSummary.endedAtMs}` : 'none'}
         open={!!sessionSummary}
         onClose={() => setSessionSummary(null)}
         summary={sessionSummary}
@@ -215,9 +202,7 @@ export function TopicPage() {
             {topic?.iconEmoji ? `${topic.iconEmoji} ` : ''}
             {topic?.name ?? 'Thema'}
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Folder sind nur Organisation (keine Logik).
-          </p>
+          <p className="mt-1 text-sm text-slate-400">Folder sind nur Organisation (keine Logik).</p>
         </div>
       </div>
 
@@ -251,8 +236,8 @@ export function TopicPage() {
             <FolderTree
               folders={folders}
               onRename={(f) => {
-                setEditing(f)
-                setEditOpen(true)
+                setEditing(f);
+                setEditOpen(true);
               }}
               onDelete={(f) => {
                 if (
@@ -260,7 +245,7 @@ export function TopicPage() {
                     `Folder „${f.name}“ löschen? (Unterfolder werden eine Ebene hochgezogen)`,
                   )
                 ) {
-                  void deleteFolder(f.id, topicId)
+                  void deleteFolder(f.id, topicId);
                 }
               }}
             />
@@ -272,8 +257,8 @@ export function TopicPage() {
             <div>
               <div className="text-sm font-semibold text-slate-200">Assets</div>
               <p className="mt-1 text-sm text-slate-400">
-                Uploads sind lokal gespeichert (IndexedDB). Für große Sammlungen
-                ist später Supabase Storage geplant.
+                Uploads sind lokal gespeichert (IndexedDB). Für große Sammlungen ist später Supabase
+                Storage geplant.
               </p>
             </div>
 
@@ -318,11 +303,11 @@ export function TopicPage() {
             type="file"
             className="hidden"
             onChange={(e) => {
-              const f = e.target.files?.[0] ?? null
-              e.currentTarget.value = ''
-              if (!f) return
-              setUploadFile(f)
-              setUploadOpen(true)
+              const f = e.target.files?.[0] ?? null;
+              e.currentTarget.value = '';
+              if (!f) return;
+              setUploadFile(f);
+              setUploadOpen(true);
             }}
           />
 
@@ -371,24 +356,20 @@ export function TopicPage() {
           {assetsLoading ? (
             <div className="mt-3 text-sm text-slate-400">Lade…</div>
           ) : filteredAssets.length === 0 ? (
-            <div className="mt-3 text-sm text-slate-400">
-              Keine Assets in dieser Ansicht.
-            </div>
+            <div className="mt-3 text-sm text-slate-400">Keine Assets in dieser Ansicht.</div>
           ) : (
             <ul className="mt-4 space-y-2">
               {filteredAssets.map((a) => (
                 <AssetItem
                   key={a.id}
                   asset={a}
-                  folderLabel={
-                    a.folderId ? folderNameById.get(a.folderId) ?? '—' : '(Root)'
-                  }
+                  folderLabel={a.folderId ? (folderNameById.get(a.folderId) ?? '—') : '(Root)'}
                   exerciseStatus={a.type === 'exercise' ? exerciseStatusByAssetId[a.id] : undefined}
                   onOpen={() => void openAsset(a)}
                   onDownload={() => void downloadAsset(a)}
                   onDelete={() => {
                     if (window.confirm(`Asset „${a.title}“ löschen?`)) {
-                      void deleteAsset(a.id, topicId)
+                      void deleteAsset(a.id, topicId);
                     }
                   }}
                 />
@@ -405,7 +386,7 @@ export function TopicPage() {
         folders={folders}
         onClose={() => setUploadOpen(false)}
         onSubmit={async (input) => {
-          if (!input.file) return
+          if (!input.file) return;
           try {
             await createWithFile({
               subjectId,
@@ -414,9 +395,9 @@ export function TopicPage() {
               type: input.type,
               title: input.title,
               file: input.file,
-            })
+            });
           } finally {
-            setUploadFile(null)
+            setUploadFile(null);
           }
         }}
       />
@@ -432,7 +413,7 @@ export function TopicPage() {
             name: input.name,
             iconEmoji: input.iconEmoji,
             parentFolderId: input.parentFolderId,
-          })
+          });
         }}
       />
 
@@ -451,13 +432,13 @@ export function TopicPage() {
         }
         onClose={() => setEditOpen(false)}
         onSave={async (input) => {
-          if (!editing) return
+          if (!editing) return;
           await renameFolder(editing.id, topicId, {
             name: input.name,
             iconEmoji: input.iconEmoji,
-          })
+          });
         }}
       />
     </div>
-  )
+  );
 }

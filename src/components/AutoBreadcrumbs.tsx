@@ -106,9 +106,13 @@ export function AutoBreadcrumbs() {
     }
 
     if ((crumbKey === 'asset' || crumbKey === 'study') && params.assetId) {
+      const assetTo =
+        subjectId && topicId
+          ? `/subjects/${subjectId}/topics/${topicId}/${params.assetId}`
+          : `/assets/${params.assetId}`;
       out.push({
         label: assetTitle ?? 'Asset',
-        to: `/assets/${params.assetId}`,
+        to: assetTo,
         state: from ? { from } : null,
       });
     }

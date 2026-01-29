@@ -1,10 +1,9 @@
-import { Navigate } from 'react-router-dom'
-import { createBrowserRouter } from 'react-router-dom'
-import { AppShell } from './app/AppShell'
-import { AssetPage, CollectionPage, SubjectPage, TopicPage } from './features/collection'
-import { NotFoundPage } from './features/common'
-import { DashboardPage } from './features/dashboard'
-import { StudyPage } from './features/session'
+import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { AppShell } from './app/AppShell';
+import { AssetPage, CollectionPage, SubjectPage, TopicPage } from './features/collection';
+import { NotFoundPage } from './features/common';
+import { DashboardPage } from './features/dashboard';
+import { StudyPage } from './features/session';
 
 export const router = createBrowserRouter([
   {
@@ -19,10 +18,14 @@ export const router = createBrowserRouter([
         element: <TopicPage />,
         handle: { crumb: 'topic' },
       },
+      {
+        path: '/subjects/:subjectId/topics/:topicId/:assetId',
+        element: <AssetPage />,
+        handle: { crumb: 'asset' },
+      },
       { path: '/assets/:assetId', element: <AssetPage />, handle: { crumb: 'asset' } },
       { path: '/study/:assetId', element: <StudyPage />, handle: { crumb: 'study' } },
       { path: '*', element: <NotFoundPage /> },
     ],
   },
-])
-
+]);
