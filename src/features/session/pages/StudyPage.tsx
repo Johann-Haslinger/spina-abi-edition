@@ -1,26 +1,32 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { Modal } from '../../../components/Modal'
-import type { Asset } from '../../../domain/models'
-import { assetFileStore, assetRepo, studySessionRepo } from '../../../repositories'
-import { useActiveSessionStore } from '../../../stores/activeSessionStore'
-import { ErrorPage } from '../../common/ErrorPage'
-import { NotFoundPage } from '../../common/NotFoundPage'
-import type { AssetFile } from '../../../domain/models'
-import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel'
-import { useStudyStore } from '../stores/studyStore'
-import { AssetViewer } from '../viewer/AssetViewer'
-import { ExerciseReviewModal } from '../modals/ExerciseReviewModal'
-import type { SessionSummaryState } from '../modals/SessionSummaryModal'
+import { ArrowLeft, Info, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { FullscreenViewerFrame } from '../../../components/FullscreenViewerFrame';
+import { Modal } from '../../../components/Modal';
+import { ViewerIconButton } from '../../../components/ViewerIconButton';
+import type { Asset, AssetFile } from '../../../domain/models';
+import { assetFileStore, assetRepo, studySessionRepo } from '../../../repositories';
+import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
+import { ErrorPage } from '../../common/ErrorPage';
+import { NotFoundPage } from '../../common/NotFoundPage';
+import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
+import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
+import type { SessionSummaryState } from '../modals/SessionSummaryModal';
+import { useStudyStore } from '../stores/studyStore';
+import { AssetViewer } from '../viewer/AssetViewer';
+import { formatExerciseStatus } from '../viewer/viewerUtils';
 
 export function StudyPage() {
-  const { assetId } = useParams()
-  const navigate = useNavigate()
-  const { active, start, end } = useActiveSessionStore()
+  const { assetId } = useParams();
+  const navigate = useNavigate();
+  const { active, start, end } = useActiveSessionStore();
 
-  const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId)
-  const [pageNumber, setPageNumber] = useState(1)
-  const [reviewOpen, setReviewOpen] = useState(false)
+  const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const {
     studySessionId,
@@ -38,80 +44,104 @@ export function StudyPage() {
     loadExerciseStatus,
     setExerciseStatus,
     reset,
-  } = useStudyStore()
+  } = useStudyStore();
 
   useEffect(() => {
-    if (!active) return
+    if (!active) return;
     bindToSession({
       subjectId: active.subjectId,
       topicId: active.topicId,
       startedAtMs: active.startedAtMs,
-    })
-  }, [active, bindToSession])
-
+    });
+  }, [active, bindToSession]);
 
   const guardState = useMemo(() => {
-    if (!assetId) return { kind: 'notfound' as const }
-    if (loading) return { kind: 'loading' as const }
-    if (error) return { kind: 'error' as const, error }
-    if (!asset) return { kind: 'notfound' as const }
-    if (asset.type !== 'exercise') return { kind: 'notfound' as const }
+    if (!assetId) return { kind: 'notfound' as const };
+    if (loading) return { kind: 'loading' as const };
+    if (error) return { kind: 'error' as const, error };
+    if (!asset) return { kind: 'notfound' as const };
+    if (asset.type !== 'exercise') return { kind: 'notfound' as const };
 
     if (!active) {
-      return { kind: 'needStart' as const, asset }
+      return { kind: 'needStart' as const, asset };
     }
     if (active.subjectId !== asset.subjectId || active.topicId !== asset.topicId) {
-      return { kind: 'needSwitch' as const, asset }
+      return { kind: 'needSwitch' as const, asset };
     }
-    return { kind: 'ok' as const, asset }
-  }, [assetId, loading, error, asset, active])
+    return { kind: 'ok' as const, asset };
+  }, [assetId, loading, error, asset, active]);
 
   useEffect(() => {
-    if (guardState.kind !== 'ok') return
-    if (!active) return
+    if (guardState.kind !== 'ok') return;
+    if (!active) return;
     void ensureStudySession({
       subjectId: active.subjectId,
       topicId: active.topicId,
       startedAtMs: active.startedAtMs,
       plannedDurationMs: active.plannedDurationMs,
-    })
-  }, [guardState.kind, active, ensureStudySession])
+    });
+  }, [guardState.kind, active, ensureStudySession]);
 
   useEffect(() => {
-    if (guardState.kind !== 'ok') return
-    void loadExerciseStatus(guardState.asset.id)
-  }, [guardState.kind, guardState.asset, loadExerciseStatus])
+    if (guardState.kind !== 'ok') return;
+    void loadExerciseStatus(guardState.asset.id);
+  }, [guardState.kind, guardState.asset, loadExerciseStatus]);
 
   const exerciseStatus =
     guardState.kind === 'ok'
       ? (exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown')
-      : 'unknown'
+      : 'unknown';
 
-  if (guardState.kind === 'notfound') return <NotFoundPage />
-  if (guardState.kind === 'loading')
-    return <div className="text-sm text-slate-400">Lade…</div>
+  if (guardState.kind === 'notfound') return <NotFoundPage />;
+  if (guardState.kind === 'loading') return <div className="text-sm text-slate-400">Lade…</div>;
   if (guardState.kind === 'error')
-    return <ErrorPage title="Fehler beim Laden" message={guardState.error} />
+    return <ErrorPage title="Fehler beim Laden" message={guardState.error} />;
+
+  const title = guardState.asset.title;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold text-slate-50">
-            {guardState.asset.title}
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Viewer + Quick-Log kommt als nächstes (diese Route ist der Guard).
-          </p>
-        </div>
+    <FullscreenViewerFrame
+      accentColor={subjectAccent}
+      overlayLeft={
+        <ViewerIconButton ariaLabel="Zurück" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-5 w-5" />
+        </ViewerIconButton>
+      }
+      overlayRight={
+        <ViewerIconButton ariaLabel="Info" onClick={() => setInfoOpen(true)}>
+          <Info className="h-5 w-5" />
+        </ViewerIconButton>
+      }
+      overlayInfo={
+        infoOpen && guardState.kind === 'ok' ? (
+          <div className="w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">Info</div>
+                <div className="mt-1 truncate text-xs text-slate-300">{title}</div>
+              </div>
+              <ViewerIconButton ariaLabel="Schließen" onClick={() => setInfoOpen(false)}>
+                <X className="h-5 w-5" />
+              </ViewerIconButton>
+            </div>
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
+              <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
+                {formatExerciseStatus(exerciseStatus)}
+              </div>
+            </div>
+          </div>
+        ) : null
+      }
+    >
+      {infoOpen ? (
         <button
           type="button"
-          onClick={() => navigate(-1)}
-          className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-        >
-          Zurück
-        </button>
-      </div>
+          aria-label="Info schließen"
+          className="absolute inset-0 z-10 cursor-default bg-transparent"
+          onClick={() => setInfoOpen(false)}
+        />
+      ) : null}
 
       <Modal
         open={guardState.kind === 'needStart'}
@@ -129,8 +159,8 @@ export function StudyPage() {
             <button
               type="button"
               onClick={() => {
-                const a = guardState.asset
-                start({ subjectId: a.subjectId, topicId: a.topicId })
+                const a = guardState.asset;
+                start({ subjectId: a.subjectId, topicId: a.topicId });
               }}
               className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
             >
@@ -140,8 +170,7 @@ export function StudyPage() {
         }
       >
         <div className="text-sm text-slate-300">
-          Diese Übung gehört zu einem Thema. Für Tracking musst du eine Session
-          starten.
+          Diese Übung gehört zu einem Thema. Für Tracking musst du eine Session starten.
         </div>
       </Modal>
 
@@ -161,9 +190,9 @@ export function StudyPage() {
             <button
               type="button"
               onClick={() => {
-                const a = guardState.asset
-                end()
-                start({ subjectId: a.subjectId, topicId: a.topicId })
+                const a = guardState.asset;
+                end();
+                start({ subjectId: a.subjectId, topicId: a.topicId });
               }}
               className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
             >
@@ -186,6 +215,7 @@ export function StudyPage() {
               pdfData={pdfData}
               pageNumber={pageNumber}
               onPageNumberChange={setPageNumber}
+              accentColor={subjectAccent}
             />
 
             <FloatingQuickLogPanel
@@ -200,13 +230,13 @@ export function StudyPage() {
               onStartAttempt={startAttempt}
               onCancelAttempt={cancelAttempt}
               onSaveAttempt={async ({ result, note, errorType }) => {
-                if (!active) throw new Error('Keine aktive Session')
+                if (!active) throw new Error('Keine aktive Session');
                 await ensureStudySession({
                   subjectId: active.subjectId,
                   topicId: active.topicId,
                   startedAtMs: active.startedAtMs,
                   plannedDurationMs: active.plannedDurationMs,
-                })
+                });
                 await logAttempt({
                   assetId: guardState.asset.id,
                   problemIdx,
@@ -215,17 +245,17 @@ export function StudyPage() {
                   result,
                   note,
                   errorType,
-                })
+                });
               }}
               onNextSubproblem={() => setSubproblemLabel(nextLabel(subproblemLabel))}
               onNewProblem={() => {
-                setProblemIdx(problemIdx + 1)
-                setSubproblemLabel('a')
+                setProblemIdx(problemIdx + 1);
+                setSubproblemLabel('a');
               }}
               onMarkProgress={() => setReviewOpen(true)}
               onFinishExercise={async () => {
-                await setExerciseStatus(guardState.asset.id, 'covered')
-                setReviewOpen(true)
+                await setExerciseStatus(guardState.asset.id, 'covered');
+                setReviewOpen(true);
               }}
             />
           </>
@@ -243,15 +273,15 @@ export function StudyPage() {
           studySessionId={studySessionId}
           assetId={guardState.asset.id}
           onGoToTopic={() => {
-            setReviewOpen(false)
-            if (active) navigate(`/subjects/${active.subjectId}/topics/${active.topicId}`)
+            setReviewOpen(false);
+            if (active) navigate(`/subjects/${active.subjectId}/topics/${active.topicId}`);
           }}
           onEndSession={async () => {
-            setReviewOpen(false)
-            const endedAtMs = Date.now()
+            setReviewOpen(false);
+            const endedAtMs = Date.now();
             const target = active
               ? `/subjects/${active.subjectId}/topics/${active.topicId}`
-              : '/dashboard'
+              : '/dashboard';
             const summary: SessionSummaryState | null = active
               ? {
                   studySessionId: studySessionId ?? undefined,
@@ -260,80 +290,77 @@ export function StudyPage() {
                   startedAtMs: active.startedAtMs,
                   endedAtMs,
                 }
-              : null
+              : null;
 
-            if (studySessionId) await studySessionRepo.end(studySessionId, endedAtMs)
-            end()
-            reset()
-            if (summary) navigate(target, { state: { sessionSummary: summary } })
-            else navigate(target)
+            if (studySessionId) await studySessionRepo.end(studySessionId, endedAtMs);
+            end();
+            reset();
+            if (summary) navigate(target, { state: { sessionSummary: summary } });
+            else navigate(target);
           }}
         />
       ) : null}
-
-    </div>
-  )
+    </FullscreenViewerFrame>
+  );
 }
 
 function useStudyAssetData(assetId: string | undefined) {
-  const [asset, setAsset] = useState<Asset | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [file, setFile] = useState<AssetFile | null>(null)
-  const [pdfData, setPdfData] = useState<Uint8Array | null>(null)
+  const [asset, setAsset] = useState<Asset | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<AssetFile | null>(null);
+  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     async function run() {
-      if (!assetId) return
-      setLoading(true)
-      setError(null)
+      if (!assetId) return;
+      setLoading(true);
+      setError(null);
       try {
-        const a = await assetRepo.get(assetId)
-        if (!cancelled) setAsset(a ?? null)
+        const a = await assetRepo.get(assetId);
+        if (!cancelled) setAsset(a ?? null);
 
         if (a) {
-          const f = await assetFileStore.get(a.id)
+          const f = await assetFileStore.get(a.id);
           if (!cancelled && f) {
-            setFile(f)
+            setFile(f);
             const isPdf =
-              f.mimeType === 'application/pdf' ||
-              f.originalName.toLowerCase().endsWith('.pdf')
+              f.mimeType === 'application/pdf' || f.originalName.toLowerCase().endsWith('.pdf');
             if (isPdf) {
-              const buf = await f.blob.arrayBuffer()
-              setPdfData(new Uint8Array(buf).slice(0))
+              const buf = await f.blob.arrayBuffer();
+              setPdfData(new Uint8Array(buf).slice(0));
             } else {
-              setPdfData(null)
+              setPdfData(null);
             }
           } else if (!cancelled) {
-            setFile(null)
-            setPdfData(null)
+            setFile(null);
+            setPdfData(null);
           }
         } else if (!cancelled) {
-          setFile(null)
-          setPdfData(null)
+          setFile(null);
+          setPdfData(null);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Fehler')
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Fehler');
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
     }
-    void run()
+    void run();
     return () => {
-      cancelled = true
-    }
-  }, [assetId])
+      cancelled = true;
+    };
+  }, [assetId]);
 
-  return { asset, file, pdfData, loading, error }
+  return { asset, file, pdfData, loading, error };
 }
 
 function nextLabel(label: string) {
-  const l = label.trim()
-  if (l.length !== 1) return l || 'a'
-  const c = l.toLowerCase().charCodeAt(0)
-  if (c < 97 || c > 122) return l
-  if (c === 122) return 'a'
-  return String.fromCharCode(c + 1)
+  const l = label.trim();
+  if (l.length !== 1) return l || 'a';
+  const c = l.toLowerCase().charCodeAt(0);
+  if (c < 97 || c > 122) return l;
+  if (c === 122) return 'a';
+  return String.fromCharCode(c + 1);
 }
-

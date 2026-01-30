@@ -1,6 +1,9 @@
-import { ArrowLeft, CirclePlay, Info, X } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
+import { X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { IoChevronBack, IoInformationCircle, IoPlay } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
+import { FullscreenViewerFrame } from '../../../../components/FullscreenViewerFrame';
+import { ViewerIconButton } from '../../../../components/ViewerIconButton';
 import type { Asset, AssetFile, ExercisePageStatus } from '../../../../domain/models';
 import { assetFileStore, assetRepo, exerciseRepo } from '../../../../repositories';
 import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
@@ -8,6 +11,7 @@ import { useSubjectAccentColor } from '../../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../../common/ErrorPage';
 import { NotFoundPage } from '../../../common/NotFoundPage';
 import { AssetViewer } from '../../../session/viewer/AssetViewer';
+import { formatExerciseStatus } from '../../../session/viewer/viewerUtils';
 
 export function ExerciseAssetView(props: { assetId: string }) {
   const navigate = useNavigate();
@@ -19,24 +23,6 @@ export function ExerciseAssetView(props: { assetId: string }) {
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const [infoOpen, setInfoOpen] = useState(false);
-  const [navH, setNavH] = useState(0);
-
-  useLayoutEffect(() => {
-    const header = document.querySelector('header');
-    if (!header) return;
-    const update = () => {
-      const rect = header.getBoundingClientRect();
-      setNavH(Math.ceil(rect.height));
-    };
-    update();
-    const ro = new ResizeObserver(() => update());
-    ro.observe(header);
-    window.addEventListener('resize', update);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', update);
-    };
-  }, []);
 
   const state = useMemo(() => {
     if (loading) return { kind: 'loading' as const };
@@ -53,11 +39,67 @@ export function ExerciseAssetView(props: { assetId: string }) {
 
   const a = state.asset;
 
-  const backgroundTint = hexToRgba(subjectAccent, 0.3);
+  function startSession() {
+    if (!a) return;
+    if (active && (active.subjectId !== a.subjectId || active.topicId !== a.topicId)) {
+      end();
+    }
+    if (!active || active.subjectId !== a.subjectId || active.topicId !== a.topicId) {
+      start({ subjectId: a.subjectId, topicId: a.topicId });
+    }
+    navigate(`/study/${a.id}`);
+  }
 
   return (
-    <div className="fixed inset-0 z-40" style={{ backgroundColor: '#ffffff' }}>
-      <div className="absolute inset-0" style={{ backgroundColor: backgroundTint }} />
+    <FullscreenViewerFrame
+      accentColor={subjectAccent}
+      overlayLeft={
+        <ViewerIconButton ariaLabel="Zurück" onClick={() => navigate(-1)}>
+          <IoChevronBack />
+        </ViewerIconButton>
+      }
+      overlayRight={
+        <>
+          <ViewerIconButton ariaLabel="Session starten" onClick={startSession}>
+            <IoPlay />
+          </ViewerIconButton>
+          <ViewerIconButton ariaLabel="Info" onClick={() => setInfoOpen(true)}>
+            <IoInformationCircle />
+          </ViewerIconButton>
+        </>
+      }
+      overlayInfo={
+        infoOpen ? (
+          <div className="w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">Info</div>
+                <div className="mt-1 truncate text-xs text-slate-300">{a.title}</div>
+              </div>
+              <ViewerIconButton ariaLabel="Schließen" onClick={() => setInfoOpen(false)}>
+                <X className="h-5 w-5" />
+              </ViewerIconButton>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
+              <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
+                {formatExerciseStatus(exerciseStatus)}
+              </div>
+            </div>
+          </div>
+        ) : null
+      }
+    >
+      {infoOpen ? (
+        <button
+          type="button"
+          aria-label="Info schließen"
+          className="absolute inset-0 z-10 cursor-default bg-transparent"
+          onClick={() => setInfoOpen(false)}
+        />
+      ) : null}
+
       {file ? (
         <AssetViewer
           title={a.title}
@@ -74,105 +116,8 @@ export function ExerciseAssetView(props: { assetId: string }) {
           </div>
         </div>
       )}
-
-      {/* Overlay controls */}
-      <div className="absolute left-3 z-10" style={{ top: navH + 12 }}>
-        <IconButton ariaLabel="Zurück" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </IconButton>
-      </div>
-      <div className="absolute right-3 z-10 flex items-center gap-2" style={{ top: navH + 12 }}>
-        <IconButton
-          ariaLabel="Session starten"
-          onClick={() => {
-            if (!a) return;
-            if (active && (active.subjectId !== a.subjectId || active.topicId !== a.topicId)) {
-              end();
-            }
-            if (!active || active.subjectId !== a.subjectId || active.topicId !== a.topicId) {
-              start({ subjectId: a.subjectId, topicId: a.topicId });
-            }
-          }}
-        >
-          <CirclePlay className="h-5 w-5" />
-        </IconButton>
-        <IconButton ariaLabel="Info" onClick={() => setInfoOpen(true)}>
-          <Info className="h-5 w-5" />
-        </IconButton>
-      </div>
-
-      {infoOpen ? (
-        <div className="absolute inset-0">
-          <button
-            type="button"
-            aria-label="Info schließen"
-            className="absolute inset-0 cursor-default bg-transparent"
-            onClick={() => setInfoOpen(false)}
-          />
-          <div
-            className="absolute right-3 w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur"
-            style={{ top: navH + 56 }}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold">Info</div>
-                <div className="mt-1 truncate text-xs text-slate-300">{a.title}</div>
-              </div>
-              <IconButton ariaLabel="Schließen" onClick={() => setInfoOpen(false)}>
-                <X className="h-5 w-5" />
-              </IconButton>
-            </div>
-
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
-              <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
-                {formatExerciseStatus(exerciseStatus)}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </div>
+    </FullscreenViewerFrame>
   );
-}
-
-function IconButton(props: { ariaLabel: string; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-label={props.ariaLabel}
-      onClick={props.onClick}
-      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/35 text-white backdrop-blur transition hover:bg-black/45 active:bg-black/55"
-    >
-      {props.children}
-    </button>
-  );
-}
-
-function formatExerciseStatus(status: ExercisePageStatus) {
-  switch (status) {
-    case 'unknown':
-      return 'Unbekannt';
-    case 'partial':
-      return 'Teilweise';
-    case 'captured':
-      return 'Erfasst';
-    case 'covered':
-      return 'Abgedeckt';
-    default:
-      return status;
-  }
-}
-
-function hexToRgba(hex: string | undefined, alpha: number) {
-  if (!hex) return `rgba(0,0,0,${alpha})`;
-  const raw = hex.trim().replace('#', '');
-  if (raw.length !== 6) return `rgba(0,0,0,${alpha})`;
-  const r = parseInt(raw.slice(0, 2), 16);
-  const g = parseInt(raw.slice(2, 4), 16);
-  const b = parseInt(raw.slice(4, 6), 16);
-  if (![r, g, b].every((n) => Number.isFinite(n))) return `rgba(0,0,0,${alpha})`;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function useExerciseStatus(assetId: string | undefined) {

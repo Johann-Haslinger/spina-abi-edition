@@ -1,5 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { pdfjs } from './pdfjs';
 import { clamp, hexToRgba, INITIAL_TOP_MARGIN } from './viewerUtils';
 
@@ -48,8 +48,52 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   const [isInteracting, setIsInteracting] = useState(false);
 
   const ratio = viewScale / RENDER_SCALE;
-  const gridSizePx = Math.max(10, Math.round(34 * ratio));
+  const gridSizePx = Math.max(10, Math.round(40 * ratio));
   const gridDotColor = hexToRgba(props.accentColor, 0.32) ?? 'rgba(0,0,0,0.18)';
+  const dotRadiusPx = clamp(1.5 * ratio, 0.6, 6);
+
+  const viewScaleRef = useRef(viewScale);
+  const panRef = useRef(pan);
+  const rafRef = useRef<number | null>(null);
+  const pendingRef = useRef<{ viewScale?: number; pan?: Point }>({});
+
+  useEffect(() => {
+    viewScaleRef.current = viewScale;
+  }, [viewScale]);
+
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  const flush = useCallback(() => {
+    rafRef.current = null;
+    const pending = pendingRef.current;
+    pendingRef.current = {};
+    if (pending.viewScale !== undefined) setViewScale(pending.viewScale);
+    if (pending.pan) setPan(pending.pan);
+  }, []);
+
+  const schedule = useCallback(
+    (next: { viewScale?: number; pan?: Point }) => {
+      if (next.viewScale !== undefined) {
+        viewScaleRef.current = next.viewScale;
+        pendingRef.current.viewScale = next.viewScale;
+      }
+      if (next.pan) {
+        panRef.current = next.pan;
+        pendingRef.current.pan = next.pan;
+      }
+      if (rafRef.current !== null) return;
+      rafRef.current = requestAnimationFrame(flush);
+    },
+    [flush],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -192,31 +236,41 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
     [],
   );
 
-  const contentPointFromContainerPoint = (p: Point) => ({
-    x: (p.x - pan.x) / ratio,
-    y: (p.y - pan.y) / ratio,
-  });
-
-  const setPanToKeepContentPointFixed = (content: Point, containerPt: Point, nextRatio: number) => {
-    setPan({ x: containerPt.x - nextRatio * content.x, y: containerPt.y - nextRatio * content.y });
+  const contentPointFromContainerPoint = (p: Point) => {
+    const nextRatio = viewScaleRef.current / RENDER_SCALE;
+    const base = panRef.current;
+    return {
+      x: (p.x - base.x) / nextRatio,
+      y: (p.y - base.y) / nextRatio,
+    };
   };
+
+  const panForFixedContentPoint = (
+    content: Point,
+    containerPt: Point,
+    nextRatio: number,
+  ): Point => ({
+    x: containerPt.x - nextRatio * content.x,
+    y: containerPt.y - nextRatio * content.y,
+  });
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const isZoom = e.ctrlKey || e.altKey || e.metaKey;
     if (!isZoom) {
-      setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+      const p = panRef.current;
+      schedule({ pan: { x: p.x - e.deltaX, y: p.y - e.deltaY } });
       return;
     }
     const c = containerPoint(e);
     const content = contentPointFromContainerPoint(c);
     const intensity = e.ctrlKey ? 0.004 : 0.0028;
     const factor = Math.exp(-e.deltaY * intensity);
-    const nextView = clamp(viewScale * factor, 0.6, 3.5);
-    if (nextView === viewScale) return;
+    const currentView = viewScaleRef.current;
+    const nextView = clamp(currentView * factor, 0.6, 3.5);
+    if (nextView === currentView) return;
     const nextRatio = nextView / RENDER_SCALE;
-    setViewScale(nextView);
-    setPanToKeepContentPointFixed(content, c, nextRatio);
+    schedule({ viewScale: nextView, pan: panForFixedContentPoint(content, c, nextRatio) });
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -225,15 +279,15 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
     setIsInteracting(true);
     const pts = Array.from(pointersRef.current.values());
     if (pts.length === 1) {
-      gestureRef.current = { kind: 'pan', startPan: pan, startPointer: pts[0] };
+      gestureRef.current = { kind: 'pan', startPan: panRef.current, startPointer: pts[0] };
     } else if (pts.length === 2) {
       const [a, b] = pts;
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
       gestureRef.current = {
         kind: 'pinch',
-        startPan: pan,
-        startRatio: ratio,
+        startPan: panRef.current,
+        startRatio: viewScaleRef.current / RENDER_SCALE,
         startDistance: Math.max(1, dist),
         startMid: mid,
         contentAtMid: contentPointFromContainerPoint(mid),
@@ -258,8 +312,10 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
         3.5 / RENDER_SCALE,
       );
       const nextView = clamp(nextRatio * RENDER_SCALE, 0.6, 3.5);
-      setViewScale(nextView);
-      setPanToKeepContentPointFixed(g.contentAtMid, mid, nextRatio);
+      schedule({
+        viewScale: nextView,
+        pan: panForFixedContentPoint(g.contentAtMid, mid, nextRatio),
+      });
       return;
     }
 
@@ -267,9 +323,11 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       const g = gestureRef.current;
       if (!g || g.kind !== 'pan') return;
       const p = pts[0];
-      setPan({
-        x: g.startPan.x + (p.x - g.startPointer.x),
-        y: g.startPan.y + (p.y - g.startPointer.y),
+      schedule({
+        pan: {
+          x: g.startPan.x + (p.x - g.startPointer.x),
+          y: g.startPan.y + (p.y - g.startPointer.y),
+        },
       });
     }
   };
@@ -281,7 +339,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       gestureRef.current = null;
     } else if (pointersRef.current.size === 1) {
       const p = Array.from(pointersRef.current.values())[0];
-      gestureRef.current = { kind: 'pan', startPan: pan, startPointer: p };
+      gestureRef.current = { kind: 'pan', startPan: panRef.current, startPointer: p };
     }
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -313,7 +371,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
           touchAction: 'none',
           userSelect: 'none',
           cursor: isInteracting ? 'grabbing' : 'grab',
-          backgroundImage: `radial-gradient(circle at 1px 1px, ${gridDotColor} 1px, transparent 0)`,
+          backgroundImage: `radial-gradient(circle at 50% 50%, ${gridDotColor} ${dotRadiusPx}px, transparent 0)`,
           backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
           backgroundPosition: `${Math.round(pan.x)}px ${Math.round(pan.y)}px`,
         }}
@@ -340,7 +398,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
                 data-page={n}
                 className="w-full"
               >
-                <div className="mx-auto w-fit rounded-md bg-white shadow-2xl">
+                <div className="mx-auto w-fit rounded-md bg-white">
                   <canvas
                     ref={(el) => {
                       canvasRefs.current[n - 1] = el;

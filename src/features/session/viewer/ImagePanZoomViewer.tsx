@@ -26,6 +26,7 @@ export function ImagePanZoomViewer(props: { src: string; alt: string; accentColo
 
   const gridSizePx = Math.max(10, Math.round(34 * scale));
   const gridDotColor = hexToRgba(props.accentColor, 0.32) ?? 'rgba(0,0,0,0.18)';
+  const dotRadiusPx = clamp(1.5 * scale, 0.6, 6);
 
   const containerPoint = useCallback((e: { clientX: number; clientY: number }) => {
     const el = containerRef.current;
@@ -197,7 +198,7 @@ export function ImagePanZoomViewer(props: { src: string; alt: string; accentColo
         touchAction: 'none',
         userSelect: 'none',
         cursor: isInteracting ? 'grabbing' : 'grab',
-        backgroundImage: `radial-gradient(circle at 1px 1px, ${gridDotColor} 1px, transparent 0)`,
+        backgroundImage: `radial-gradient(circle at 50% 50%, ${gridDotColor} ${dotRadiusPx}px, transparent 0)`,
         backgroundSize: `${gridSizePx}px ${gridSizePx}px`,
         backgroundPosition: `${Math.round(pan.x)}px ${Math.round(pan.y)}px`,
       }}

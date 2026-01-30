@@ -13,4 +13,19 @@ export function hexToRgba(hex: string | undefined, alpha: number): string | unde
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-export const INITIAL_TOP_MARGIN = 48;
+export const INITIAL_TOP_MARGIN = 80;
+
+export function formatExerciseStatus(status: 'unknown' | 'partial' | 'captured' | 'covered') {
+  switch (status) {
+    case 'unknown':
+      return 'Unbekannt';
+    case 'partial':
+      return 'Teilweise';
+    case 'captured':
+      return 'Erfasst';
+    case 'covered':
+      return 'Abgedeckt';
+    default:
+      return status;
+  }
+}
