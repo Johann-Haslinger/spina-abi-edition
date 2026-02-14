@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { NavLink } from 'react-router-dom';
+import { NavLink, matchPath, useLocation } from 'react-router-dom';
 import { SessionWidget } from '../features/session';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -10,7 +10,19 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       : 'text-black dark:text-white/70 hover:text-black dark:hover:text-white hover:bg-black/10 dark:hover:bg-white/10',
   );
 
+function useIsExerciseOpen() {
+  const { pathname } = useLocation();
+  return (
+    matchPath({ path: '/study/:assetId', end: false }, pathname) !== null ||
+    matchPath({ path: '/assets/:assetId', end: false }, pathname) !== null ||
+    matchPath({ path: '/subjects/:subjectId/topics/:topicId/:assetId', end: false }, pathname) !==
+      null
+  );
+}
+
 export function NavBar() {
+  const isExerciseOpen = useIsExerciseOpen();
+
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="mx-auto grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 xl:px-8 py-4">
@@ -31,7 +43,7 @@ export function NavBar() {
         </nav>
         <div className="justify-self-end flex items-center gap-2">
           {/* <ThemeToggle /> */}
-          <SessionWidget />
+          {!isExerciseOpen ? <SessionWidget /> : null}
         </div>
       </div>
     </header>

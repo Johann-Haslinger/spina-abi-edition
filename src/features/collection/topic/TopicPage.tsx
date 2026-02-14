@@ -191,7 +191,7 @@ export function TopicPage() {
       <div>
         {/* <TopicFolderSection /> */}
 
-        <section className="lg:col-span-2 px-4">
+        <section className="lg:col-span-2">
           {assetsError ? (
             <div className="mt-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
               {assetsError}

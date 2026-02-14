@@ -80,7 +80,7 @@ export function StudyPage() {
 
   const exerciseStatus =
     guardState.kind === 'ok'
-      ? (exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown')
+      ? exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown'
       : 'unknown';
 
   const openInfoPanel = () => setInfoOpen(true);
@@ -112,7 +112,18 @@ export function StudyPage() {
   }, [guardState.kind, infoOpen]);
 
   if (guardState.kind === 'notfound') return <NotFoundPage />;
-  if (guardState.kind === 'loading') return <div className="text-sm text-slate-400">Lade…</div>;
+  if (guardState.kind === 'loading')
+    return (
+      <FullscreenViewerFrame accentColor={subjectAccent}>
+        <div className="absolute inset-0 grid place-items-center">
+          <div
+            role="status"
+            aria-label="Lädt"
+            className="h-8 w-8 animate-spin rounded-full border-2 border-slate-400/60 border-t-transparent"
+          />
+        </div>
+      </FullscreenViewerFrame>
+    );
   if (guardState.kind === 'error')
     return <ErrorPage title="Fehler beim Laden" message={guardState.error} />;
 

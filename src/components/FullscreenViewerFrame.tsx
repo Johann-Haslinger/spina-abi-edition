@@ -24,7 +24,7 @@ export function FullscreenViewerFrame(props: FullscreenViewerFrameProps) {
       ) : null}
 
       {props.overlayRight ? (
-        <div className="absolute right-3 z-10 flex items-center gap-2" style={{ top: 72 }}>
+        <div className="absolute right-6 top-8 z-10 flex items-center gap-2">
           {props.overlayRight}
         </div>
       ) : null}

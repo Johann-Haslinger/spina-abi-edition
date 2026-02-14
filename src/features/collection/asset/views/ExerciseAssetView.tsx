@@ -34,7 +34,18 @@ export function ExerciseAssetView(props: { assetId: string }) {
   }, [loading, error, asset]);
 
   if (state.kind === 'notfound') return <NotFoundPage />;
-  if (state.kind === 'loading') return <div className="text-sm text-slate-400">Lade…</div>;
+  if (state.kind === 'loading')
+    return (
+      <FullscreenViewerFrame accentColor={subjectAccent}>
+        <div className="absolute inset-0 grid place-items-center">
+          <div
+            role="status"
+            aria-label="Lädt"
+            className="h-8 w-8 animate-spin rounded-full border-2 border-slate-400/60 border-t-transparent"
+          />
+        </div>
+      </FullscreenViewerFrame>
+    );
   if (state.kind === 'error') return <ErrorPage title="Fehler beim Laden" message={state.error} />;
 
   const a = state.asset;

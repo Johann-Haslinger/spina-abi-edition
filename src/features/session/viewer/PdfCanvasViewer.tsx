@@ -44,8 +44,10 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   const [docLoading, setDocLoading] = useState(false);
   const [hasRenderedOnce, setHasRenderedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pan, setPan] = useState<Point>({ x: 16, y: INITIAL_TOP_MARGIN });
+  const [pan, setPan] = useState<Point>({ x: 0, y: INITIAL_TOP_MARGIN });
   const [isInteracting, setIsInteracting] = useState(false);
+
+  const showLoadingOverlay = docLoading || !layoutReady || !hasRenderedOnce;
 
   const ratio = viewScale / RENDER_SCALE;
   const gridSizePx = Math.max(10, Math.round(40 * ratio));
@@ -381,38 +383,46 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
       >
-        <div
-          className="absolute left-0 top-0"
-          style={{
-            transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${ratio})`,
-            transformOrigin: '0 0',
-          }}
-        >
-          <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 py-6">
-            {pageNumbers.map((n) => (
-              <div
-                key={n}
-                ref={(el) => {
-                  pageRefs.current[n - 1] = el;
-                }}
-                data-page={n}
-                className="w-full"
-              >
-                <div className="mx-auto w-fit rounded-md bg-white">
-                  <canvas
-                    ref={(el) => {
-                      canvasRefs.current[n - 1] = el;
-                    }}
-                  />
+        {layoutReady ? (
+          <div
+            className="absolute left-0 top-0"
+            style={{
+              transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${ratio})`,
+              transformOrigin: '0 0',
+              opacity: hasRenderedOnce ? 1 : 0,
+              pointerEvents: hasRenderedOnce ? 'auto' : 'none',
+            }}
+          >
+            <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 py-6">
+              {pageNumbers.map((n) => (
+                <div
+                  key={n}
+                  ref={(el) => {
+                    pageRefs.current[n - 1] = el;
+                  }}
+                  data-page={n}
+                  className="w-full"
+                >
+                  <div className="mx-auto w-fit rounded-md bg-white">
+                    <canvas
+                      ref={(el) => {
+                        canvasRefs.current[n - 1] = el;
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        {!hasRenderedOnce && (docLoading || !layoutReady) ? (
-          <div className="absolute inset-0 grid place-items-center text-sm text-slate-500">
-            PDF lädt…
+        {showLoadingOverlay ? (
+          <div className="absolute inset-0 grid place-items-center">
+            <div
+              role="status"
+              aria-label="Lädt"
+              className="h-8 w-8 animate-spin rounded-full border-2 border-slate-400/60 border-t-transparent"
+            />
           </div>
         ) : null}
       </div>
