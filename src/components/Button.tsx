@@ -3,12 +3,13 @@ const ButtonOutline = (props: {
   onClick: () => void;
   className?: string;
   icon?: React.ReactNode;
+  disabled?: boolean;
 }) => {
   return (
     <button
       className={`rounded-full text-base p-1.5 cursor-pointer active:scale-95 transition-all border-[0.5px] ${
-        props.className
-      }  ${
+        props.disabled ? 'opacity-30 cursor-not-allowed! hover:bg-white-20!' : ''
+      } ${props.className} ${
         props.icon && props.children
           ? 'flex items-center gap-2'
           : props.icon
@@ -16,6 +17,7 @@ const ButtonOutline = (props: {
           : 'px-4'
       }`}
       onClick={props.onClick}
+      disabled={props.disabled}
     >
       {props.icon && <div className="text-xl">{props.icon}</div>}
       {props.children}
@@ -28,12 +30,14 @@ export const PrimaryButton = (props: {
   icon?: React.ReactNode;
   onClick: () => void;
   className?: string;
+  disabled?: boolean;
 }) => {
   return (
     <ButtonOutline
       icon={props.icon}
       className={`${props.className} hover:bg-white bg-white/90 text-black border-white`}
       onClick={props.onClick}
+      disabled={props.disabled}
     >
       {props.children}
     </ButtonOutline>
@@ -45,12 +49,14 @@ export const SecondaryButton = (props: {
   onClick: () => void;
   className?: string;
   icon?: React.ReactNode;
+  disabled?: boolean;
 }) => {
   return (
     <ButtonOutline
       icon={props.icon}
       className={`${props.className} hover:bg-white/15 bg-white/10 text-white border-white/10`}
       onClick={props.onClick}
+      disabled={props.disabled}
     >
       {props.children}
     </ButtonOutline>

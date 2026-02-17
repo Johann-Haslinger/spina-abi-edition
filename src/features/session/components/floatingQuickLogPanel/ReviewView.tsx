@@ -1,5 +1,6 @@
-import { Check } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { IoCheckmark } from 'react-icons/io5';
+import { PrimaryButton, SecondaryButton } from '../../../../components/Button';
 import type { AttemptResult } from '../../../../domain/models';
 import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
@@ -37,7 +38,7 @@ export function ReviewView(props: {
   const showError = useMemo(() => result !== 'correct', [result]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 flex flex-col h-full">
       <PanelViewHeader
         left={
           <PanelHeading>
@@ -50,40 +51,36 @@ export function ReviewView(props: {
           <div className="flex items-center gap-1">
             <div className="text-right text-xs font-semibold">
               <span className="ml-2 text-white/60">
-                Zeit: <span className="tabular-nums">{formatDuration(seconds)}</span>
+                <span className="tabular-nums">{formatDuration(seconds)}</span>
               </span>
             </div>
           </div>
         }
       />
 
-      <div className="flex px-2 mt-6 justify-between w-full gap-2">
+      <div className="flex px-2 mt-4 mb-3 justify-between w-full gap-2">
         <ResultChip active={result === 'correct'} label="✅" onClick={() => setResult('correct')} />
         <ResultChip active={result === 'partial'} label="🟨" onClick={() => setResult('partial')} />
         <ResultChip active={result === 'wrong'} label="❌" onClick={() => setResult('wrong')} />
       </div>
 
       {showError ? (
-        <label className="block">
-          <div className="text-xs font-semibold text-slate-300">Fehlergrund</div>
-          <input
-            value={errorType}
-            onChange={(e) => setErrorType(e.target.value)}
-            placeholder="z.B. Rechenfehler"
-            className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-50 outline-none ring-indigo-500/30 focus:ring-2"
-          />
-        </label>
+        <textarea
+          value={errorType}
+          onChange={(e) => setErrorType(e.target.value)}
+          placeholder="Fehlergrund"
+          className="mt-3 w-full text-sm outline-none placeholder:text-white/50 resize-none"
+          rows={2}
+        />
       ) : null}
 
-      <label className="block">
-        <div className="text-xs font-semibold text-slate-300">Notiz (optional)</div>
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="1 Satz…"
-          className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-50 outline-none ring-indigo-500/30 focus:ring-2"
-        />
-      </label>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Notiz (optional)"
+        className="mt-1 w-full text-sm outline-none placeholder:text-white/50 resize-none"
+        rows={2}
+      />
 
       {saveError ? (
         <div className="rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
@@ -91,9 +88,9 @@ export function ReviewView(props: {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
+      <div className="flex mt-auto justify-end gap-2">
+        <SecondaryButton onClick={props.onClose}>Abbrechen</SecondaryButton>
+        <PrimaryButton
           onClick={async () => {
             setSaving(true);
             setSaveError(null);
@@ -109,21 +106,9 @@ export function ReviewView(props: {
               setSaving(false);
             }
           }}
-          className="inline-flex items-center gap-2 rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"
           disabled={saving}
-        >
-          <Check className="h-4 w-4" />
-          Speichern
-        </button>
-
-        <button
-          type="button"
-          onClick={props.onClose}
-          className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-          disabled={saving}
-        >
-          Abbrechen
-        </button>
+          icon={<IoCheckmark />}
+        />
       </div>
     </div>
   );
@@ -134,7 +119,7 @@ function ResultChip(props: { active: boolean; label: string; onClick: () => void
     <button
       type="button"
       onClick={props.onClick}
-      className={`rounded-xl border border-white/5 bg-white/5 px-4 py-3 text-lg font-semibold text-slate-50 ${
+      className={`rounded-full border border-white/5 bg-white/5 px-4 py-2.5 text-lg font-semibold text-slate-50 ${
         props.active ? 'border-white/60' : ''
       }`}
     >

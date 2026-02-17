@@ -1,4 +1,6 @@
+import { PrimaryButton, SecondaryButton } from '../../../../components/Button';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
+import { HighlightText, MutedText, PanelHeading } from './TextHighlight';
 
 export function NextView(props: {
   gripProps: DragGripProps;
@@ -10,38 +12,26 @@ export function NextView(props: {
   return (
     <div className="space-y-3">
       <PanelViewHeader
-        right={<div className="text-right text-xs font-semibold text-white/80">Wie geht’s weiter?</div>}
-        gripProps={props.gripProps}
+        left={
+          <PanelHeading>
+            <MutedText>Wie geht es</MutedText> <br />
+            <HighlightText>weiter?</HighlightText>
+          </PanelHeading>
+        }
       />
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={props.onNextSubproblem}
-          className="rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-50 hover:bg-slate-700"
-        >
+      <div className="space-y-3 mt-6 gap-2">
+        <PrimaryButton className="w-full" onClick={props.onNextSubproblem}>
           Nächste Teilaufgabe
-        </button>
-        <button
-          type="button"
-          onClick={props.onNewProblem}
-          className="rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-50 hover:bg-slate-700"
-        >
+        </PrimaryButton>
+        <PrimaryButton className="w-full" onClick={props.onNewProblem}>
           Neue Aufgabe
-        </button>
-        <button
-          type="button"
-          onClick={props.onMarkProgress}
-          className="rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-50 hover:bg-slate-700"
-        >
+        </PrimaryButton>
+        <SecondaryButton className="w-full" onClick={props.onMarkProgress}>
           Zwischenstand
-        </button>
-        <button
-          type="button"
-          onClick={props.onFinishExercise}
-          className="ml-auto rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
-        >
+        </SecondaryButton>
+        <SecondaryButton className="w-full" onClick={props.onFinishExercise}>
           Übung beenden
-        </button>
+        </SecondaryButton>
       </div>
     </div>
   );

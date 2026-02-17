@@ -46,8 +46,8 @@ export function FloatingQuickLogPanel(props: {
       start: 280,
       progress: 64,
       progressDetails: 240,
-      review: 340,
-      next: 180,
+      review: 360,
+      next: 320,
     }),
     [],
   );

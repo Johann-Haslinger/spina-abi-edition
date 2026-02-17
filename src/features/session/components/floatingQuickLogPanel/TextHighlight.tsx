@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import type React from 'react';
 
 export function PanelHeading(props: { children: React.ReactNode }) {
-  return <div className="text-xl font-bold">{props.children}</div>;
+  return <div className="text-[22px] font-bold">{props.children}</div>;
 }
 
 export function HighlightText(props: { children: React.ReactNode; className?: string }) {

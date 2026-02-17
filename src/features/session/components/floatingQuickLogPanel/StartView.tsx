@@ -1,8 +1,8 @@
 import { Info, Minus, Plus } from 'lucide-react';
+import { PrimaryButton, SecondaryButton } from '../../../../components/Button';
 import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
 import { HighlightText, MutedText, PanelHeading } from './TextHighlight';
-import { PrimaryViewerPanelButton } from './ViewerPanelButtons';
 
 export function StartView(props: {
   assetId: string;
@@ -44,7 +44,7 @@ export function StartView(props: {
         }
       />
 
-      <div className="mt-5 space-y-2">
+      <div className="mt-3">
         <Row
           label="Aufgabe"
           right={
@@ -73,14 +73,14 @@ export function StartView(props: {
       </div>
 
       <div className="mt-8 flex items-center justify-end gap-2">
-        <PrimaryViewerPanelButton
+        <PrimaryButton
           onClick={() => {
             startAttempt({ assetId: props.assetId });
             props.onStarted();
           }}
         >
           Starten
-        </PrimaryViewerPanelButton>
+        </PrimaryButton>
       </div>
     </>
   );
@@ -103,51 +103,21 @@ function Stepper(props: {
   onInc: () => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full p-1">
-      <div className="min-w-10 px-2 text-center text-sm font-semibold text-white tabular-nums">
-        {props.value}
-      </div>
-      <div>
-        <IconButton
+    <div className="inline-flex justify-between items-center gap-1 rounded-full p-1">
+      <div className="text-sm font-semibold text-white tabular-nums pr-2">{props.value}</div>
+      <div className="flex gap-2 scale-90">
+        <SecondaryButton
           disabled={props.decDisabled}
-          ariaLabel="Decrease"
           onClick={props.onDec}
-          className="w-8"
-        >
-          <Minus className="size-4" />
-        </IconButton>
-      </div>
-      <div>
-        <IconButton
+          icon={<Minus className="size-4" />}
+        />
+        <SecondaryButton
           disabled={props.incDisabled}
-          ariaLabel="Increase"
           onClick={props.onInc}
-          className="w-8"
-        >
-          <Plus className="size-4" />
-        </IconButton>
+          icon={<Plus className="size-4" />}
+        />
       </div>
     </div>
-  );
-}
-
-function IconButton(props: {
-  disabled?: boolean;
-  ariaLabel: string;
-  onClick: () => void;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={props.disabled}
-      aria-label={props.ariaLabel}
-      onClick={props.onClick}
-      className={`${props.className} inline-flex size-7 bg-white/5 border-[0.5px] hover:scale-105 active:scale-95 border-white/5 active:bg-white/2 transition-all duration-100 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent`}
-    >
-      {props.children}
-    </button>
   );
 }
 
