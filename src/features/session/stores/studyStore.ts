@@ -59,6 +59,16 @@ type StudyState = {
   reset: () => void;
 };
 
+type PersistedStudyState = Pick<
+  StudyState,
+  | 'boundSessionKey'
+  | 'studySessionId'
+  | 'currentAttempt'
+  | 'problemIdx'
+  | 'subproblemLabel'
+  | 'exerciseStatusByAssetId'
+>;
+
 export const useStudyStore = create<StudyState>()(
   persist(
     (set, get) => ({
@@ -202,15 +212,12 @@ export const useStudyStore = create<StudyState>()(
       migrate: (persisted, version) => {
         // v1 stored `attemptStartedAtMs`; v2 uses `currentAttempt`.
         if (version === 1 && persisted && typeof persisted === 'object') {
-          const p = persisted as {
+          const p = persisted as PersistedStudyState & {
             attemptStartedAtMs?: number | null;
-            currentAttempt?: CurrentAttempt | null;
-            problemIdx?: number;
-            subproblemLabel?: string;
           };
           if (!p.currentAttempt && p.attemptStartedAtMs) {
             return {
-              ...persisted,
+              ...(persisted as PersistedStudyState),
               currentAttempt: {
                 startedAtMs: p.attemptStartedAtMs,
                 problemIdx: p.problemIdx ?? 1,
@@ -219,7 +226,7 @@ export const useStudyStore = create<StudyState>()(
             };
           }
         }
-        return persisted as any;
+        return persisted as PersistedStudyState;
       },
       partialize: (s) => ({
         boundSessionKey: s.boundSessionKey,

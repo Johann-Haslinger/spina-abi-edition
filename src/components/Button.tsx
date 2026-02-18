@@ -8,7 +8,7 @@ const ButtonOutline = (props: {
   return (
     <button
       className={`rounded-full text-base p-1.5 cursor-pointer active:scale-95 transition-all border-[0.5px] ${
-        props.disabled ? 'opacity-30 cursor-not-allowed! hover:bg-white-20!' : ''
+        props.disabled ? 'opacity-40 cursor-not-allowed! hover:bg-white-20!' : ''
       } ${props.className} ${
         props.icon && props.children
           ? 'flex items-center gap-2'

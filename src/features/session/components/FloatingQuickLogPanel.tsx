@@ -8,6 +8,7 @@ import { ProgressDetailsView } from './floatingQuickLogPanel/ProgressDetailsView
 import { ProgressView } from './floatingQuickLogPanel/ProgressView.tsx';
 import { ReviewView } from './floatingQuickLogPanel/ReviewView';
 import { StartView } from './floatingQuickLogPanel/StartView.tsx';
+import { incrementSuffix } from './floatingQuickLogPanel/stepperSuffix';
 
 type PanelView = 'start' | 'progress' | 'progressDetails' | 'review' | 'next';
 
@@ -176,7 +177,7 @@ export function FloatingQuickLogPanel(props: {
                   <NextView
                     gripProps={gripProps}
                     onNextSubproblem={() => {
-                      setSubproblemLabel(nextLabelWrap(subproblemLabel));
+                      setSubproblemLabel(incrementSuffix((subproblemLabel || 'a').trim()) || 'a');
                       setView('start');
                     }}
                     onNewProblem={() => {
@@ -202,13 +203,4 @@ export function FloatingQuickLogPanel(props: {
       </motion.div>
     </div>
   );
-}
-
-function nextLabelWrap(label: string) {
-  const l = label.trim();
-  if (l.length !== 1) return l || 'a';
-  const c = l.toLowerCase().charCodeAt(0);
-  if (c < 97 || c > 122) return l;
-  if (c === 122) return 'a';
-  return String.fromCharCode(c + 1);
 }

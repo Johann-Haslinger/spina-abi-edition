@@ -1,8 +1,16 @@
-import { Info, Minus, Plus } from 'lucide-react';
-import { PrimaryButton, SecondaryButton } from '../../../../components/Button';
+import { Minus, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { IoInformationCircleOutline } from 'react-icons/io5';
+import { GhostButton, PrimaryButton, SecondaryButton } from '../../../../components/Button';
 import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
 import { HighlightText, MutedText, PanelHeading } from './TextHighlight';
+import {
+  canDecrementSuffix,
+  canIncrementSuffix,
+  decrementSuffix,
+  incrementSuffix,
+} from './stepperSuffix';
 
 export function StartView(props: {
   assetId: string;
@@ -15,13 +23,6 @@ export function StartView(props: {
   const { problemIdx, subproblemLabel, setProblemIdx, setSubproblemLabel, startAttempt } =
     useStudyStore();
 
-  const subLabel = normalizeLabel(subproblemLabel);
-  const canDecProblem = problemIdx > 1;
-  const canIncProblem = problemIdx < 999;
-
-  const canDecSub = subLabel !== 'a';
-  const canIncSub = subLabel !== 'z';
-
   return (
     <>
       <PanelViewHeader
@@ -32,15 +33,10 @@ export function StartView(props: {
           </PanelHeading>
         }
         right={
-          <button
-            type="button"
-            className="inline-flex size-8 items-center justify-center rounded-full bg-white/5 text-white/70 hover:bg-white/10 hover:text-white/90"
-            aria-label="Info"
-            title="Info"
+          <GhostButton
             onClick={() => {}}
-          >
-            <Info className="size-4" />
-          </button>
+            icon={<IoInformationCircleOutline className="text-2xl" />}
+          />
         }
       />
 
@@ -49,11 +45,12 @@ export function StartView(props: {
           label="Aufgabe"
           right={
             <Stepper
+              key={`problem:${problemIdx}`}
               value={String(problemIdx)}
-              decDisabled={!canDecProblem}
-              incDisabled={!canIncProblem}
-              onDec={() => setProblemIdx(Math.max(1, problemIdx - 1))}
-              onInc={() => setProblemIdx(Math.min(999, problemIdx + 1))}
+              kind="number"
+              min={1}
+              max={999}
+              onChange={(next) => setProblemIdx(Number.parseInt(next, 10))}
             />
           }
         />
@@ -62,11 +59,11 @@ export function StartView(props: {
           label="Teilaufgabe"
           right={
             <Stepper
-              value={subLabel}
-              decDisabled={!canDecSub}
-              incDisabled={!canIncSub}
-              onDec={() => setSubproblemLabel(prevLabel(subLabel))}
-              onInc={() => setSubproblemLabel(nextLabel(subLabel))}
+              key={`subproblem:${subproblemLabel}`}
+              value={subproblemLabel}
+              kind="free"
+              emptyValue="a"
+              onChange={(next) => setSubproblemLabel(next)}
             />
           }
         />
@@ -88,8 +85,8 @@ export function StartView(props: {
 
 function Row(props: { label: string; right: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <MutedText className="text-sm font.medium">{props.label}</MutedText>
+    <div className="flex items-center justify-between">
+      <MutedText className="text-sm w-20! font-medium">{props.label}</MutedText>
       {props.right}
     </div>
   );
@@ -97,50 +94,108 @@ function Row(props: { label: string; right: React.ReactNode }) {
 
 function Stepper(props: {
   value: string;
-  decDisabled: boolean;
-  incDisabled: boolean;
-  onDec: () => void;
-  onInc: () => void;
+  kind: 'number' | 'free';
+  min?: number;
+  max?: number;
+  emptyValue?: string;
+  onChange: (next: string) => void;
 }) {
+  const [draft, setDraft] = useState(props.value);
+  const displayValue = draft;
+
+  const parseCurrentNumber = () => {
+    const digits = displayValue.replace(/[^\d]/g, '');
+    const fallbackDigits = props.value.replace(/[^\d]/g, '');
+    const n = Number.parseInt(digits || fallbackDigits || '0', 10);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const clampNumber = (n: number) => {
+    const min = props.min ?? Number.NEGATIVE_INFINITY;
+    const max = props.max ?? Number.POSITIVE_INFINITY;
+    return Math.max(min, Math.min(max, n));
+  };
+
+  const commit = () => {
+    if (props.kind === 'number') {
+      const digits = displayValue.replace(/[^\d]/g, '');
+      const n = Number.parseInt(digits || String(props.min ?? 0), 10);
+      const normalized = String(clampNumber(Number.isFinite(n) ? n : props.min ?? 0));
+      setDraft(normalized);
+      props.onChange(normalized);
+      return;
+    }
+
+    const trimmed = displayValue.trim();
+    const normalized = trimmed || props.emptyValue || '';
+    setDraft(normalized);
+    props.onChange(normalized);
+  };
+
+  const decDisabled =
+    props.kind === 'number'
+      ? parseCurrentNumber() <= (props.min ?? Number.NEGATIVE_INFINITY)
+      : !canDecrementSuffix((displayValue.trim() || props.emptyValue || '').trim());
+
+  const incDisabled =
+    props.kind === 'number'
+      ? parseCurrentNumber() >= (props.max ?? Number.POSITIVE_INFINITY)
+      : !canIncrementSuffix((displayValue.trim() || props.emptyValue || '').trim());
+
   return (
-    <div className="inline-flex justify-between items-center gap-1 rounded-full p-1">
-      <div className="text-sm font-semibold text-white tabular-nums pr-2">{props.value}</div>
-      <div className="flex gap-2 scale-90">
+    <div className="inline-flex justify-end items-center rounded-full">
+      <input
+        value={displayValue}
+        onChange={(e) => {
+          const nextRaw = e.target.value;
+          const next = props.kind === 'number' ? nextRaw.replace(/[^\d]/g, '') : nextRaw;
+          setDraft(next);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+        }}
+        inputMode={props.kind === 'number' ? 'numeric' : undefined}
+        className="w-10 bg-transparent outline-none text-sm font-semibold text-white tabular-nums pr-2 text-right"
+      />
+      <div className="flex gap-2 scale-80">
         <SecondaryButton
-          disabled={props.decDisabled}
-          onClick={props.onDec}
+          disabled={decDisabled}
+          onClick={() => {
+            if (props.kind === 'number') {
+              const next = clampNumber(parseCurrentNumber() - 1);
+              const normalized = String(next);
+              setDraft(normalized);
+              props.onChange(normalized);
+              return;
+            }
+            const current = displayValue.trim() || props.emptyValue || '';
+            const next = decrementSuffix(current);
+            const normalized = (next || props.emptyValue || '').trim() || props.emptyValue || '';
+            setDraft(normalized);
+            props.onChange(normalized);
+          }}
           icon={<Minus className="size-4" />}
         />
         <SecondaryButton
-          disabled={props.incDisabled}
-          onClick={props.onInc}
+          disabled={incDisabled}
+          onClick={() => {
+            if (props.kind === 'number') {
+              const next = clampNumber(parseCurrentNumber() + 1);
+              const normalized = String(next);
+              setDraft(normalized);
+              props.onChange(normalized);
+              return;
+            }
+            const current = displayValue.trim() || props.emptyValue || '';
+            const next = incrementSuffix(current);
+            const normalized = (next || props.emptyValue || '').trim() || props.emptyValue || '';
+            setDraft(normalized);
+            props.onChange(normalized);
+          }}
           icon={<Plus className="size-4" />}
         />
       </div>
     </div>
   );
-}
-
-function normalizeLabel(label: string) {
-  const l = label.trim().toLowerCase();
-  if (l.length !== 1) return l || 'a';
-  const c = l.charCodeAt(0);
-  if (c < 97 || c > 122) return l;
-  return l;
-}
-
-function nextLabel(label: string) {
-  const l = normalizeLabel(label);
-  const c = l.charCodeAt(0);
-  if (c < 97 || c > 122) return l;
-  if (c === 122) return 'z';
-  return String.fromCharCode(c + 1);
-}
-
-function prevLabel(label: string) {
-  const l = normalizeLabel(label);
-  const c = l.charCodeAt(0);
-  if (c < 97 || c > 122) return l;
-  if (c === 97) return 'a';
-  return String.fromCharCode(c - 1);
 }
