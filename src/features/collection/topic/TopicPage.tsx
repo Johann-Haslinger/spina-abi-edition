@@ -13,9 +13,9 @@ import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import {
-  SessionSummaryModal,
+  SessionReviewModal,
   type SessionSummaryState,
-} from '../../session/modals/SessionSummaryModal';
+} from '../../session/modals/SessionReviewModal';
 import { AssetItem } from './components/AssetItem';
 import { FilterChip } from './components/FilterChip';
 import { UploadAssetModal } from './modals/UploadAssetModal';
@@ -162,7 +162,7 @@ export function TopicPage() {
 
   return (
     <div className="space-y-6">
-      <SessionSummaryModal
+      <SessionReviewModal
         key={sessionSummary ? `${sessionSummary.startedAtMs}-${sessionSummary.endedAtMs}` : 'none'}
         open={!!sessionSummary}
         onClose={() => setSessionSummary(null)}

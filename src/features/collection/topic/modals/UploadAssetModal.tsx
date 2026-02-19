@@ -1,58 +1,57 @@
-import { FileUp } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Modal } from '../../../../components/Modal'
-import type { AssetType, Folder } from '../../../../domain/models'
-import { FilterChip } from '../components/FilterChip'
-import { flattenFoldersForSelect } from '../utils/folderSelect'
+import { FileUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Modal } from '../../../../components/Modal';
+import type { AssetType, Folder } from '../../../../domain/models';
+import { FilterChip } from '../components/FilterChip';
+import { flattenFoldersForSelect } from '../utils/folderSelect';
 
 export function UploadAssetModal(props: {
-  open: boolean
-  file: File | null
-  initialType: AssetType
-  folders: Folder[]
-  onClose: () => void
+  open: boolean;
+  file: File | null;
+  initialType: AssetType;
+  folders: Folder[];
+  onClose: () => void;
   onSubmit: (input: {
-    type: AssetType
-    title: string
-    folderId?: string
-    file: File
-  }) => Promise<void> | void
+    type: AssetType;
+    title: string;
+    folderId?: string;
+    file: File;
+  }) => Promise<void> | void;
 }) {
-  const [type, setType] = useState<AssetType>(props.initialType)
-  const [title, setTitle] = useState('')
-  const [folderId, setFolderId] = useState<string | ''>('')
-  const [saving, setSaving] = useState(false)
+  const [type, setType] = useState<AssetType>(props.initialType);
+  const [title, setTitle] = useState('');
+  const [folderId, setFolderId] = useState<string | ''>('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!props.open) return
-    setType(props.initialType)
-    const f = props.file
-    setTitle(f ? f.name.replace(/\.[^.]+$/, '') : '')
-    setFolderId('')
-  }, [props.open, props.initialType, props.file])
+    if (!props.open) return;
+    setType(props.initialType);
+    const f = props.file;
+    setTitle(f ? f.name.replace(/\.[^.]+$/, '') : '');
+    setFolderId('');
+  }, [props.open, props.initialType, props.file]);
 
   async function submit() {
-    if (!props.file) return
-    const t = title.trim()
-    if (!t) return
-    setSaving(true)
+    if (!props.file) return;
+    const t = title.trim();
+    if (!t) return;
+    setSaving(true);
     try {
       await props.onSubmit({
         type,
         title: t,
         folderId: folderId || undefined,
         file: props.file,
-      })
-      props.onClose()
+      });
+      props.onClose();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
     <Modal
       open={props.open}
-      title="Asset hochladen"
       onClose={props.onClose}
       footer={
         <>
@@ -87,8 +86,16 @@ export function UploadAssetModal(props: {
         <div className="space-y-2">
           <div className="text-xs font-semibold text-slate-300">Typ</div>
           <div className="flex flex-wrap gap-2">
-            <FilterChip active={type === 'exercise'} label="Übung" onClick={() => setType('exercise')} />
-            <FilterChip active={type === 'cheatsheet'} label="Merkblatt" onClick={() => setType('cheatsheet')} />
+            <FilterChip
+              active={type === 'exercise'}
+              label="Übung"
+              onClick={() => setType('exercise')}
+            />
+            <FilterChip
+              active={type === 'cheatsheet'}
+              label="Merkblatt"
+              onClick={() => setType('cheatsheet')}
+            />
             <FilterChip active={type === 'note'} label="Notiz" onClick={() => setType('note')} />
             <FilterChip active={type === 'file'} label="Datei" onClick={() => setType('file')} />
           </div>
@@ -120,6 +127,5 @@ export function UploadAssetModal(props: {
         </label>
       </div>
     </Modal>
-  )
+  );
 }
-

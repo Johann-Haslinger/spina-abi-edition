@@ -84,10 +84,10 @@ export function UpsertSubjectModal(props: {
   return (
     <Modal
       open={props.open}
-      title={title}
       onClose={props.onClose}
       footer={
         <div className="flex w-full items-center justify-between gap-3">
+          {title}
           {props.mode === 'edit' && props.onDelete ? (
             <button
               type="button"

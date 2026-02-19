@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FiMinimize2 } from 'react-icons/fi';
 import { IoCheckmark } from 'react-icons/io5';
 import { GhostButton, PrimaryButton, SecondaryButton } from '../../../../components/Button';
+import { formatDurationClock } from '../../../../utils/time';
 import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
 
@@ -19,7 +20,9 @@ export function ProgressDetailsView(props: {
       <PanelViewHeader left={<GhostButton onClick={props.onClose} icon={<FiMinimize2 />} />} />
 
       <div className="flex flex-col mt-3 items-center">
-        <span className="tabular-nums text-4xl font-medium">{formatDuration(pastSeconds)}</span>
+        <span className="tabular-nums text-4xl font-medium">
+          {formatDurationClock(pastSeconds)}
+        </span>
         <span className="text-base mt-2 opacity-70">
           Aufgabe {currentAttempt?.problemIdx} {currentAttempt?.subproblemLabel}
         </span>
@@ -31,12 +34,6 @@ export function ProgressDetailsView(props: {
       </div>
     </div>
   );
-}
-
-function formatDuration(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 const usePastTimeInSeconds = () => {

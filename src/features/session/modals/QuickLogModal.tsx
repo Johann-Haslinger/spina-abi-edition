@@ -1,44 +1,47 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Modal } from '../../../components/Modal'
-import type { AttemptResult } from '../../../domain/models'
+import { useEffect, useMemo, useState } from 'react';
+import { Modal } from '../../../components/Modal';
+import type { AttemptResult } from '../../../domain/models';
 
 export function QuickLogModal(props: {
-  open: boolean
-  onClose: () => void
-  onSubmit: (input: { result: AttemptResult; note?: string; errorType?: string }) => Promise<void> | void
+  open: boolean;
+  onClose: () => void;
+  onSubmit: (input: {
+    result: AttemptResult;
+    note?: string;
+    errorType?: string;
+  }) => Promise<void> | void;
 }) {
-  const [result, setResult] = useState<AttemptResult>('correct')
-  const [note, setNote] = useState('')
-  const [errorType, setErrorType] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState<AttemptResult>('correct');
+  const [note, setNote] = useState('');
+  const [errorType, setErrorType] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const showError = useMemo(() => result !== 'correct', [result])
+  const showError = useMemo(() => result !== 'correct', [result]);
 
   useEffect(() => {
-    if (!props.open) return
-    setResult('correct')
-    setNote('')
-    setErrorType('')
-  }, [props.open])
+    if (!props.open) return;
+    setResult('correct');
+    setNote('');
+    setErrorType('');
+  }, [props.open]);
 
   async function submit() {
-    setSaving(true)
+    setSaving(true);
     try {
       await props.onSubmit({
         result,
         note: note.trim() || undefined,
         errorType: showError ? errorType.trim() || undefined : undefined,
-      })
-      props.onClose()
+      });
+      props.onClose();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
     <Modal
       open={props.open}
-      title="Teilaufgabe fertig"
       onClose={props.onClose}
       footer={
         <>
@@ -64,8 +67,16 @@ export function QuickLogModal(props: {
       <div className="space-y-4">
         <div className="text-xs font-semibold text-slate-300">Ergebnis</div>
         <div className="flex flex-wrap gap-2">
-          <ResultChip active={result === 'correct'} label="✅" onClick={() => setResult('correct')} />
-          <ResultChip active={result === 'partial'} label="🟨" onClick={() => setResult('partial')} />
+          <ResultChip
+            active={result === 'correct'}
+            label="✅"
+            onClick={() => setResult('correct')}
+          />
+          <ResultChip
+            active={result === 'partial'}
+            label="🟨"
+            onClick={() => setResult('partial')}
+          />
           <ResultChip active={result === 'wrong'} label="❌" onClick={() => setResult('wrong')} />
         </div>
 
@@ -92,7 +103,7 @@ export function QuickLogModal(props: {
         </label>
       </div>
     </Modal>
-  )
+  );
 }
 
 function ResultChip(props: { active: boolean; label: string; onClick: () => void }) {
@@ -108,6 +119,5 @@ function ResultChip(props: { active: boolean; label: string; onClick: () => void
     >
       {props.label}
     </button>
-  )
+  );
 }
-

@@ -1,51 +1,54 @@
-import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion';
+import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export function Modal(props: {
-  open: boolean
-  title: string
-  onClose: () => void
-  children: ReactNode
-  footer?: ReactNode
+  open: boolean;
+
+  onClose: () => void;
+  children: ReactNode;
+  footer?: ReactNode;
 }) {
-  const { open, title, onClose, children, footer } = props
-  if (!open) return null
+  const { open, onClose, children, footer } = props;
 
   const node = (
-    <div className="fixed inset-0 z-10000">
-      <div
-        className="absolute inset-0 bg-black/60"
-        onClick={onClose}
-        aria-hidden
-      />
-      <div className="absolute inset-0 overflow-y-auto p-4">
-        <div className="mx-auto mt-16 w-full max-w-lg rounded-xl border border-slate-800 bg-slate-950 shadow-xl">
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-            <div className="text-sm font-semibold text-slate-50">{title}</div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md p-2 text-slate-300 hover:bg-slate-900 hover:text-slate-50"
-              aria-label="Schließen"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="px-4 py-4">{children}</div>
-          {footer ? (
-            <div className="flex items-center justify-end gap-2 border-t border-slate-800 px-4 py-3">
-              {footer}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  )
+    <AnimatePresence>
+      {open ? (
+        <motion.div
+          className="fixed inset-0 z-10000"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+        >
+          <motion.div
+            className="absolute inset-0 bg-black/50"
+            onClick={onClose}
+            aria-hidden
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          />
+          <motion.div
+            className="absolute flex flex-col left-1/2 max-h-[80vh] overflow-hidden -translate-x-1/2 mx-auto w-full max-w-lg rounded-4xl min-h-2/3 top-1/2 -translate-y-1/2 border border-white/15 bg-[#1E1E1E]/90 backdrop-blur shadow-xl"
+            initial={{ opacity: 0, y: 14, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.985 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            <div className="min-h-0 flex-1 overflow-y-auto pb-28 p-6">{children}</div>
+            {footer ? (
+              <div className="pointer-events-auto absolute bottom-0 left-0 right-0 flex items-center justify-end gap-2 px-6 pt-4 pb-6 rounded-b-4xl">
+                {footer}
+              </div>
+            ) : null}
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
 
-  // Use a portal so the modal is never clipped by ancestors
-  // (e.g. headers with backdrop-filter/overflow contexts).
-  if (typeof document === 'undefined') return node
-  return createPortal(node, document.body)
+  if (typeof document === 'undefined') return open ? node : null;
+  return createPortal(node, document.body);
 }
-

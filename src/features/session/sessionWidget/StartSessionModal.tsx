@@ -1,53 +1,49 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Modal } from '../../../components/Modal'
-import type { Subject, Topic } from '../../../domain/models'
-import { useActiveSessionStore } from '../../../stores/activeSessionStore'
-import { useSubjectsStore } from '../../../stores/subjectsStore'
-import { useTopicsStore } from '../../../stores/topicsStore'
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Modal } from '../../../components/Modal';
+import type { Subject, Topic } from '../../../domain/models';
+import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useSubjectsStore } from '../../../stores/subjectsStore';
+import { useTopicsStore } from '../../../stores/topicsStore';
 
 export function StartSessionModal(props: { open: boolean; onClose: () => void }) {
-  const navigate = useNavigate()
-  const { start } = useActiveSessionStore()
-  const { subjects, loading, error, refresh } = useSubjectsStore()
-  const { topicsBySubject, loadingBySubject, errorBySubject, refreshBySubject } =
-    useTopicsStore()
+  const navigate = useNavigate();
+  const { start } = useActiveSessionStore();
+  const { subjects, loading, error, refresh } = useSubjectsStore();
+  const { topicsBySubject, loadingBySubject, errorBySubject, refreshBySubject } = useTopicsStore();
 
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('')
-  const [selectedTopicId, setSelectedTopicId] = useState<string>('')
-  const [plannedMinutes, setPlannedMinutes] = useState<string>('') 
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
+  const [plannedMinutes, setPlannedMinutes] = useState<string>('');
 
-  const topics: Topic[] = selectedSubjectId ? topicsBySubject[selectedSubjectId] ?? [] : []
-  const topicsLoading = selectedSubjectId
-    ? (loadingBySubject[selectedSubjectId] ?? false)
-    : false
-  const topicsError = selectedSubjectId ? errorBySubject[selectedSubjectId] : undefined
+  const topics: Topic[] = selectedSubjectId ? topicsBySubject[selectedSubjectId] ?? [] : [];
+  const topicsLoading = selectedSubjectId ? loadingBySubject[selectedSubjectId] ?? false : false;
+  const topicsError = selectedSubjectId ? errorBySubject[selectedSubjectId] : undefined;
 
   useEffect(() => {
-    if (!props.open) return
-    void refresh()
-  }, [props.open, refresh])
+    if (!props.open) return;
+    void refresh();
+  }, [props.open, refresh]);
 
   useEffect(() => {
-    if (!props.open) return
-    if (!selectedSubjectId) return
-    void refreshBySubject(selectedSubjectId)
-  }, [props.open, selectedSubjectId, refreshBySubject])
+    if (!props.open) return;
+    if (!selectedSubjectId) return;
+    void refreshBySubject(selectedSubjectId);
+  }, [props.open, selectedSubjectId, refreshBySubject]);
 
   const plannedDurationMs = useMemo(() => {
-    const trimmed = plannedMinutes.trim()
-    if (!trimmed) return undefined
-    const n = Number(trimmed)
-    if (!Number.isFinite(n) || n <= 0) return undefined
-    return Math.round(n * 60_000)
-  }, [plannedMinutes])
+    const trimmed = plannedMinutes.trim();
+    if (!trimmed) return undefined;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n <= 0) return undefined;
+    return Math.round(n * 60_000);
+  }, [plannedMinutes]);
 
-  const canStart = !!selectedSubjectId && !!selectedTopicId
+  const canStart = !!selectedSubjectId && !!selectedTopicId;
 
   return (
     <Modal
       open={props.open}
-      title="Session starten"
       onClose={props.onClose}
       footer={
         <>
@@ -62,14 +58,14 @@ export function StartSessionModal(props: { open: boolean; onClose: () => void })
             type="button"
             disabled={!canStart}
             onClick={() => {
-              if (!canStart) return
+              if (!canStart) return;
               start({
                 subjectId: selectedSubjectId,
                 topicId: selectedTopicId,
                 plannedDurationMs,
-              })
-              props.onClose()
-              navigate(`/subjects/${selectedSubjectId}/topics/${selectedTopicId}`)
+              });
+              props.onClose();
+              navigate(`/subjects/${selectedSubjectId}/topics/${selectedTopicId}`);
             }}
             className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-60"
           >
@@ -90,9 +86,9 @@ export function StartSessionModal(props: { open: boolean; onClose: () => void })
           <select
             value={selectedSubjectId}
             onChange={(e) => {
-              const next = e.target.value
-              setSelectedSubjectId(next)
-              setSelectedTopicId('')
+              const next = e.target.value;
+              setSelectedSubjectId(next);
+              setSelectedTopicId('');
             }}
             className="mt-1 w-full rounded-md border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-50 outline-none ring-indigo-500/30 focus:ring-2"
             disabled={loading}
@@ -118,11 +114,7 @@ export function StartSessionModal(props: { open: boolean; onClose: () => void })
             disabled={!selectedSubjectId || topicsLoading}
           >
             <option value="" disabled>
-              {!selectedSubjectId
-                ? 'Erst Fach wählen'
-                : topicsLoading
-                  ? 'Lade…'
-                  : 'Bitte wählen'}
+              {!selectedSubjectId ? 'Erst Fach wählen' : topicsLoading ? 'Lade…' : 'Bitte wählen'}
             </option>
             {topics.map((t) => (
               <option key={t.id} value={t.id}>
@@ -131,9 +123,7 @@ export function StartSessionModal(props: { open: boolean; onClose: () => void })
               </option>
             ))}
           </select>
-          {topicsError ? (
-            <div className="mt-2 text-xs text-rose-200">{topicsError}</div>
-          ) : null}
+          {topicsError ? <div className="mt-2 text-xs text-rose-200">{topicsError}</div> : null}
         </label>
 
         <label className="block">
@@ -153,6 +143,5 @@ export function StartSessionModal(props: { open: boolean; onClose: () => void })
         </label>
       </div>
     </Modal>
-  )
+  );
 }
-

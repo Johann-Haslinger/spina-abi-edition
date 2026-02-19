@@ -3,6 +3,7 @@ import { IoCheckmark } from 'react-icons/io5';
 import { PrimaryButton, SecondaryButton } from '../../../../components/Button';
 import type { AttemptResult } from '../../../../domain/models';
 import { downloadAttemptPng } from '../../../../ink/export';
+import { formatDurationClock } from '../../../../utils/time';
 import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
 import { HighlightText, MutedText, PanelHeading } from './TextHighlight';
@@ -51,7 +52,7 @@ export function ReviewView(props: {
         right={
           <div>
             <div className="text-right text-xs font-semibold">
-              <span className="tabular-nums">{formatDuration(seconds)}</span>
+              <span className="tabular-nums">{formatDurationClock(seconds)}</span>
             </div>
             <div>
               <button
@@ -135,10 +136,4 @@ function ResultChip(props: { active: boolean; label: string; onClick: () => void
       {props.label}
     </button>
   );
-}
-
-function formatDuration(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
 }

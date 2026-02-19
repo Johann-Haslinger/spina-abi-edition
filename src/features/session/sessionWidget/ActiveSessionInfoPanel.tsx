@@ -1,7 +1,7 @@
 import { Pause, Play, Plus } from 'lucide-react';
 import type { ActiveSession } from '../../../stores/activeSessionStore';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
-import { formatDuration } from './utils';
+import { formatDurationClock } from '../../../utils/time';
 
 export function ActiveSessionInfoPanel(props: {
   open: boolean;
@@ -79,12 +79,12 @@ export function ActiveSessionInfoPanel(props: {
 
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
             <span className="rounded bg-slate-900/60 px-2 py-1">
-              Laufzeit: {formatDuration(props.elapsedSeconds)}
+              Laufzeit: {formatDurationClock(props.elapsedSeconds)}
             </span>
             <span className="rounded bg-slate-900/60 px-2 py-1">
               Erwartet:{' '}
               {props.active.plannedDurationMs
-                ? formatDuration(Math.round(props.active.plannedDurationMs / 1000))
+                ? formatDurationClock(Math.round(props.active.plannedDurationMs / 1000))
                 : '—'}
             </span>
             {props.active.plannedDurationMs ? (

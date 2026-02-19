@@ -13,7 +13,7 @@ import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
 import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
-import type { SessionSummaryState } from '../modals/SessionSummaryModal';
+import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { AssetViewer } from '../viewer/AssetViewer';
 import { formatExerciseStatus } from '../viewer/viewerUtils';
@@ -171,7 +171,6 @@ export function StudyPage() {
 
       <Modal
         open={guardState.kind === 'needStart'}
-        title="Session starten?"
         onClose={goToAssetTopic}
         footer={
           <>
@@ -202,7 +201,6 @@ export function StudyPage() {
 
       <Modal
         open={guardState.kind === 'needSwitch'}
-        title="Session wechseln?"
         onClose={goToAssetTopic}
         footer={
           <>

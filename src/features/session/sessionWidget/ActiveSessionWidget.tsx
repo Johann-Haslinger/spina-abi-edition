@@ -7,10 +7,11 @@ import { useActiveSessionStore, type ActiveSession } from '../../../stores/activ
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
-import type { SessionSummaryState } from '../modals/SessionSummaryModal';
+import { formatDurationClock } from '../../../utils/time';
+import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { ActiveSessionInfoPanel } from './ActiveSessionInfoPanel';
-import { formatDuration, getElapsedMs } from './utils';
+import { getElapsedMs } from './utils';
 
 export function ActiveSessionWidget(props: { active: ActiveSession }) {
   const { active } = props;
@@ -35,10 +36,10 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
   const timerLabel = useMemo(() => {
-    if (!active.plannedDurationMs) return formatDuration(elapsedSeconds);
+    if (!active.plannedDurationMs) return formatDurationClock(elapsedSeconds);
     const remainingSeconds = Math.ceil((active.plannedDurationMs - elapsedMs) / 1000);
-    if (remainingSeconds >= 0) return formatDuration(remainingSeconds);
-    return `+${formatDuration(Math.abs(remainingSeconds))}`;
+    if (remainingSeconds >= 0) return formatDurationClock(remainingSeconds);
+    return `+${formatDurationClock(Math.abs(remainingSeconds))}`;
   }, [active.plannedDurationMs, elapsedMs, elapsedSeconds]);
 
   const stopSession = useCallback(async () => {
@@ -61,7 +62,7 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   return (
     <div
       ref={containerRef}
-      className="fixed w-[200px] z-[1000000000] max-w-[calc(100vw-32px)]"
+      className="fixed w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
       style={{ left: pos.x, top: pos.y }}
     >
       <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5">

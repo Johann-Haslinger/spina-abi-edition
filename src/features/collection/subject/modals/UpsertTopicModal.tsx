@@ -1,47 +1,46 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Modal } from '../../../../components/Modal'
+import { useEffect, useMemo, useState } from 'react';
+import { Modal } from '../../../../components/Modal';
 
 export function UpsertTopicModal(props: {
-  open: boolean
-  mode: 'create' | 'edit'
-  initial?: { name: string; iconEmoji?: string }
-  onClose: () => void
-  onSave: (input: { name: string; iconEmoji?: string }) => Promise<void> | void
+  open: boolean;
+  mode: 'create' | 'edit';
+  initial?: { name: string; iconEmoji?: string };
+  onClose: () => void;
+  onSave: (input: { name: string; iconEmoji?: string }) => Promise<void> | void;
 }) {
   const title = useMemo(
     () => (props.mode === 'edit' ? 'Thema bearbeiten' : 'Thema anlegen'),
     [props.mode],
-  )
+  );
 
-  const [name, setName] = useState('')
-  const [iconEmoji, setIconEmoji] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [name, setName] = useState('');
+  const [iconEmoji, setIconEmoji] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!props.open) return
-    setName(props.initial?.name ?? '')
-    setIconEmoji(props.initial?.iconEmoji ?? '')
-  }, [props.open, props.initial])
+    if (!props.open) return;
+    setName(props.initial?.name ?? '');
+    setIconEmoji(props.initial?.iconEmoji ?? '');
+  }, [props.open, props.initial]);
 
   async function submit() {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    setSaving(true)
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
     try {
       await props.onSave({
         name: trimmed,
         iconEmoji: iconEmoji.trim() || undefined,
-      })
-      props.onClose()
+      });
+      props.onClose();
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
     <Modal
       open={props.open}
-      title={title}
       onClose={props.onClose}
       footer={
         <>
@@ -64,6 +63,7 @@ export function UpsertTopicModal(props: {
         </>
       }
     >
+      {title}
       <div className="space-y-4">
         <label className="block">
           <div className="text-xs font-semibold text-slate-300">Icon (Emoji)</div>
@@ -85,6 +85,5 @@ export function UpsertTopicModal(props: {
         </label>
       </div>
     </Modal>
-  )
+  );
 }
-
