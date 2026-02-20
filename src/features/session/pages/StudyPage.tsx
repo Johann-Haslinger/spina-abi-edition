@@ -12,6 +12,7 @@ import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
+import { StudyAiWidget } from '../components/studyAi/StudyAiWidget';
 import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
@@ -30,6 +31,7 @@ export function StudyPage() {
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const {
+    boundSessionKey,
     studySessionId,
     bindToSession,
     ensureStudySession,
@@ -257,6 +259,13 @@ export function StudyPage() {
               subjectId={guardState.asset.subjectId}
               topicId={guardState.asset.topicId}
               onOpenExerciseReview={() => setReviewOpen(true)}
+            />
+
+            <StudyAiWidget
+              assetId={guardState.asset.id}
+              pdfData={pdfData}
+              boundSessionKey={boundSessionKey}
+              currentAttemptId={currentAttempt?.attemptId ?? null}
             />
           </>
         ) : (
