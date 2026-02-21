@@ -1,17 +1,26 @@
-export function formatDuration(totalSeconds: number) {
+export function formatDuration(totalSeconds: number, short?: boolean) {
   const seconds = Math.max(0, Math.floor(totalSeconds));
 
   if (seconds < 60) {
+    if (short) {
+      return `${seconds} s`;
+    }
     return `${seconds} ${seconds === 1 ? 'Sekunde' : 'Sekunden'}`;
   }
 
   if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60);
+    if (short) {
+      return `${minutes} min`;
+    }
     return `${minutes} ${minutes === 1 ? 'Minute' : 'Minuten'}`;
   }
 
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
+  if (short) {
+    return `${hours}:${String(minutes).padStart(2, '0')} h`;
+  }
   return `${hours}:${String(minutes).padStart(2, '0')} Stunden`;
 }
 

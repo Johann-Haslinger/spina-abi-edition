@@ -1,12 +1,12 @@
-import { GripVertical } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { IoStop } from 'react-icons/io5';
+import { IoInformation } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
+import { GhostButton } from '../../../components/Button';
 import { studySessionRepo } from '../../../repositories';
 import { useActiveSessionStore, type ActiveSession } from '../../../stores/activeSessionStore';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
-import { formatDurationClock } from '../../../utils/time';
+import { formatDuration } from '../../../utils/time';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { formatTaskPath } from '../utils/formatTaskPath';
@@ -33,10 +33,10 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
 
   const secondaryLabel = useMemo(() => {
     if (!currentAttempt) return topicName ?? active.topicId;
-    return `Aufgabe ${formatTaskPath(currentAttempt, depth)}`;
+    return `${formatTaskPath(currentAttempt, depth)}`;
   }, [active.topicId, currentAttempt, depth, topicName]);
 
-  const { containerRef, pos, gripProps } = useDraggablePosition({
+  const { containerRef, pos } = useDraggablePosition({
     width: 200,
     initialTop: 24,
     initialRight: 24,
@@ -47,10 +47,10 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
   const timerLabel = useMemo(() => {
-    if (!active.plannedDurationMs) return formatDurationClock(elapsedSeconds);
+    if (!active.plannedDurationMs) return formatDuration(elapsedSeconds, true);
     const remainingSeconds = Math.ceil((active.plannedDurationMs - elapsedMs) / 1000);
-    if (remainingSeconds >= 0) return formatDurationClock(remainingSeconds);
-    return `+${formatDurationClock(Math.abs(remainingSeconds))}`;
+    if (remainingSeconds >= 0) return formatDuration(remainingSeconds, true);
+    return `+${formatDuration(Math.abs(remainingSeconds), true)}`;
   }, [active.plannedDurationMs, elapsedMs, elapsedSeconds]);
 
   const stopSession = useCallback(async () => {
@@ -80,33 +80,15 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
         <div className="flex items-stretch p-1.5">
           <button
             type="button"
-            onClick={() => void stopSession()}
-            className="inline-flex cursor-pointer size-8 items-center justify-center rounded-full text-white dark:text-white/80"
-            aria-label="Stop"
-            title="Session beenden"
-          >
-            <IoStop className="size-4" />
-          </button>
-
-          <button
-            type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="flex cursor-pointer min-w-0 flex-1 flex-col justify-center rounded-lg px-2.5 text-left"
+            className="flex text-sm  cursor-pointer min-w-0 flex-1 items-center px-2.5"
             aria-expanded={expanded}
           >
-            <div className="tabular-nums leading-3.7 text-xs font-bold">{timerLabel}</div>
-            <div className="truncate text-xs opacity-70 leading-3.7">{secondaryLabel}</div>
+            <span className="tabular-nums font-medium">{timerLabel} · </span>
+            <span className="truncate ml-1 opacity-70">{secondaryLabel}</span>
           </button>
 
-          <button
-            type="button"
-            className="inline-flex pr-1.5 items-center justify-center text-black/70 hover:text-black/90 dark:text-white/60 cursor-grab active:cursor-grabbing"
-            aria-label="Verschieben"
-            title="Ziehen zum Verschieben"
-            {...gripProps}
-          >
-            <GripVertical className="size-5" />
-          </button>
+          <GhostButton onClick={() => setExpanded((v) => !v)} icon={<IoInformation />} />
         </div>
       </div>
 
@@ -116,6 +98,7 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
         subjectName={subjectName}
         topicName={topicName}
         elapsedSeconds={elapsedSeconds}
+        onStop={stopSession}
       />
     </div>
   );

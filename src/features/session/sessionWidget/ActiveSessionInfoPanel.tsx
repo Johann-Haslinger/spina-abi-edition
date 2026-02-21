@@ -1,4 +1,4 @@
-import { Pause, Play, Plus } from 'lucide-react';
+import { Pause, Play, Plus, Square } from 'lucide-react';
 import type { ActiveSession } from '../../../stores/activeSessionStore';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { formatDurationClock } from '../../../utils/time';
@@ -9,6 +9,7 @@ export function ActiveSessionInfoPanel(props: {
   subjectName?: string;
   topicName?: string;
   elapsedSeconds: number;
+  onStop: () => void | Promise<void>;
 }) {
   const { togglePause, extendPlannedDurationMs, setPlannedDurationMs } = useActiveSessionStore();
 
@@ -44,6 +45,16 @@ export function ActiveSessionInfoPanel(props: {
                 <Pause className="h-4 w-4" />
               )}
               {props.active.pausedAtMs ? 'Fortsetzen' : 'Pausieren'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void props.onStop?.()}
+              className="inline-flex items-center gap-2 rounded-md bg-red-700/80 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              title="Session beenden"
+            >
+              <Square className="h-4 w-4" />
+              Beenden
             </button>
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
