@@ -67,7 +67,7 @@ export function FloatingQuickLogPanel(props: {
   return (
     <div className="fixed inset-0 z-9999 pointer-events-none">
       <motion.div
-        className="absolute bottom-4 right-4 pointer-events-auto touch-none"
+        className="absolute bottom-6 right-6 pointer-events-auto touch-none"
         drag
         dragControls={dragControls}
         dragListener={false}

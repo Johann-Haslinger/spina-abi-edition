@@ -7,7 +7,8 @@ type Point = { x: number; y: number };
 type InkCommand =
   | { kind: 'add'; stroke: InkStroke }
   | { kind: 'delete'; strokes: InkStroke[] }
-  | { kind: 'translateAttempt'; attemptId: string; dx: number; dy: number };
+  | { kind: 'translateAttempt'; attemptId: string; dx: number; dy: number }
+  | { kind: 'translateStrokes'; strokeIds: string[]; dx: number; dy: number };
 
 type InkState = {
   context: { studySessionId: string; assetId: string } | null;
@@ -15,11 +16,13 @@ type InkState = {
 
   activeAttemptId: string | null;
   brush: InkBrush;
-  color: string;
+  pencilColor: string;
+  markerColor: string;
   opacity: number;
   baseSize: number;
 
   selectedAttemptId: string | null;
+  selectedStrokeIds: string[];
 
   undoStack: InkCommand[];
   redoStack: InkCommand[];
@@ -27,7 +30,7 @@ type InkState = {
   setContext: (ctx: { studySessionId: string; assetId: string } | null) => void;
   setActiveAttemptId: (attemptId: string | null) => void;
   setBrush: (brush: InkBrush) => void;
-  setColor: (color: string) => void;
+  setColorForBrush: (brush: 'pencil' | 'marker', color: string) => void;
   setOpacity: (opacity: number) => void;
   setBaseSize: (size: number) => void;
 
@@ -35,14 +38,17 @@ type InkState = {
 
   exec: (cmd: InkCommand) => void;
   applyTranslation: (input: { attemptId: string; dx: number; dy: number }) => void;
+  applyTranslationStrokes: (input: { strokeIds: string[]; dx: number; dy: number }) => void;
   pushCommand: (cmd: InkCommand) => void;
   undo: () => InkCommand | null;
   redo: () => InkCommand | null;
 
   clearSelection: () => void;
   setSelectedAttemptId: (attemptId: string | null) => void;
+  setSelectedStrokeIds: (ids: string[]) => void;
   getSelectionBBox: () => {
-    attemptId: string;
+    attemptId?: string;
+    strokeIds?: string[];
     bbox: { minX: number; minY: number; maxX: number; maxY: number };
   } | null;
 };
@@ -71,13 +77,38 @@ function applyCmd(strokes: InkStroke[], cmd: InkCommand): InkStroke[] {
       };
     });
   }
+  if (cmd.kind === 'translateStrokes') {
+    const ids = new Set(cmd.strokeIds);
+    const { dx, dy } = cmd;
+    return strokes.map((s) => {
+      if (!ids.has(s.id)) return s;
+      return {
+        ...s,
+        points: s.points.map(([x, y, p, t]) => [x + dx, y + dy, p, t]),
+        bbox: {
+          minX: s.bbox.minX + dx,
+          minY: s.bbox.minY + dy,
+          maxX: s.bbox.maxX + dx,
+          maxY: s.bbox.maxY + dy,
+        },
+        updatedAtMs: Date.now(),
+      };
+    });
+  }
   return strokes;
 }
 
 function invertCmd(cmd: InkCommand): InkCommand {
   if (cmd.kind === 'add') return { kind: 'delete', strokes: [cmd.stroke] };
   if (cmd.kind === 'delete') return { kind: 'add', stroke: cmd.strokes[0]! };
-  return { kind: 'translateAttempt', attemptId: cmd.attemptId, dx: -cmd.dx, dy: -cmd.dy };
+  if (cmd.kind === 'translateAttempt')
+    return { kind: 'translateAttempt', attemptId: cmd.attemptId, dx: -cmd.dx, dy: -cmd.dy };
+  return {
+    kind: 'translateStrokes',
+    strokeIds: cmd.strokeIds,
+    dx: -cmd.dx,
+    dy: -cmd.dy,
+  };
 }
 
 export const useInkStore = create<InkState>()((set, get) => ({
@@ -86,11 +117,13 @@ export const useInkStore = create<InkState>()((set, get) => ({
 
   activeAttemptId: null,
   brush: 'pencil',
-  color: '#111827',
+  pencilColor: '#ffffff',
+  markerColor: '#D79E00',
   opacity: 1,
   baseSize: 2.2,
 
   selectedAttemptId: null,
+  selectedStrokeIds: [],
 
   undoStack: [],
   redoStack: [],
@@ -100,13 +133,15 @@ export const useInkStore = create<InkState>()((set, get) => ({
       context: ctx,
       strokes: [],
       selectedAttemptId: null,
+      selectedStrokeIds: [],
       undoStack: [],
       redoStack: [],
     })),
 
   setActiveAttemptId: (attemptId) => set({ activeAttemptId: attemptId }),
   setBrush: (brush) => set({ brush }),
-  setColor: (color) => set({ color }),
+  setColorForBrush: (brush, color) =>
+    set(brush === 'pencil' ? { pencilColor: color } : { markerColor: color }),
   setOpacity: (opacity) => set({ opacity }),
   setBaseSize: (baseSize) => set({ baseSize }),
 
@@ -123,6 +158,11 @@ export const useInkStore = create<InkState>()((set, get) => ({
   applyTranslation: ({ attemptId, dx, dy }) =>
     set((s) => ({
       strokes: applyCmd(s.strokes, { kind: 'translateAttempt', attemptId, dx, dy }),
+    })),
+
+  applyTranslationStrokes: ({ strokeIds, dx, dy }) =>
+    set((s) => ({
+      strokes: applyCmd(s.strokes, { kind: 'translateStrokes', strokeIds, dx, dy }),
     })),
 
   pushCommand: (cmd) =>
@@ -168,11 +208,18 @@ export const useInkStore = create<InkState>()((set, get) => ({
     return last;
   },
 
-  clearSelection: () => set({ selectedAttemptId: null }),
-  setSelectedAttemptId: (attemptId) => set({ selectedAttemptId: attemptId }),
+  clearSelection: () => set({ selectedAttemptId: null, selectedStrokeIds: [] }),
+  setSelectedAttemptId: (attemptId) => set({ selectedAttemptId: attemptId, selectedStrokeIds: [] }),
+  setSelectedStrokeIds: (ids) => set({ selectedStrokeIds: ids, selectedAttemptId: null }),
 
   getSelectionBBox: () => {
-    const { selectedAttemptId, strokes } = get();
+    const { selectedAttemptId, selectedStrokeIds, strokes } = get();
+    if (selectedStrokeIds.length > 0) {
+      const selected = strokes.filter((s) => selectedStrokeIds.includes(s.id));
+      if (selected.length === 0) return null;
+      const bbox = selected.map((s) => s.bbox).reduce((acc, b) => bboxUnion(acc, b));
+      return { strokeIds: selectedStrokeIds, bbox };
+    }
     if (!selectedAttemptId) return null;
     const selected = strokes.filter((s) => s.attemptId === selectedAttemptId);
     if (selected.length === 0) return null;

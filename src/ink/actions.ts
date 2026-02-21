@@ -34,6 +34,16 @@ export function useInkActions() {
     [exec],
   );
 
+  const translateStrokes = useCallback(
+    async (input: { strokeIds: string[]; dx: number; dy: number }) => {
+      if (!input.dx && !input.dy) return;
+      if (input.strokeIds.length === 0) return;
+      await inkRepo.translateStrokes(input);
+      exec({ kind: 'translateStrokes', ...input });
+    },
+    [exec],
+  );
+
   const undoWithPersist = useCallback(async () => {
     const cmd = undo();
     if (!cmd) return;
@@ -43,6 +53,12 @@ export function useInkActions() {
       await inkRepo.bulkUpsert(cmd.strokes);
     } else if (cmd.kind === 'translateAttempt') {
       await inkRepo.translateAttempt({ attemptId: cmd.attemptId, dx: -cmd.dx, dy: -cmd.dy });
+    } else if (cmd.kind === 'translateStrokes') {
+      await inkRepo.translateStrokes({
+        strokeIds: cmd.strokeIds,
+        dx: -cmd.dx,
+        dy: -cmd.dy,
+      });
     }
   }, [undo]);
 
@@ -55,8 +71,21 @@ export function useInkActions() {
       await inkRepo.deleteByIds(cmd.strokes.map((s) => s.id));
     } else if (cmd.kind === 'translateAttempt') {
       await inkRepo.translateAttempt({ attemptId: cmd.attemptId, dx: cmd.dx, dy: cmd.dy });
+    } else if (cmd.kind === 'translateStrokes') {
+      await inkRepo.translateStrokes({
+        strokeIds: cmd.strokeIds,
+        dx: cmd.dx,
+        dy: cmd.dy,
+      });
     }
   }, [redo]);
 
-  return { commitStroke, deleteStrokes, translateAttempt, undoWithPersist, redoWithPersist };
+  return {
+    commitStroke,
+    deleteStrokes,
+    translateAttempt,
+    translateStrokes,
+    undoWithPersist,
+    redoWithPersist,
+  };
 }

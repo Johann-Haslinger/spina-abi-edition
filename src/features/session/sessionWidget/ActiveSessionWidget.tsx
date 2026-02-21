@@ -38,8 +38,8 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
 
   const { containerRef, pos, gripProps } = useDraggablePosition({
     width: 200,
-    initialTop: 12,
-    initialRight: 12,
+    initialTop: 24,
+    initialRight: 24,
     padding: 8,
   });
 

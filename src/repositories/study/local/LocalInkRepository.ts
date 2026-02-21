@@ -50,4 +50,22 @@ export class LocalInkRepository {
         s.updatedAtMs = Date.now();
       });
   }
+
+  async translateStrokes(input: { strokeIds: string[]; dx: number; dy: number }): Promise<void> {
+    const { strokeIds, dx, dy } = input;
+    if (strokeIds.length === 0) return;
+    const ids = new Set(strokeIds);
+    const strokes = await db.inkStrokes.filter((s) => ids.has(s.id)).toArray();
+    for (const s of strokes) {
+      s.points = s.points.map(([x, y, p, t]) => [x + dx, y + dy, p, t]);
+      s.bbox = {
+        minX: s.bbox.minX + dx,
+        minY: s.bbox.minY + dy,
+        maxX: s.bbox.maxX + dx,
+        maxY: s.bbox.maxY + dy,
+      };
+      s.updatedAtMs = Date.now();
+    }
+    await db.inkStrokes.bulkPut(strokes);
+  }
 }
