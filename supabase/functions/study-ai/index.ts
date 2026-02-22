@@ -2,7 +2,6 @@
 // Receives chat messages + (cached) PDF and forwards to OpenAI.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 type InputMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -121,67 +120,16 @@ serve(async (req) => {
       userAgent: req.headers.get('user-agent') ?? '',
     });
 
-    const supabaseUrl = assertEnv('SUPABASE_URL');
-    const serviceRoleKey = assertEnv('SUPABASE_SERVICE_ROLE_KEY');
     const openaiKey = assertEnv('OPENAI_API_KEY');
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const bucket = Deno.env.get('STUDY_AI_BUCKET') || 'ai-pdfs';
+    // For now we always require the PDF in the request (no Supabase Storage caching).
+    const pdfB64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
+    if (!pdfB64) return jsonResponse(400, { error: 'pdfBase64 fehlt' });
 
-    let docId = typeof body.docId === 'string' ? body.docId : '';
-    let pdfBytes: Uint8Array | null = null;
+    const pdfBytes = b64ToBytes(pdfB64);
+    const docId = await sha256Hex(pdfBytes);
     const pdfFilename =
       typeof body.pdfFilename === 'string' && body.pdfFilename ? body.pdfFilename : 'exercise.pdf';
-
-    if (!docId) {
-      const pdfB64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
-      if (!pdfB64) return jsonResponse(400, { error: 'docId oder pdfBase64 fehlt' });
-      pdfBytes = b64ToBytes(pdfB64);
-      docId = await sha256Hex(pdfBytes);
-      const path = `${docId}.pdf`;
-      log(reqId, 'pdf_cache_miss_uploading', { bucket, path, pdfBytes: pdfBytes.byteLength });
-
-      const uploadRes = await supabase.storage.from(bucket).upload(path, pdfBytes, {
-        contentType: 'application/pdf',
-        upsert: false,
-      });
-      // Ignore "already exists" errors; we can still proceed using cache.
-      if (uploadRes.error && uploadRes.error.statusCode !== '409') {
-        log(reqId, 'storage_upload_failed', {
-          bucket,
-          path,
-          statusCode: uploadRes.error.statusCode,
-          message: uploadRes.error.message,
-        });
-        return jsonResponse(500, {
-          error: `Storage upload failed: ${uploadRes.error.message}. Bucket '${bucket}' vorhanden?`,
-        });
-      }
-      log(reqId, 'storage_upload_ok', {
-        bucket,
-        path,
-        existed: uploadRes.error?.statusCode === '409',
-      });
-    }
-
-    if (!pdfBytes) {
-      const path = `${docId}.pdf`;
-      log(reqId, 'pdf_cache_hit_downloading', { bucket, path });
-      const dl = await supabase.storage.from(bucket).download(path);
-      if (dl.error || !dl.data) {
-        log(reqId, 'storage_download_failed', {
-          bucket,
-          path,
-          message: dl.error?.message ?? 'missing',
-        });
-        return jsonResponse(500, {
-          error: `Storage download failed: ${dl.error?.message ?? 'missing'}. docId=${docId}`,
-        });
-      }
-      const ab = await dl.data.arrayBuffer();
-      pdfBytes = new Uint8Array(ab);
-      log(reqId, 'storage_download_ok', { bucket, path, pdfBytes: pdfBytes.byteLength });
-    }
 
     const pdfBase64ForOpenAI = bytesToB64(pdfBytes);
 
@@ -211,7 +159,10 @@ serve(async (req) => {
         ],
       },
       ...body.messages.map((m, idx) => {
-        const base = [{ type: 'input_text', text: m.content }];
+        const base =
+          m.role === 'assistant'
+            ? [{ type: 'output_text', text: m.content }]
+            : [{ type: 'input_text', text: m.content }];
         if (idx === lastUserIdx) {
           // OpenAI expects base64 PDFs as a data URL.
           base.push({

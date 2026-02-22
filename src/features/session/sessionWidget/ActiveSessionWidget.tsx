@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoInformation } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
 import { GhostButton } from '../../../components/Button';
@@ -12,9 +13,10 @@ import { useStudyStore } from '../stores/studyStore';
 import { formatTaskPath } from '../utils/formatTaskPath';
 import { ActiveSessionInfoPanel } from './ActiveSessionInfoPanel';
 import { getElapsedMs } from './utils';
+import { HUD_VARIANTS_TOP_RIGHT } from '../components/studyHud/hudMotion';
 
-export function ActiveSessionWidget(props: { active: ActiveSession }) {
-  const { active } = props;
+export function ActiveSessionWidget(props: { active: ActiveSession; hidden?: boolean }) {
+  const { active, hidden = false } = props;
   const navigate = useNavigate();
   const { end } = useActiveSessionStore();
   const { studySessionId, reset, currentAttempt, taskDepthByAssetId, loadTaskDepth } =
@@ -33,24 +35,17 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
 
   const secondaryLabel = useMemo(() => {
     if (!currentAttempt) return topicName ?? active.topicId;
-    return `${formatTaskPath(currentAttempt, depth)}`;
+    return `Aufgabe ${formatTaskPath(currentAttempt, depth)}`;
   }, [active.topicId, currentAttempt, depth, topicName]);
-
-  const { containerRef, pos } = useDraggablePosition({
-    width: 200,
-    initialTop: 24,
-    initialRight: 24,
-    padding: 8,
-  });
 
   const elapsedMs = getElapsedMs(active, nowMs);
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
   const timerLabel = useMemo(() => {
-    if (!active.plannedDurationMs) return formatDuration(elapsedSeconds, true);
+    if (!active.plannedDurationMs) return formatDuration(elapsedSeconds);
     const remainingSeconds = Math.ceil((active.plannedDurationMs - elapsedMs) / 1000);
-    if (remainingSeconds >= 0) return formatDuration(remainingSeconds, true);
-    return `+${formatDuration(Math.abs(remainingSeconds), true)}`;
+    if (remainingSeconds >= 0) return formatDuration(remainingSeconds);
+    return `+${formatDuration(Math.abs(remainingSeconds))}`;
   }, [active.plannedDurationMs, elapsedMs, elapsedSeconds]);
 
   const stopSession = useCallback(async () => {
@@ -71,24 +66,27 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   }, [active.subjectId, active.topicId, active.startedAtMs, end, navigate, reset, studySessionId]);
 
   return (
-    <div
-      ref={containerRef}
+    <motion.div
       className="fixed w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
-      style={{ left: pos.x, top: pos.y }}
+      style={{ right: 24, top: 24, pointerEvents: hidden ? 'none' : 'auto' }}
+      variants={HUD_VARIANTS_TOP_RIGHT}
+      initial="hidden"
+      animate={hidden ? 'hidden' : 'shown'}
+      exit="hidden"
+      aria-hidden={hidden}
     >
       <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5">
-        <div className="flex items-stretch p-1.5">
+        <div className="flex p-1.5">
+          <GhostButton onClick={() => setExpanded((v) => !v)} icon={<IoInformation />} />
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="flex text-sm  cursor-pointer min-w-0 flex-1 items-center px-2.5"
+            className="text-sm pl-1 cursor-pointer min-w-0 text-left"
             aria-expanded={expanded}
           >
-            <span className="tabular-nums font-medium">{timerLabel} · </span>
-            <span className="truncate ml-1 opacity-70">{secondaryLabel}</span>
+            <div className="tabular-nums text-xs font-medium">{timerLabel} </div>
+            <div className="truncate text-xs mt-0.5 opacity-70">{secondaryLabel}</div>
           </button>
-
-          <GhostButton onClick={() => setExpanded((v) => !v)} icon={<IoInformation />} />
         </div>
       </div>
 
@@ -100,7 +98,7 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
         elapsedSeconds={elapsedSeconds}
         onStop={stopSession}
       />
-    </div>
+    </motion.div>
   );
 }
 
@@ -138,83 +136,4 @@ function useSessionNames(active: ActiveSession) {
   }, [active.subjectId, active.topicId, topicsBySubject]);
 
   return { subjectName, topicName };
-}
-
-function useDraggablePosition(input: {
-  width: number;
-  initialTop: number;
-  initialRight: number;
-  padding: number;
-}) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  const [pos, setPos] = useState(() => {
-    const w = input.width;
-    const x =
-      typeof window === 'undefined'
-        ? input.padding
-        : Math.max(input.padding, window.innerWidth - w - input.initialRight);
-    return { x, y: input.initialTop };
-  });
-
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
-
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      dragRef.current = {
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-        originX: pos.x,
-        originY: pos.y,
-      };
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    },
-    [pos.x, pos.y],
-  );
-
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      const d = dragRef.current;
-      if (!d || d.pointerId !== e.pointerId) return;
-
-      const dx = e.clientX - d.startX;
-      const dy = e.clientY - d.startY;
-      const rect = containerRef.current?.getBoundingClientRect();
-      const w = rect?.width ?? input.width;
-      const h = rect?.height ?? 64;
-
-      const nextX = d.originX + dx;
-      const nextY = d.originY + dy;
-
-      const padding = input.padding;
-      const clampedX = Math.max(padding, Math.min(window.innerWidth - w - padding, nextX));
-      const clampedY = Math.max(padding, Math.min(window.innerHeight - h - padding, nextY));
-      setPos({ x: clampedX, y: clampedY });
-    },
-    [input.padding, input.width],
-  );
-
-  const onPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    const d = dragRef.current;
-    if (d && d.pointerId === e.pointerId) dragRef.current = null;
-  }, []);
-
-  const onPointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    const d = dragRef.current;
-    if (d && d.pointerId === e.pointerId) dragRef.current = null;
-  }, []);
-
-  return {
-    containerRef,
-    pos,
-    gripProps: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
-  };
 }

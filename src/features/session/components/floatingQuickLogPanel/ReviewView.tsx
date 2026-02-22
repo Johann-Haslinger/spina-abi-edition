@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { IoCheckmark } from 'react-icons/io5';
 import { GhostButton, PrimaryButton } from '../../../../components/Button';
 import type { AttemptResult } from '../../../../domain/models';
-import { downloadAttemptPng } from '../../../../ink/export';
-import { formatDurationClock } from '../../../../utils/time';
-import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
 import { HighlightText, MutedText, PanelHeading } from './TextHighlight';
 
@@ -23,20 +20,6 @@ export function ReviewView(props: {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const currentAttempt = useStudyStore((s) => s.currentAttempt);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!currentAttempt) return;
-    const t = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [currentAttempt]);
-
-  const seconds = useMemo(() => {
-    if (!currentAttempt) return 0;
-    return Math.max(0, Math.floor((nowMs - currentAttempt.startedAtMs) / 1000));
-  }, [nowMs, currentAttempt]);
-
   const showError = useMemo(() => result !== 'correct', [result]);
 
   return (
@@ -48,23 +31,6 @@ export function ReviewView(props: {
             <br />
             <HighlightText>die Aufgabe?</HighlightText>
           </PanelHeading>
-        }
-        right={
-          <div>
-            <div className="text-right text-xs font-semibold">
-              <span className="tabular-nums">{formatDurationClock(seconds)}</span>
-            </div>
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  downloadAttemptPng({ attemptId: currentAttempt?.attemptId ?? '' });
-                }}
-              >
-                PNG
-              </button>
-            </div>
-          </div>
         }
       />
 

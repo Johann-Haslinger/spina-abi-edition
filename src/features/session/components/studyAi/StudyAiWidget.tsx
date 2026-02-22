@@ -82,6 +82,10 @@ export function StudyAiWidget(props: {
     setUiMode(conversationKey, 'overlay');
 
     try {
+      const messagesForRequest = conv.messages.concat([
+        { id: 'local', role: 'user', content: trimmed, createdAtMs: Date.now() },
+      ]);
+
       let attemptImageDataUrl: string | null = null;
       if (props.currentAttemptId && props.pdfData) {
         try {
@@ -96,15 +100,17 @@ export function StudyAiWidget(props: {
         }
       }
 
-      const res = await sendStudyAiMessage({
-        conversationKey,
-        messages: conv.messages.concat([
-          { id: 'local', role: 'user', content: trimmed, createdAtMs: Date.now() },
-        ]),
-        docId: conv.docId,
-        pdfData: conv.docId ? null : props.pdfData,
-        attemptImageDataUrl,
-      });
+      const doSend = (docId: string | null, pdfData: Uint8Array | null) =>
+        sendStudyAiMessage({
+          conversationKey,
+          messages: messagesForRequest,
+          docId,
+          pdfData,
+          attemptImageDataUrl,
+        });
+
+      // Always send the PDF (no storage caching).
+      const res = await doSend(conv.docId, props.pdfData);
 
       if (res.docId && res.docId !== conv.docId) setDocId(conversationKey, res.docId);
       append(conversationKey, { role: 'assistant', content: res.assistantMessage });

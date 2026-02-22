@@ -61,9 +61,6 @@ export function StudyAiMorphShell(props: {
               placeholder="Frage zur Aufgabe…"
               autoFocus={props.isCompactDevice ? props.autoFocusCenter : true}
             />
-            {props.error ? (
-              <div className="px-2 pb-1 pt-2 text-xs text-rose-200">{props.error}</div>
-            ) : null}
           </div>
         ) : null}
 
@@ -77,9 +74,6 @@ export function StudyAiMorphShell(props: {
               placeholder="Nachricht senden…"
               autoFocus={props.isCompactDevice ? false : true}
             />
-            {props.error ? (
-              <div className="mt-2 px-2 text-xs text-rose-200">{props.error}</div>
-            ) : null}
           </div>
         ) : null}
 
@@ -139,9 +133,9 @@ function useStudyAiMorphLayout(mode: StudyAiUiMode) {
       }
     > = {
       button: {
-        stageClass: 'absolute inset-0 flex items-end justify-start p-5 pointer-events-none',
+        stageClass: 'absolute inset-0 flex items-end justify-start p-6 pointer-events-none',
         shellClass:
-          'grid size-14 place-items-center rounded-full border border-white/5 bg-[#243957]/80 text-white shadow-lg backdrop-blur',
+          'grid size-18 place-items-center rounded-full border border-white/5 bg-[#243957]/80 text-white shadow-lg backdrop-blur',
       },
       center: {
         stageClass: 'absolute inset-0 grid place-items-center items-end p-6 pointer-events-auto',

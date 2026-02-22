@@ -1,8 +1,10 @@
 import { AnimatePresence, motion, useDragControls, useMotionValue } from 'framer-motion';
 import { useEffect, useMemo } from 'react';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useStudyHudVisibility } from '../stores/studyHudStore';
 import { useFloatingQuickLogPanelStore } from '../stores/floatingQuickLogPanelStore';
 import { useStudyStore } from '../stores/studyStore';
+import { HUD_VARIANTS_BOTTOM_RIGHT } from './studyHud/hudMotion';
 import { ConfigView } from './floatingQuickLogPanel/ConfigView';
 import { NextView } from './floatingQuickLogPanel/NextView';
 import { ProgressDetailsView } from './floatingQuickLogPanel/ProgressDetailsView';
@@ -20,6 +22,8 @@ export function FloatingQuickLogPanel(props: {
   topicId: string;
   onOpenExerciseReview: () => void;
 }) {
+  const { suppressNonStudyAi } = useStudyHudVisibility();
+
   const view = useFloatingQuickLogPanelStore((s) => s.view) as PanelView;
   const setView = useFloatingQuickLogPanelStore((s) => s.setView) as (v: PanelView) => void;
   const storedX = useFloatingQuickLogPanelStore((s) => s.x);
@@ -68,17 +72,25 @@ export function FloatingQuickLogPanel(props: {
     <div className="fixed inset-0 z-9999 pointer-events-none">
       <motion.div
         className="absolute bottom-6 right-6 pointer-events-auto touch-none"
-        drag
-        dragControls={dragControls}
-        dragListener={false}
-        dragConstraints={{ top: 8, left: 8, right: 8, bottom: 8 }}
-        dragElastic={0}
-        dragMomentum={false}
-        style={{ x, y, width: viewWidthPx[view] }}
-        animate={{ width: viewWidthPx[view] }}
-        transition={{ type: 'spring', stiffness: 520, damping: 44 }}
-        onDragEnd={() => setPosition({ x: x.get(), y: y.get() })}
+        variants={HUD_VARIANTS_BOTTOM_RIGHT}
+        initial="hidden"
+        animate={suppressNonStudyAi ? 'hidden' : 'shown'}
+        exit="hidden"
+        aria-hidden={suppressNonStudyAi}
+        style={{ pointerEvents: suppressNonStudyAi ? 'none' : 'auto' }}
       >
+        <motion.div
+          drag
+          dragControls={dragControls}
+          dragListener={false}
+          dragConstraints={{ top: 8, left: 8, right: 8, bottom: 8 }}
+          dragElastic={0}
+          dragMomentum={false}
+          style={{ x, y, width: viewWidthPx[view] }}
+          animate={{ width: viewWidthPx[view] }}
+          transition={{ type: 'spring', stiffness: 520, damping: 44 }}
+          onDragEnd={() => setPosition({ x: x.get(), y: y.get() })}
+        >
         <motion.div
           animate={{
             height: viewHeightPx[view],
@@ -198,6 +210,7 @@ export function FloatingQuickLogPanel(props: {
               </div>
             </motion.div>
           </AnimatePresence>
+        </motion.div>
         </motion.div>
       </motion.div>
     </div>

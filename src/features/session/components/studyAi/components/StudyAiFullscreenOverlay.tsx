@@ -29,11 +29,11 @@ export function StudyAiFullscreenOverlay(props: {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.16, ease: 'easeOut' }}
     >
-      <div className="absolute inset-0 bg-[#26313F]/70 backdrop-blur" />
+      <div className="absolute inset-0 bg-[#26313F]/90 backdrop-blur" />
 
       <div className="absolute h-full inset-x-0 top-0 flex justify-center">
         <div ref={scrollerRef} className="h-full w-full py-40 overflow-y-scroll px-4">
-          <div className="w-3/5 xl:w-1/2 mx-auto">
+          <div className="w-3/5 mx-auto">
             <StudyAiMessageList messages={props.messages} />
             <div className="h-60" />
             {props.sending ? (

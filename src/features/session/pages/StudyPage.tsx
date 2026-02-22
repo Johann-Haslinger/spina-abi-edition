@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -15,9 +14,9 @@ import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
 import { StudyAiWidget } from '../components/studyAi/StudyAiWidget';
 import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
+import { useStudyHudStore } from '../stores/studyHudStore';
 import { useStudyStore } from '../stores/studyStore';
 import { AssetViewer } from '../viewer/AssetViewer';
-import { formatExerciseStatus } from '../viewer/viewerUtils';
 
 export function StudyPage() {
   const { assetId } = useParams();
@@ -35,11 +34,12 @@ export function StudyPage() {
     studySessionId,
     bindToSession,
     ensureStudySession,
-    exerciseStatusByAssetId,
     loadExerciseStatus,
     reset,
     currentAttempt,
   } = useStudyStore();
+
+  const setStudyAiConversationKey = useStudyHudStore((s) => s.setStudyAiConversationKey);
 
   useEffect(() => {
     if (!active) return;
@@ -66,6 +66,17 @@ export function StudyPage() {
     return { kind: 'ok' as const, asset };
   }, [assetId, loading, error, asset, active]);
 
+  const studyAiConversationKey = useMemo(() => {
+    if (guardState.kind !== 'ok') return null;
+    if (!boundSessionKey) return null;
+    return `${boundSessionKey}:${guardState.asset.id}`;
+  }, [boundSessionKey, guardState]);
+
+  useEffect(() => {
+    setStudyAiConversationKey(studyAiConversationKey);
+    return () => setStudyAiConversationKey(null);
+  }, [setStudyAiConversationKey, studyAiConversationKey]);
+
   useEffect(() => {
     if (guardState.kind !== 'ok') return;
     if (!active) return;
@@ -81,11 +92,6 @@ export function StudyPage() {
     if (guardState.kind !== 'ok') return;
     void loadExerciseStatus(guardState.asset.id);
   }, [guardState.kind, guardState.asset, loadExerciseStatus]);
-
-  const exerciseStatus =
-    guardState.kind === 'ok'
-      ? exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown'
-      : 'unknown';
 
   const openInfoPanel = () => setInfoOpen(true);
   const closeInfoPanel = () => setInfoOpen(false);
@@ -131,8 +137,6 @@ export function StudyPage() {
   if (guardState.kind === 'error')
     return <ErrorPage title="Fehler beim Laden" message={guardState.error} />;
 
-  const title = guardState.asset.title;
-
   return (
     <FullscreenViewerFrame
       overlayLeft={
@@ -140,27 +144,27 @@ export function StudyPage() {
           <IoChevronBack />
         </ViewerIconButton>
       }
-      overlayInfo={
-        infoOpen && guardState.kind === 'ok' ? (
-          <div className="w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold">Info</div>
-                <div className="mt-1 truncate text-xs text-slate-300">{title}</div>
-              </div>
-              <ViewerIconButton ariaLabel="Schließen" onClick={closeInfoPanel}>
-                <X className="h-5 w-5" />
-              </ViewerIconButton>
-            </div>
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
-              <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
-                {formatExerciseStatus(exerciseStatus)}
-              </div>
-            </div>
-          </div>
-        ) : null
-      }
+      // overlayInfo={
+      //   infoOpen && guardState.kind === 'ok' ? (
+      //     <div className="w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur">
+      //       <div className="flex items-start justify-between gap-3">
+      //         <div className="min-w-0">
+      //           <div className="text-sm font-semibold">Info</div>
+      //           <div className="mt-1 truncate text-xs text-slate-300">{title}</div>
+      //         </div>
+      //         <ViewerIconButton ariaLabel="Schließen" onClick={closeInfoPanel}>
+      //           <X className="h-5 w-5" />
+      //         </ViewerIconButton>
+      //       </div>
+      //       <div className="mt-4">
+      //         <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
+      //         <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
+      //           {formatExerciseStatus(exerciseStatus)}
+      //         </div>
+      //       </div>
+      //     </div>
+      //   ) : null
+      // }
     >
       {infoOpen ? (
         <button
@@ -248,6 +252,9 @@ export function StudyPage() {
                       studySessionId,
                       assetId: guardState.asset.id,
                       activeAttemptId: currentAttempt?.attemptId ?? null,
+                      studyAiConversationKey: boundSessionKey
+                        ? `${boundSessionKey}:${guardState.asset.id}`
+                        : null,
                     }
                   : null
               }

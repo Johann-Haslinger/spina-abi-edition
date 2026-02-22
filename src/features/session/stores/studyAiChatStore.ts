@@ -105,6 +105,7 @@ export const useStudyAiChatStore = create<StudyAiChatState>()(
             [conversationKey]: {
               ...(s.conversations[conversationKey] ?? defaultConversation),
               messages: [],
+              docId: null,
             },
           },
         })),
