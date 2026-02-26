@@ -26,8 +26,7 @@ function makeHudVariants(offset: { x: number; y: number }): Variants {
   };
 }
 
-// Big enough offsets so fixed widgets fully leave the viewport.
 export const HUD_VARIANTS_TOP_RIGHT = makeHudVariants({ x: 560, y: -420 });
 export const HUD_VARIANTS_BOTTOM_RIGHT = makeHudVariants({ x: 560, y: 420 });
 export const HUD_VARIANTS_BOTTOM_LEFT = makeHudVariants({ x: -560, y: 420 });
-
+export const HUD_VARIANTS_DOWN = makeHudVariants({ x: 0, y: 420 });

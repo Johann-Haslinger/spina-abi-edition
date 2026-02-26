@@ -209,7 +209,7 @@ export function StudyAiInputRow(props: {
         ref={actionsRef}
         className={[
           'flex items-center gap-2 flex-none w-fit',
-          isMultiline ? 'self-end justify-end mt-3' : '',
+          isMultiline ? 'self-end justify-end' : '',
         ].join(' ')}
       >
         {props.rightAccessory}

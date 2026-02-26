@@ -127,7 +127,7 @@ export function InkToolbar(props: {
   const activeTool = toolButtons.find((t) => t.id === brush) ?? toolButtons[0]!;
   const activeTintColor =
     brush === 'pencil' ? pencilColor : brush === 'marker' ? markerColor : null;
-  const activeTintOpacity = brush === 'marker' ? 0.8 : 1;
+  const activeTintOpacity = brush === 'marker' ? 0.9 : 1;
 
   return (
     <LayoutGroup id="ink-toolbar">
@@ -144,7 +144,7 @@ export function InkToolbar(props: {
             <motion.div
               layoutId="ink-toolbar-surface"
               transition={MORPH_TRANSITION}
-              className="w-fit rounded-full border overflow-hidden px-6 border-[#3C4E68] bg-[#243957]/70 shadow-lg backdrop-blur dark:border-white/5"
+              className="w-fit rounded-full border overflow-hidden px-6 border-[#3C4E68] bg-[#243957]/70 shadow-lg backdrop-blur-xs dark:border-white/5"
             >
               <motion.div
                 key="content"
@@ -205,7 +205,7 @@ export function InkToolbar(props: {
                             }`}
                           >
                             <div
-                              className="absolute inset-0 h-full w-full"
+                              className="absolute inset-0 h-full backdrop-blur-xl w-full"
                               style={
                                 {
                                   backgroundColor: tintColor,

@@ -1,11 +1,11 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { drawDottedGrid } from '../../../ink/grid.ts';
 import { InkOverlay } from '../../../ink/InkOverlay';
-import { AnimatePresence, motion } from 'framer-motion';
 import { InkToolbar } from '../components/ink/InkToolbar';
+import { HUD_VARIANTS_DOWN } from '../components/studyHud/hudMotion';
 import { useStudyHudVisibility } from '../stores/studyHudStore';
-import { HUD_VARIANTS_BOTTOM_LEFT } from '../components/studyHud/hudMotion';
 import { pdfjs } from './pdfjs';
 import { clamp, hexToRgba, INITIAL_TOP_MARGIN } from './viewerUtils';
 
@@ -502,17 +502,22 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
           {props.ink ? (
             <motion.div
               key="ink-toolbar"
-              variants={HUD_VARIANTS_BOTTOM_LEFT}
+              className="fixed inset-0 z-50 pointer-events-none"
+              variants={HUD_VARIANTS_DOWN}
               initial="hidden"
               animate={suppressNonStudyAi ? 'hidden' : 'shown'}
               exit="hidden"
               aria-hidden={suppressNonStudyAi}
-              style={{ pointerEvents: suppressNonStudyAi ? 'none' : 'auto' }}
             >
-              <InkToolbar
-                activeAttemptId={props.ink.activeAttemptId}
-                studyAiConversationKey={props.ink.studyAiConversationKey ?? null}
-              />
+              <div
+                className="pointer-events-auto"
+                style={{ pointerEvents: suppressNonStudyAi ? 'none' : 'auto' }}
+              >
+                <InkToolbar
+                  activeAttemptId={props.ink.activeAttemptId}
+                  studyAiConversationKey={props.ink.studyAiConversationKey ?? null}
+                />
+              </div>
             </motion.div>
           ) : null}
         </AnimatePresence>
