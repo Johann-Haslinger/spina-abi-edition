@@ -28,9 +28,15 @@ export function NextView(props: {
             {nextSubLabel}
           </PrimaryButton>
         ) : null}
-        <GhostButton className="w-full" onClick={props.onNewProblem}>
-          Nächste Aufgabe
-        </GhostButton>
+        {showNextSub ? (
+          <GhostButton className="w-full" onClick={props.onNewProblem}>
+            Nächste Aufgabe
+          </GhostButton>
+        ) : (
+          <PrimaryButton className="w-full" onClick={props.onNewProblem}>
+            Nächste Aufgabe
+          </PrimaryButton>
+        )}
         <GhostButton className="w-full" onClick={props.onMarkProgress}>
           Zwischenstand
         </GhostButton>

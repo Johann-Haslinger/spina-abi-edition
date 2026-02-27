@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { IoAddCircle, IoRemoveCircle } from 'react-icons/io5';
 import { PrimaryButton } from '../../../../components/Button';
-import { ConfirmModal } from '../../../../components/ConfirmModal';
 import { useStudyStore } from '../../stores/studyStore';
 import { PanelViewHeader, type DragGripProps } from './PanelViewHeader';
 import { HighlightText, MutedText, PanelHeading } from './TextHighlight';
@@ -14,8 +13,6 @@ export function ConfigView(props: {
   const { taskDepthByAssetId, loadTaskDepth, setTaskDepth, decreaseTaskDepthWithCleanup } =
     useStudyStore();
   const [saving, setSaving] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingNextDepth, setPendingNextDepth] = useState<1 | 2 | 3 | null>(null);
 
   useEffect(() => {
     void loadTaskDepth(props.assetId);
@@ -47,35 +44,14 @@ export function ConfigView(props: {
     }
   };
 
-  const requestDecrease = (next: 1 | 2 | 3) => {
-    setPendingNextDepth(next);
-    setConfirmOpen(true);
-  };
-
-  const confirmDecrease = async () => {
-    if (!pendingNextDepth) return;
+  const applyDecrease = async (next: 1 | 2 | 3) => {
     setSaving(true);
     try {
-      await decreaseTaskDepthWithCleanup(props.assetId, pendingNextDepth);
-      setConfirmOpen(false);
-      setPendingNextDepth(null);
+      await decreaseTaskDepthWithCleanup(props.assetId, next);
     } finally {
       setSaving(false);
     }
   };
-
-  const confirmTitle =
-    pendingNextDepth === 2
-      ? 'Ebene entfernen?'
-      : pendingNextDepth === 1
-      ? 'Ebenen entfernen?'
-      : 'Änderung bestätigen';
-  const confirmMessage =
-    pendingNextDepth === 2
-      ? 'Unteraufgaben werden entfernt und die dazugehörigen Attempts gelöscht. Fortfahren?'
-      : pendingNextDepth === 1
-      ? 'Teilaufgaben (und ggf. Unter-Teilaufgaben) werden entfernt und die dazugehörigen Attempts gelöscht. Fortfahren?'
-      : 'Fortfahren?';
 
   return (
     <div className="flex flex-col h-full">
@@ -95,7 +71,7 @@ export function ConfigView(props: {
               <div key={r.key} className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <button
-                    onClick={() => requestDecrease(r.nextDepth)}
+                    onClick={() => void applyDecrease(r.nextDepth)}
                     className={` transition-all ${
                       r.removable
                         ? 'text-white/90 cursor-pointer hover:text-white active:text-lg'
@@ -129,21 +105,6 @@ export function ConfigView(props: {
           Fertig
         </PrimaryButton>
       </div>
-
-      <ConfirmModal
-        open={confirmOpen}
-        title={confirmTitle}
-        message={confirmMessage}
-        confirmLabel="Löschen"
-        confirmTone="danger"
-        busy={saving}
-        onCancel={() => {
-          if (saving) return;
-          setConfirmOpen(false);
-          setPendingNextDepth(null);
-        }}
-        onConfirm={() => void confirmDecrease()}
-      />
     </div>
   );
 }

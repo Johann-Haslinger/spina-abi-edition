@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -16,7 +15,6 @@ import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { AssetViewer } from '../viewer/AssetViewer';
-import { formatExerciseStatus } from '../viewer/viewerUtils';
 
 export function StudyPage() {
   const { assetId } = useParams();
@@ -26,14 +24,12 @@ export function StudyPage() {
   const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId);
   const [pageNumber, setPageNumber] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const {
     studySessionId,
     bindToSession,
     ensureStudySession,
-    exerciseStatusByAssetId,
     loadExerciseStatus,
     reset,
     currentAttempt,
@@ -80,14 +76,6 @@ export function StudyPage() {
     void loadExerciseStatus(guardState.asset.id);
   }, [guardState.kind, guardState.asset, loadExerciseStatus]);
 
-  const exerciseStatus =
-    guardState.kind === 'ok'
-      ? exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown'
-      : 'unknown';
-
-  const openInfoPanel = () => setInfoOpen(true);
-  const closeInfoPanel = () => setInfoOpen(false);
-
   const assetForNav =
     guardState.kind === 'ok' || guardState.kind === 'needStart' || guardState.kind === 'needSwitch'
       ? guardState.asset
@@ -100,18 +88,6 @@ export function StudyPage() {
     }
     navigate(`/subjects/${assetForNav.subjectId}/topics/${assetForNav.topicId}`);
   };
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (guardState.kind !== 'ok') return;
-      if (e.key.toLowerCase() !== 'i') return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (infoOpen) return;
-      openInfoPanel();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [guardState.kind, infoOpen]);
 
   if (guardState.kind === 'notfound') return <NotFoundPage />;
   if (guardState.kind === 'loading')
@@ -129,8 +105,6 @@ export function StudyPage() {
   if (guardState.kind === 'error')
     return <ErrorPage title="Fehler beim Laden" message={guardState.error} />;
 
-  const title = guardState.asset.title;
-
   return (
     <FullscreenViewerFrame
       overlayLeft={
@@ -138,37 +112,7 @@ export function StudyPage() {
           <IoChevronBack />
         </ViewerIconButton>
       }
-      overlayInfo={
-        infoOpen && guardState.kind === 'ok' ? (
-          <div className="w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold">Info</div>
-                <div className="mt-1 truncate text-xs text-slate-300">{title}</div>
-              </div>
-              <ViewerIconButton ariaLabel="Schließen" onClick={closeInfoPanel}>
-                <X className="h-5 w-5" />
-              </ViewerIconButton>
-            </div>
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
-              <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
-                {formatExerciseStatus(exerciseStatus)}
-              </div>
-            </div>
-          </div>
-        ) : null
-      }
     >
-      {infoOpen ? (
-        <button
-          type="button"
-          aria-label="Info schließen"
-          className="absolute inset-0 z-10 cursor-default bg-transparent"
-          onClick={closeInfoPanel}
-        />
-      ) : null}
-
       <Modal
         open={guardState.kind === 'needStart'}
         onClose={goToAssetTopic}

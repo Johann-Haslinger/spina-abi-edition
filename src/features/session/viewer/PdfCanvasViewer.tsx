@@ -50,6 +50,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   const [error, setError] = useState<string | null>(null);
   const [pan, setPan] = useState<Point>({ x: 0, y: INITIAL_TOP_MARGIN });
   const [isInteracting, setIsInteracting] = useState(false);
+  const [contentW, setContentW] = useState<number | null>(null);
 
   const showLoadingOverlay = docLoading || !layoutReady || !hasRenderedOnce;
 
@@ -208,6 +209,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       }
 
       const contentW = PAD_X + maxW;
+      setContentW(contentW);
       const rect = el.getBoundingClientRect();
       setPan((p) => ({ x: (rect.width - contentW * ratio) / 2, y: p.y }));
       didInitialCenterRef.current = true;
@@ -329,7 +331,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
     const intensity = e.ctrlKey ? 0.004 : 0.0028;
     const factor = Math.exp(-e.deltaY * intensity);
     const currentView = viewScaleRef.current;
-    const nextView = clamp(currentView * factor, 0.6, 3.5);
+    const nextView = clamp(currentView * factor, 0.4, 3.5);
     if (nextView === currentView) return;
     const nextRatio = nextView / RENDER_SCALE;
     schedule({ viewScale: nextView, pan: panForFixedContentPoint(content, c, nextRatio) });
@@ -370,10 +372,10 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       if (!g || g.kind !== 'pinch') return;
       const nextRatio = clamp(
         g.startRatio * (dist / g.startDistance),
-        0.6 / RENDER_SCALE,
+        0.4 / RENDER_SCALE,
         3.5 / RENDER_SCALE,
       );
-      const nextView = clamp(nextRatio * RENDER_SCALE, 0.6, 3.5);
+      const nextView = clamp(nextRatio * RENDER_SCALE, 0.4, 3.5);
       schedule({
         viewScale: nextView,
         pan: panForFixedContentPoint(g.contentAtMid, mid, nextRatio),
@@ -456,7 +458,10 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
               pointerEvents: hasRenderedOnce ? 'auto' : 'none',
             }}
           >
-            <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-6 px-4 py-6">
+            <div
+              className="mx-auto flex max-w-[1200px] flex-col gap-6 px-4 py-6"
+              style={{ width: contentW ?? undefined }}
+            >
               {pageNumbers.map((n) => (
                 <div
                   key={n}
@@ -479,9 +484,10 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
           </div>
         ) : null}
 
-        {props.ink ? (
+        {!showLoadingOverlay && props.ink ? (
           <>
             <InkOverlay
+              containerRef={containerRef}
               studySessionId={props.ink.studySessionId}
               assetId={props.ink.assetId}
               activeAttemptId={props.ink.activeAttemptId}

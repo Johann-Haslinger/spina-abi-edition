@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoInformation } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
 import { GhostButton } from '../../../components/Button';
@@ -36,13 +36,6 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
     return `${formatTaskPath(currentAttempt, depth)}`;
   }, [active.topicId, currentAttempt, depth, topicName]);
 
-  const { containerRef, pos } = useDraggablePosition({
-    width: 200,
-    initialTop: 24,
-    initialRight: 24,
-    padding: 8,
-  });
-
   const elapsedMs = getElapsedMs(active, nowMs);
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
@@ -71,11 +64,7 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   }, [active.subjectId, active.topicId, active.startedAtMs, end, navigate, reset, studySessionId]);
 
   return (
-    <div
-      ref={containerRef}
-      className="fixed w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
-      style={{ left: pos.x, top: pos.y }}
-    >
+    <div className="fixed top-6 right-6 w-[200px] z-1000000000 max-w-[calc(100vw-32px)]">
       <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5">
         <div className="flex items-stretch p-1.5">
           <button
@@ -138,83 +127,4 @@ function useSessionNames(active: ActiveSession) {
   }, [active.subjectId, active.topicId, topicsBySubject]);
 
   return { subjectName, topicName };
-}
-
-function useDraggablePosition(input: {
-  width: number;
-  initialTop: number;
-  initialRight: number;
-  padding: number;
-}) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  const [pos, setPos] = useState(() => {
-    const w = input.width;
-    const x =
-      typeof window === 'undefined'
-        ? input.padding
-        : Math.max(input.padding, window.innerWidth - w - input.initialRight);
-    return { x, y: input.initialTop };
-  });
-
-  const dragRef = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
-
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      dragRef.current = {
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-        originX: pos.x,
-        originY: pos.y,
-      };
-      e.currentTarget.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    },
-    [pos.x, pos.y],
-  );
-
-  const onPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      const d = dragRef.current;
-      if (!d || d.pointerId !== e.pointerId) return;
-
-      const dx = e.clientX - d.startX;
-      const dy = e.clientY - d.startY;
-      const rect = containerRef.current?.getBoundingClientRect();
-      const w = rect?.width ?? input.width;
-      const h = rect?.height ?? 64;
-
-      const nextX = d.originX + dx;
-      const nextY = d.originY + dy;
-
-      const padding = input.padding;
-      const clampedX = Math.max(padding, Math.min(window.innerWidth - w - padding, nextX));
-      const clampedY = Math.max(padding, Math.min(window.innerHeight - h - padding, nextY));
-      setPos({ x: clampedX, y: clampedY });
-    },
-    [input.padding, input.width],
-  );
-
-  const onPointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    const d = dragRef.current;
-    if (d && d.pointerId === e.pointerId) dragRef.current = null;
-  }, []);
-
-  const onPointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    const d = dragRef.current;
-    if (d && d.pointerId === e.pointerId) dragRef.current = null;
-  }, []);
-
-  return {
-    containerRef,
-    pos,
-    gripProps: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
-  };
 }

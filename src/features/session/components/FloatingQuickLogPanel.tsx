@@ -208,7 +208,7 @@ function usePanelDimensions() {
   const viewHeightPx: Record<PanelView, number> = useMemo(
     () => ({
       start: 310,
-      config: 280,
+      config: 290,
       progress: 64,
       progressDetails: 240,
       review: 360,
@@ -220,7 +220,7 @@ function usePanelDimensions() {
   const viewWidthPx: Record<PanelView, number> = useMemo(
     () => ({
       start: 256,
-      config: 220,
+      config: 246,
       progress: 154,
       progressDetails: 256,
       review: 256,

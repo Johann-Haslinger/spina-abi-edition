@@ -183,22 +183,40 @@ export const useStudyStore = create<StudyState>()(
             : [];
 
         const labelBySubId = new Map(subproblems.map((sp) => [sp.id, sp.label]));
-        const attemptIdsToDelete =
-          currentDepth === 3 && nextDepth === 2
-            ? attempts.filter((a) => Boolean(a.subsubproblemId)).map((a) => a.id)
-            : currentDepth >= 2 && nextDepth === 1
-            ? attempts
-                .filter((a) => {
-                  if (a.subsubproblemId) return true;
-                  const lbl = (labelBySubId.get(a.subproblemId) ?? '').trim();
-                  return lbl !== '';
-                })
-                .map((a) => a.id)
-            : [];
+        const problemIdBySubId = new Map(subproblems.map((sp) => [sp.id, sp.problemId]));
 
-        if (attemptIdsToDelete.length) {
-          await db.attempts.bulkDelete(attemptIdsToDelete);
-          await db.inkStrokes.where('attemptId').anyOf(attemptIdsToDelete).delete();
+        if (currentDepth === 3 && nextDepth === 2) {
+          const toRemap = attempts.filter((a) => Boolean(a.subsubproblemId));
+          if (toRemap.length) {
+            const updated = toRemap.map((a) => ({ ...a, subsubproblemId: undefined }));
+            await db.attempts.bulkPut(updated);
+          }
+        } else if (currentDepth >= 2 && nextDepth === 1) {
+          const defaultSubByProblemId = new Map<string, string>();
+          for (const p of problems) {
+            const defaultSub = await subproblemRepo.getOrCreate({
+              problemId: p.id,
+              label: '',
+            });
+            defaultSubByProblemId.set(p.id, defaultSub.id);
+          }
+          const toRemap = attempts.filter((a) => {
+            if (a.subsubproblemId) return true;
+            const lbl = (labelBySubId.get(a.subproblemId) ?? '').trim();
+            return lbl !== '';
+          });
+          if (toRemap.length) {
+            const updated = toRemap.map((a) => {
+              const problemId = problemIdBySubId.get(a.subproblemId);
+              const defaultSubId = problemId ? defaultSubByProblemId.get(problemId) : undefined;
+              return {
+                ...a,
+                subproblemId: defaultSubId ?? a.subproblemId,
+                subsubproblemId: undefined,
+              };
+            });
+            await db.attempts.bulkPut(updated);
+          }
         }
 
         if (nextDepth <= 2) {

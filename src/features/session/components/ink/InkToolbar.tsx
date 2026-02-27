@@ -1,6 +1,6 @@
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { Minimize2, Redo2, Undo2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { GhostButton } from '../../../../components/Button';
 import { useInkActions } from '../../../../ink/actions';
 import { useInkStore } from '../../../../ink/inkStore';
@@ -81,22 +81,13 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
   const setColorForBrush = useInkStore((s) => s.setColorForBrush);
   const undoStackLen = useInkStore((s) => s.undoStack.length);
   const redoStackLen = useInkStore((s) => s.redoStack.length);
-
+  const selectedAttemptId = useInkStore((s) => s.selectedAttemptId);
+  const toolButtons = useToolButtons();
   const { undoWithPersist, redoWithPersist } = useInkActions();
 
-  const toolButtons = useMemo(
-    () =>
-      [
-        { id: 'pencil' as const, label: 'Pencil', src: '/ink/pencil.png' },
-        { id: 'marker' as const, label: 'Marker', src: '/ink/marker.png' },
-        { id: 'eraser' as const, label: 'Eraser', src: '/ink/eraser.png' },
-        { id: 'select' as const, label: 'Auswahl', src: '/ink/select.png' },
-      ] as const,
-    [],
-  );
-
+  const canEdit = props.activeAttemptId ?? selectedAttemptId;
   if (!isProbablyIpad()) return null;
-  if (!props.activeAttemptId) return null;
+  if (!canEdit) return null;
 
   const activeTool = toolButtons.find((t) => t.id === brush) ?? toolButtons[0]!;
   const activeTintColor =
@@ -129,7 +120,9 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
         {open ? (
           <div
             key="open"
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
           >
             <motion.div
               layoutId="ink-toolbar-surface"
@@ -253,7 +246,12 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
             </motion.div>
           </div>
         ) : (
-          <div key="closed" className="absolute bottom-6 left-6 z-50 pointer-events-auto">
+          <div
+            key="closed"
+            className="fixed bottom-6 left-6 z-50 pointer-events-auto"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             <motion.div
               layoutId="ink-toolbar-surface"
               transition={MORPH_TRANSITION}
@@ -281,4 +279,42 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
       </AnimatePresence>
     </LayoutGroup>
   );
+}
+
+function useToolButtons() {
+  const toolButtons = useMemo(
+    () =>
+      [
+        { id: 'pencil' as const, label: 'Pencil', src: '/ink/pencil.png' },
+        { id: 'marker' as const, label: 'Marker', src: '/ink/marker.png' },
+        { id: 'eraser' as const, label: 'Eraser', src: '/ink/eraser.png' },
+        { id: 'select' as const, label: 'Auswahl', src: '/ink/select.png' },
+      ] as const,
+    [],
+  );
+
+  useEffect(() => {
+    const hrefs = toolButtons.map((t) => t.src);
+
+    const links: HTMLLinkElement[] = [];
+    for (const href of hrefs) {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.href = href;
+      document.head.appendChild(link);
+      links.push(link);
+    }
+
+    hrefs.forEach((href) => {
+      const img = new Image();
+      img.src = href;
+    });
+
+    return () => {
+      links.forEach((l) => l.remove());
+    };
+  }, [toolButtons]);
+
+  return toolButtons;
 }
