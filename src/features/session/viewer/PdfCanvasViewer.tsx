@@ -40,6 +40,9 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   const pointersRef = useRef<Map<number, Point>>(new Map());
   const gestureRef = useRef<Gesture>(null);
   const didInitialCenterRef = useRef(false);
+  const inertiaRafRef = useRef<number | null>(null);
+  const panSamplesRef = useRef<Array<{ t: number; pan: Point }>>([]);
+  const lastPinchAtMsRef = useRef<number>(-Infinity);
 
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [numPages, setNumPages] = useState<number | null>(null);
@@ -76,7 +79,46 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (inertiaRafRef.current !== null) cancelAnimationFrame(inertiaRafRef.current);
     };
+  }, []);
+
+  const stopInertia = useCallback(() => {
+    if (inertiaRafRef.current !== null) {
+      cancelAnimationFrame(inertiaRafRef.current);
+      inertiaRafRef.current = null;
+    }
+  }, []);
+
+  const resetPanSamples = useCallback(() => {
+    panSamplesRef.current = [];
+  }, []);
+
+  const pushPanSample = useCallback((pan: Point) => {
+    const t = performance.now();
+    const samples = panSamplesRef.current;
+    samples.push({ t, pan });
+    const cutoff = t - 120;
+    while (samples.length > 2 && samples[0].t < cutoff) samples.shift();
+    if (samples.length > 8) samples.splice(0, samples.length - 8);
+  }, []);
+
+  const getReleaseVelocity = useCallback((): Point => {
+    const samples = panSamplesRef.current;
+    if (samples.length < 2) return { x: 0, y: 0 };
+    const b = samples[samples.length - 1];
+
+    const targetT = b.t - 60;
+    let a = samples[0];
+    for (let i = samples.length - 2; i >= 0; i--) {
+      if (samples[i].t <= targetT) {
+        a = samples[i];
+        break;
+      }
+    }
+    const dt = b.t - a.t;
+    if (dt < 24) return { x: 0, y: 0 };
+    return { x: (b.pan.x - a.pan.x) / dt, y: (b.pan.y - a.pan.y) / dt }; // px/ms
   }, []);
 
   useLayoutEffect(() => {
@@ -156,6 +198,59 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       rafRef.current = requestAnimationFrame(flush);
     },
     [flush],
+  );
+
+  const startInertia = useCallback(
+    (initialVelocity: Point) => {
+      stopInertia();
+      // Prevent a pending scheduled flush from "rewinding" pan mid-inertia.
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      pendingRef.current = {};
+
+      // Tune feel here.
+      const speedScale = 0.75;
+      const maxSpeed = 2.2; // px/ms (~2200 px/s)
+      const decayPerFrame = 0.88; // per 16.67ms
+      const stopSpeed = 0.045;
+      const maxDurationMs = 700;
+
+      let v: Point = {
+        x: Math.max(-maxSpeed, Math.min(maxSpeed, initialVelocity.x * speedScale)),
+        y: Math.max(-maxSpeed, Math.min(maxSpeed, initialVelocity.y * speedScale)),
+      };
+
+      const tStart = performance.now();
+      let lastT = tStart;
+
+      const step = (t: number) => {
+        inertiaRafRef.current = requestAnimationFrame(step);
+        const dt = Math.min(32, Math.max(0, t - lastT));
+        lastT = t;
+
+        const elapsed = t - tStart;
+        const speed = Math.hypot(v.x, v.y);
+        if (elapsed > maxDurationMs || speed < stopSpeed || dt === 0) {
+          stopInertia();
+          resetPanSamples();
+          return;
+        }
+
+        const p = panRef.current;
+        const nextPan = { x: p.x + v.x * dt, y: p.y + v.y * dt };
+        panRef.current = nextPan;
+        setPan(nextPan);
+
+        // Exponential-ish decay.
+        const decay = Math.pow(decayPerFrame, dt / 16.67);
+        v = { x: v.x * decay, y: v.y * decay };
+      };
+
+      inertiaRafRef.current = requestAnimationFrame(step);
+    },
+    [resetPanSamples, stopInertia],
   );
 
   useEffect(() => {
@@ -320,6 +415,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    stopInertia();
     const isZoom = e.ctrlKey || e.altKey || e.metaKey;
     if (!isZoom) {
       const p = panRef.current;
@@ -338,9 +434,12 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    stopInertia();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointersRef.current.set(e.pointerId, containerPoint(e));
     setIsInteracting(true);
+    resetPanSamples();
+    pushPanSample(panRef.current);
     const pts = Array.from(pointersRef.current.values());
     if (pts.length === 1) {
       gestureRef.current = { kind: 'pan', startPan: panRef.current, startPointer: pts[0] };
@@ -370,6 +469,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       const dist = Math.hypot(b.x - a.x, b.y - a.y);
       const g = gestureRef.current;
       if (!g || g.kind !== 'pinch') return;
+      lastPinchAtMsRef.current = performance.now();
       const nextRatio = clamp(
         g.startRatio * (dist / g.startDistance),
         0.4 / RENDER_SCALE,
@@ -387,23 +487,37 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
       const g = gestureRef.current;
       if (!g || g.kind !== 'pan') return;
       const p = pts[0];
-      schedule({
-        pan: {
-          x: g.startPan.x + (p.x - g.startPointer.x),
-          y: g.startPan.y + (p.y - g.startPointer.y),
-        },
-      });
+      const nextPan = {
+        x: g.startPan.x + (p.x - g.startPointer.x),
+        y: g.startPan.y + (p.y - g.startPointer.y),
+      };
+      schedule({ pan: nextPan });
+      pushPanSample(nextPan);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
+    const gAtEnd = gestureRef.current;
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size === 0) {
       setIsInteracting(false);
       gestureRef.current = null;
+      if (gAtEnd?.kind === 'pan') {
+        // Avoid "launching" momentum right after a pinch-zoom (feels weird).
+        if (performance.now() - lastPinchAtMsRef.current < 180) {
+          resetPanSamples();
+          return;
+        }
+        const v = getReleaseVelocity();
+        const speed = Math.hypot(v.x, v.y);
+        if (speed > 0.12) startInertia(v);
+        else resetPanSamples();
+      }
     } else if (pointersRef.current.size === 1) {
       const p = Array.from(pointersRef.current.values())[0];
       gestureRef.current = { kind: 'pan', startPan: panRef.current, startPointer: p };
+      resetPanSamples();
+      pushPanSample(panRef.current);
     }
     try {
       (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -417,6 +531,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
     if (pointersRef.current.size === 0) {
       setIsInteracting(false);
       gestureRef.current = null;
+      resetPanSamples();
     }
   };
 
