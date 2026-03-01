@@ -15,7 +15,7 @@ export async function sendStudyAiMessage(input: {
   const supabase = getSupabaseClient();
 
   const pdfBytes = input.pdfData;
-  if (!pdfBytes) throw new Error('PDF fehlt (pdfData ist leer).');
+  if (!pdfBytes && !input.docId) throw new Error('PDF fehlt (pdfData ist leer).');
   if (pdfBytes && pdfBytes.byteLength > MAX_PDF_BYTES) throw new Error('PDF ist zu groß.');
 
   if (input.attemptImageDataUrl && input.attemptImageDataUrl.length > MAX_ATTEMPT_IMAGE_CHARS) {
@@ -34,10 +34,11 @@ export async function sendStudyAiMessage(input: {
     messages: input.messages.map((m) => ({ role: m.role, content: m.content })),
   };
 
-  // For now: always attach the PDF to every request (no storage caching).
   if (input.docId) body.docId = input.docId;
-  body.pdfBase64 = pdfBytesToBase64(pdfBytes);
-  body.pdfFilename = 'exercise.pdf';
+  if (pdfBytes) {
+    body.pdfBase64 = pdfBytesToBase64(pdfBytes);
+    body.pdfFilename = 'exercise.pdf';
+  }
   if (input.attemptImageDataUrl) body.attemptImageDataUrl = input.attemptImageDataUrl;
 
   const { data, error } = await supabase.functions.invoke('study-ai', { body });
