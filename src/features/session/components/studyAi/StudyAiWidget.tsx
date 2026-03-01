@@ -109,8 +109,8 @@ export function StudyAiWidget(props: {
           attemptImageDataUrl,
         });
 
-      // Always send the PDF (no storage caching).
-      const res = await doSend(conv.docId, props.pdfData);
+      const shouldSendPdf = !conv.docId;
+      const res = await doSend(conv.docId, shouldSendPdf ? props.pdfData : null);
 
       if (res.docId && res.docId !== conv.docId) setDocId(conversationKey, res.docId);
       append(conversationKey, { role: 'assistant', content: res.assistantMessage });

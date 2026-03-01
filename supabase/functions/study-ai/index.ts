@@ -14,6 +14,14 @@ type ReqBody = {
   attemptImageDataUrl?: string;
 };
 
+type CachedOpenAiFile = {
+  fileId: string;
+  updatedAtMs: number;
+};
+
+const OPENAI_FILE_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const openAiFileCache = new Map<string, CachedOpenAiFile>();
+
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
@@ -47,6 +55,12 @@ function jsonResponse(status: number, body: unknown) {
   });
 }
 
+function cleanupOpenAiFileCache(nowMs: number) {
+  for (const [docId, entry] of openAiFileCache.entries()) {
+    if (nowMs - entry.updatedAtMs > OPENAI_FILE_CACHE_TTL_MS) openAiFileCache.delete(docId);
+  }
+}
+
 function b64ToBytes(b64: string) {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -54,18 +68,44 @@ function b64ToBytes(b64: string) {
   return out;
 }
 
-function bytesToB64(bytes: Uint8Array) {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
 async function sha256Hex(bytes: Uint8Array) {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function uploadPdfToOpenAiFile(args: {
+  reqId: string;
+  openaiKey: string;
+  pdfBytes: Uint8Array;
+  pdfFilename: string;
+}) {
+  const form = new FormData();
+  form.append('purpose', 'user_data');
+  form.append(
+    'file',
+    new Blob([args.pdfBytes], { type: 'application/pdf' }),
+    args.pdfFilename || 'exercise.pdf',
+  );
+
+  const res = await fetch('https://api.openai.com/v1/files', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${args.openaiKey}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const t = await res.text();
+    log(args.reqId, 'openai_file_upload_failed', {
+      status: res.status,
+      bodySnippet: safeSnippet(t, 800),
+    });
+    throw new Error(`OpenAI file upload error: ${res.status}`);
+  }
+
+  const j = (await res.json()) as { id?: unknown };
+  if (typeof j.id !== 'string' || !j.id) throw new Error('OpenAI file upload returned no file id');
+
+  return j.id;
 }
 
 function assertEnv(name: string) {
@@ -122,16 +162,25 @@ serve(async (req) => {
 
     const openaiKey = assertEnv('OPENAI_API_KEY');
 
-    // For now we always require the PDF in the request (no Supabase Storage caching).
-    const pdfB64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
-    if (!pdfB64) return jsonResponse(400, { error: 'pdfBase64 fehlt' });
+    cleanupOpenAiFileCache(Date.now());
 
-    const pdfBytes = b64ToBytes(pdfB64);
-    const docId = await sha256Hex(pdfBytes);
+    const requestedDocId = typeof body.docId === 'string' && body.docId ? body.docId : null;
+    const pdfB64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
+    const hasPdf = Boolean(pdfB64);
+    if (!hasPdf && !requestedDocId) return jsonResponse(400, { error: 'pdfBase64 oder docId fehlt' });
+
+    const pdfBytes = hasPdf ? b64ToBytes(pdfB64) : null;
+    const docId = pdfBytes ? await sha256Hex(pdfBytes) : requestedDocId;
+    if (!docId) return jsonResponse(400, { error: 'docId konnte nicht bestimmt werden' });
     const pdfFilename =
       typeof body.pdfFilename === 'string' && body.pdfFilename ? body.pdfFilename : 'exercise.pdf';
 
-    const pdfBase64ForOpenAI = bytesToB64(pdfBytes);
+    const cachedFile = openAiFileCache.get(docId) ?? null;
+    let pdfFileId = cachedFile?.fileId ?? null;
+    if (!pdfFileId && pdfBytes) {
+      pdfFileId = await uploadPdfToOpenAiFile({ reqId, openaiKey, pdfBytes, pdfFilename });
+      openAiFileCache.set(docId, { fileId: pdfFileId, updatedAtMs: Date.now() });
+    }
 
     const attemptImageDataUrl =
       typeof body.attemptImageDataUrl === 'string' && body.attemptImageDataUrl
@@ -154,7 +203,7 @@ serve(async (req) => {
         content: [
           {
             type: 'input_text',
-            text: 'Du bist ein Tutor für Mathe-Abi Aufgaben. Nutze die angehängte PDF als Quelle. Antworte klar, Schritt-für-Schritt, und kurz genug zum Mitschreiben. Wenn etwas fehlt, stelle gezielte Rückfragen.',
+            text: 'Du bist ein Tutor für Mathe-Abi Aufgaben. Nutze nur Informationen aus der angehängten Aufgabe und markiere Annahmen klar. Antworte in knappen, nummerierten Schritten. Wenn die Angaben nicht reichen, stelle zuerst eine präzise Rückfrage statt zu raten. Nenne am Ende eine kurze Plausibilitätsprüfung des Ergebnisses.',
           },
         ],
       },
@@ -164,12 +213,16 @@ serve(async (req) => {
             ? [{ type: 'output_text', text: m.content }]
             : [{ type: 'input_text', text: m.content }];
         if (idx === lastUserIdx) {
-          // OpenAI expects base64 PDFs as a data URL.
-          base.push({
-            type: 'input_file',
-            filename: pdfFilename,
-            file_data: `data:application/pdf;base64,${pdfBase64ForOpenAI}`,
-          });
+          if (pdfFileId) {
+            base.push({ type: 'input_file', file_id: pdfFileId });
+          } else if (pdfB64) {
+            // Fallback if no cached file id exists.
+            base.push({
+              type: 'input_file',
+              filename: pdfFilename,
+              file_data: `data:application/pdf;base64,${pdfB64}`,
+            });
+          }
           if (attemptImageDataUrl)
             base.push({ type: 'input_image', image_url: attemptImageDataUrl, detail: 'auto' });
         }
@@ -178,12 +231,12 @@ serve(async (req) => {
     ];
 
     // Use a PDF-capable model by default; can be overridden via env.
-    const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4o-mini';
+    const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
     log(reqId, 'openai_request_start', {
       model,
       pdfFilename,
-      pdfBytes: pdfBytes.byteLength,
-      pdfBase64Chars: pdfBase64ForOpenAI.length,
+      pdfBytes: pdfBytes?.byteLength ?? 0,
+      hasCachedFileId: Boolean(pdfFileId),
       messagesCount: body.messages.length,
       lastUserIdx,
     });
@@ -197,6 +250,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model,
         input,
+        temperature: 0.2,
         max_output_tokens: 900,
       }),
     });
