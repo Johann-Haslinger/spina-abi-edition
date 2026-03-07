@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { IoClose, IoTrash } from 'react-icons/io5';
 import { GhostButton, SecondaryButton } from '../../../../../components/Button';
 import type { StudyAiMessage } from '../../../stores/studyAiChatStore';
+import { StudyAiGeneratingDots } from './StudyAiGeneratingDots';
 import { StudyAiMessageList } from './StudyAiMessageList';
 
 export function StudyAiFullscreenOverlay(props: {
@@ -13,13 +14,9 @@ export function StudyAiFullscreenOverlay(props: {
   onMinimize: () => void;
   onClose: () => void;
   onClear: () => void;
+  onRegenerate?: () => void;
 }) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [props.messages.length, props.sending]);
+  const scrollerRef = useAutoScrollToBottom(props.messages, props.sending);
 
   return (
     <motion.div
@@ -34,12 +31,18 @@ export function StudyAiFullscreenOverlay(props: {
       <div className="absolute h-full inset-x-0 top-0 flex justify-center">
         <div ref={scrollerRef} className="h-full w-full py-40 overflow-y-scroll px-4">
           <div className="w-3/5 mx-auto">
-            <StudyAiMessageList messages={props.messages} />
-            <div className="h-60" />
+            <StudyAiMessageList
+              messages={props.messages}
+              sending={props.sending}
+              onRegenerate={props.onRegenerate}
+            />
             {props.sending ? (
-              <div className="mt-3 text-xs text-slate-300">Antwort wird generiert…</div>
+              <div className="mt-3">
+                <StudyAiGeneratingDots />
+              </div>
             ) : null}
             {props.error ? <div className="mt-3 text-xs text-rose-200">{props.error}</div> : null}
+            <div className="h-60" />
           </div>
           <div className="absolute top-0 flex flex-col gap-2 pt-60 pl-4">
             <SecondaryButton onClick={props.onMinimize} icon={<Minimize2 className="size-4" />} />
@@ -51,3 +54,32 @@ export function StudyAiFullscreenOverlay(props: {
     </motion.div>
   );
 }
+
+const useAutoScrollToBottom = (messages: StudyAiMessage[], sending: boolean) => {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    const el = scrollerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom();
+        requestAnimationFrame(scrollToBottom);
+      });
+    }, 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    const raf1 = requestAnimationFrame(() => {
+      scrollToBottom();
+      requestAnimationFrame(scrollToBottom);
+    });
+    return () => cancelAnimationFrame(raf1);
+  }, [messages.length, sending]);
+
+  return scrollerRef;
+};

@@ -2,6 +2,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderAttemptCompositePngDataUrl } from '../../../../ink/attemptComposite';
 import { sendStudyAiMessage } from '../../ai/aiClient';
+import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
 import {
   useStudyAiChatStore,
   type StudyAiMessage,
@@ -42,6 +43,7 @@ export function StudyAiWidget(props: {
   );
   const setUiMode = useStudyAiChatStore((s) => s.setUiMode);
   const append = useStudyAiChatStore((s) => s.append);
+  const removeLastTurn = useStudyAiChatStore((s) => s.removeLastTurn);
   const clearConversation = useStudyAiChatStore((s) => s.clearConversation);
   const setDocId = useStudyAiChatStore((s) => s.setDocId);
 
@@ -63,6 +65,8 @@ export function StudyAiWidget(props: {
     prevModeRef.current = ui.mode;
   }, [ui.mode]);
 
+  const getConversation = useStudyAiChatStore((s) => s.getConversation);
+
   const send = async (text: string) => {
     if (!conversationKey) {
       setSendError('Keine Session aktiv.');
@@ -79,12 +83,15 @@ export function StudyAiWidget(props: {
     setSendError(null);
     append(conversationKey, { role: 'user', content: trimmed });
     setDraft('');
+    const panelView = useFloatingQuickLogPanelStore.getState().view;
+    if (panelView === 'progressDetails' || panelView === 'review') {
+      useFloatingQuickLogPanelStore.getState().setView('progress');
+    }
     setUiMode(conversationKey, 'overlay');
 
     try {
-      const messagesForRequest = conv.messages.concat([
-        { id: 'local', role: 'user', content: trimmed, createdAtMs: Date.now() },
-      ]);
+      const currentConv = getConversation(conversationKey);
+      const messagesForRequest = currentConv.messages;
 
       let attemptImageDataUrl: string | null = null;
       if (props.currentAttemptId && props.pdfData) {
@@ -109,16 +116,26 @@ export function StudyAiWidget(props: {
           attemptImageDataUrl,
         });
 
-      const shouldSendPdf = !conv.docId;
-      const res = await doSend(conv.docId, shouldSendPdf ? props.pdfData : null);
+      const shouldSendPdf = !currentConv.docId;
+      const res = await doSend(currentConv.docId, shouldSendPdf ? props.pdfData : null);
 
-      if (res.docId && res.docId !== conv.docId) setDocId(conversationKey, res.docId);
+      if (res.docId && res.docId !== currentConv.docId) setDocId(conversationKey, res.docId);
       append(conversationKey, { role: 'assistant', content: res.assistantMessage });
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Fehler beim Senden');
     } finally {
       setSending(false);
     }
+  };
+
+  const handleRegenerate = () => {
+    if (!conversationKey || conv.messages.length < 2) return;
+    const last = conv.messages[conv.messages.length - 1];
+    const prev = conv.messages[conv.messages.length - 2];
+    if (last.role !== 'assistant' || prev.role !== 'user') return;
+    const userContent = prev.content;
+    removeLastTurn(conversationKey);
+    void send(userContent);
   };
 
   useEffect(() => {
@@ -148,6 +165,7 @@ export function StudyAiWidget(props: {
             onMinimize={() => setUiMode(conversationKey, 'floating')}
             onClose={() => setUiMode(conversationKey, 'button')}
             onClear={() => clearConversation(conversationKey)}
+            onRegenerate={handleRegenerate}
           />
         ) : null}
       </AnimatePresence>
@@ -162,12 +180,23 @@ export function StudyAiWidget(props: {
         draft={draft}
         onDraftChange={setDraft}
         onSubmit={() => void send(draft)}
-        onOpenCenter={() =>
-          setUiMode(conversationKey, conv.messages.length > 0 ? 'floating' : 'center')
-        }
-        onMaximize={() => setUiMode(conversationKey, 'overlay')}
+        onOpenCenter={() => {
+          const panelView = useFloatingQuickLogPanelStore.getState().view;
+          if (panelView === 'progressDetails' || panelView === 'review') {
+            useFloatingQuickLogPanelStore.getState().setView('progress');
+          }
+          setUiMode(conversationKey, conv.messages.length > 0 ? 'floating' : 'center');
+        }}
+        onMaximize={() => {
+          const panelView = useFloatingQuickLogPanelStore.getState().view;
+          if (panelView === 'progressDetails' || panelView === 'review') {
+            useFloatingQuickLogPanelStore.getState().setView('progress');
+          }
+          setUiMode(conversationKey, 'overlay');
+        }}
         onClose={() => setUiMode(conversationKey, 'button')}
         onClear={() => clearConversation(conversationKey)}
+        onRegenerate={handleRegenerate}
       />
     </div>
   );

@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion';
 import { Bot, Maximize2 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { IoClose } from 'react-icons/io5';
 import { SecondaryButton } from '../../../../../components/Button';
 import type { StudyAiMessage, StudyAiUiMode } from '../../../stores/studyAiChatStore';
+import { StudyAiGeneratingDots } from './StudyAiGeneratingDots';
 import { StudyAiIconButton } from './StudyAiIconButton';
 import { StudyAiInputRow } from './StudyAiInputRow';
 import { StudyAiMessageList } from './StudyAiMessageList';
@@ -24,8 +25,23 @@ export function StudyAiMorphShell(props: {
   onMaximize: () => void;
   onClose: () => void;
   onClear: () => void;
+  onRegenerate?: () => void;
 }) {
   const { stageClass, shellClass } = useStudyAiMorphLayout(props.mode);
+  const floatingScrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = floatingScrollRef.current;
+    if (!el) return;
+    const scrollToBottom = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    const raf = requestAnimationFrame(() => {
+      scrollToBottom();
+      requestAnimationFrame(scrollToBottom);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [props.messages.length, props.sending]);
 
   return (
     <div
@@ -97,10 +113,20 @@ export function StudyAiMorphShell(props: {
               />
             </div>
 
-            <div className="max-h-[440px] overflow-y-auto w-full pt-16 px-3 pb-28">
-              <StudyAiMessageList messages={props.messages} compact />
+            <div
+              ref={floatingScrollRef}
+              className="max-h-[440px] overflow-y-auto w-full pt-16 px-3 pb-28"
+            >
+              <StudyAiMessageList
+                messages={props.messages}
+                compact
+                sending={props.sending}
+                onRegenerate={props.onRegenerate}
+              />
               {props.sending ? (
-                <div className="mt-2 text-xs text-slate-200/80">Antwort wird generiert…</div>
+                <div className="mt-2">
+                  <StudyAiGeneratingDots compact />
+                </div>
               ) : null}
               {props.error ? <div className="mt-2 text-xs text-rose-200">{props.error}</div> : null}
             </div>

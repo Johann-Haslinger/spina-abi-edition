@@ -297,6 +297,7 @@ export function InkToolbar(props: {
   );
 }
 
+import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
 import { useStudyAiChatStore, type StudyAiUiMode } from '../../stores/studyAiChatStore';
 
 export type InkToolbarStudyAiLayoutConfig = {
@@ -310,6 +311,7 @@ export type InkToolbarStudyAiLayoutConfig = {
   floatingModeWidthPx: number;
 
   openCenterShiftWhenStudyAiFloatingPx: number;
+  openCenterShiftWhenQuickLogDetailsOrReviewPx: number;
 };
 
 const INK_TOOLBAR_STUDY_AI_LAYOUT_DEFAULTS: InkToolbarStudyAiLayoutConfig = {
@@ -323,6 +325,7 @@ const INK_TOOLBAR_STUDY_AI_LAYOUT_DEFAULTS: InkToolbarStudyAiLayoutConfig = {
   floatingModeWidthPx: 360,
 
   openCenterShiftWhenStudyAiFloatingPx: 100,
+  openCenterShiftWhenQuickLogDetailsOrReviewPx: -50,
 };
 
 function useInkToolbarStudyAiLayout(params: {
@@ -344,27 +347,33 @@ function useInkToolbarStudyAiLayout(params: {
     return s.uiByConversation[key]?.mode ?? 'button';
   });
 
+  const quickLogView = useFloatingQuickLogPanelStore((s) => s.view);
+  const quickLogShift =
+    quickLogView === 'progressDetails' || quickLogView === 'review'
+      ? cfg.openCenterShiftWhenQuickLogDetailsOrReviewPx
+      : 0;
+
   return useMemo(() => {
+    let closedLeftPx: number;
+    let openCenterShiftPx: number;
+
     if (mode === 'button') {
-      return {
-        studyAiMode: mode,
-        closedLeftPx: cfg.buttonModeLeftInsetPx + cfg.buttonModeWidthPx + cfg.gapPx,
-        openCenterShiftPx: 0,
-      };
+      closedLeftPx = cfg.buttonModeLeftInsetPx + cfg.buttonModeWidthPx + cfg.gapPx;
+      openCenterShiftPx = 0;
+    } else if (mode === 'floating') {
+      closedLeftPx = cfg.floatingModeLeftInsetPx + cfg.floatingModeWidthPx + cfg.gapPx;
+      openCenterShiftPx = cfg.openCenterShiftWhenStudyAiFloatingPx;
+    } else {
+      closedLeftPx = cfg.closedLeftFallbackPx;
+      openCenterShiftPx = 0;
     }
 
-    if (mode === 'floating') {
-      return {
-        studyAiMode: mode,
-        closedLeftPx: cfg.floatingModeLeftInsetPx + cfg.floatingModeWidthPx + cfg.gapPx,
-        openCenterShiftPx: cfg.openCenterShiftWhenStudyAiFloatingPx,
-      };
-    }
+    openCenterShiftPx += quickLogShift;
 
     return {
       studyAiMode: mode,
-      closedLeftPx: cfg.closedLeftFallbackPx,
-      openCenterShiftPx: 0,
+      closedLeftPx,
+      openCenterShiftPx,
     };
-  }, [cfg, mode]);
+  }, [cfg, mode, quickLogShift]);
 }

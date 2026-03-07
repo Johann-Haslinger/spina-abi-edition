@@ -33,6 +33,7 @@ type StudyAiChatState = {
   setUiMode: (conversationKey: string, mode: StudyAiUiMode) => void;
 
   append: (conversationKey: string, msg: Omit<StudyAiMessage, 'id' | 'createdAtMs'>) => void;
+  removeLastTurn: (conversationKey: string) => void;
   setDocId: (conversationKey: string, docId: string | null) => void;
   clearConversation: (conversationKey: string) => void;
 };
@@ -83,6 +84,24 @@ export const useStudyAiChatStore = create<StudyAiChatState>()(
             conversations: {
               ...s.conversations,
               [conversationKey]: { ...current, messages: [...current.messages, next] },
+            },
+          };
+        }),
+
+      removeLastTurn: (conversationKey) =>
+        set((s) => {
+          const current = s.conversations[conversationKey] ?? defaultConversation;
+          if (current.messages.length < 2) return s;
+          const last = current.messages[current.messages.length - 1];
+          const prev = current.messages[current.messages.length - 2];
+          if (last.role !== 'assistant' || prev.role !== 'user') return s;
+          return {
+            conversations: {
+              ...s.conversations,
+              [conversationKey]: {
+                ...current,
+                messages: current.messages.slice(0, -2),
+              },
             },
           };
         }),

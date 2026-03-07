@@ -1,10 +1,10 @@
 import { AnimatePresence, motion, useDragControls, useMotionValue } from 'framer-motion';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
-import { useStudyHudVisibility } from '../stores/studyHudStore';
 import { useFloatingQuickLogPanelStore } from '../stores/floatingQuickLogPanelStore';
+import { useStudyAiChatStore } from '../stores/studyAiChatStore';
+import { useStudyHudStore, useStudyHudVisibility } from '../stores/studyHudStore';
 import { useStudyStore } from '../stores/studyStore';
-import { HUD_VARIANTS_BOTTOM_RIGHT } from './studyHud/hudMotion';
 import { ConfigView } from './floatingQuickLogPanel/ConfigView';
 import { NextView } from './floatingQuickLogPanel/NextView';
 import { ProgressDetailsView } from './floatingQuickLogPanel/ProgressDetailsView';
@@ -12,6 +12,7 @@ import { ProgressView } from './floatingQuickLogPanel/ProgressView.tsx';
 import { ReviewView } from './floatingQuickLogPanel/ReviewView';
 import { StartView } from './floatingQuickLogPanel/StartView.tsx';
 import { incrementSuffix } from './floatingQuickLogPanel/stepperSuffix';
+import { HUD_VARIANTS_BOTTOM_RIGHT } from './studyHud/hudMotion';
 
 type PanelView = 'start' | 'config' | 'progress' | 'progressDetails' | 'review' | 'next';
 
@@ -25,7 +26,23 @@ export function FloatingQuickLogPanel(props: {
   const { suppressNonStudyAi } = useStudyHudVisibility();
 
   const view = useFloatingQuickLogPanelStore((s) => s.view) as PanelView;
-  const setView = useFloatingQuickLogPanelStore((s) => s.setView) as (v: PanelView) => void;
+  const setViewRaw = useFloatingQuickLogPanelStore((s) => s.setView) as (v: PanelView) => void;
+
+  const setView = useCallback(
+    (newView: PanelView) => {
+      if (newView === 'progressDetails' || newView === 'review') {
+        const key = useStudyHudStore.getState().studyAiConversationKey;
+        if (key) {
+          const mode = useStudyAiChatStore.getState().uiByConversation[key]?.mode ?? 'button';
+          if (mode === 'overlay' || mode === 'floating') {
+            useStudyAiChatStore.getState().setUiMode(key, 'button');
+          }
+        }
+      }
+      setViewRaw(newView);
+    },
+    [setViewRaw],
+  );
   const storedX = useFloatingQuickLogPanelStore((s) => s.x);
   const storedY = useFloatingQuickLogPanelStore((s) => s.y);
   const setPosition = useFloatingQuickLogPanelStore((s) => s.setPosition);
@@ -91,126 +108,128 @@ export function FloatingQuickLogPanel(props: {
           transition={{ type: 'spring', stiffness: 520, damping: 44 }}
           onDragEnd={() => setPosition({ x: x.get(), y: y.get() })}
         >
-        <motion.div
-          animate={{
-            height: viewHeightPx[view],
-          }}
-          transition={{ type: 'spring', stiffness: 520, damping: 44 }}
-          style={{ height: viewHeightPx[view] }}
-          className="relative w-full overflow-hidden rounded-4xl border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5"
-        >
-          <AnimatePresence mode="sync" initial={false}>
-            <motion.div
-              key={view}
-              className="absolute inset-0"
-              initial={{ opacity: 0, scale: 0.985 }}
-              animate={{ opacity: 1, scale: 1, padding: view === 'progress' ? 12 : 20 }}
-              exit={{ opacity: 0, scale: 0.985 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              style={{ willChange: 'opacity, transform' }}
-            >
-              <div className="h-full">
-                {view === 'start' ? (
-                  <StartView
-                    assetId={props.assetId}
-                    pageNumber={props.pageNumber}
-                    gripProps={gripProps}
-                    subjectId={props.subjectId}
-                    topicId={props.topicId}
-                    onStarted={() => setView('progress')}
-                    onOpenConfig={() => setView('config')}
-                  />
-                ) : null}
+          <motion.div
+            animate={{
+              height: viewHeightPx[view],
+            }}
+            transition={{ type: 'spring', stiffness: 520, damping: 44 }}
+            style={{ height: viewHeightPx[view] }}
+            className="relative w-full overflow-hidden rounded-4xl border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5"
+          >
+            <AnimatePresence mode="sync" initial={false}>
+              <motion.div
+                key={view}
+                className="absolute inset-0"
+                initial={{ opacity: 0, scale: 0.985 }}
+                animate={{ opacity: 1, scale: 1, padding: view === 'progress' ? 12 : 20 }}
+                exit={{ opacity: 0, scale: 0.985 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+                style={{ willChange: 'opacity, transform' }}
+              >
+                <div className="h-full">
+                  {view === 'start' ? (
+                    <StartView
+                      assetId={props.assetId}
+                      pageNumber={props.pageNumber}
+                      gripProps={gripProps}
+                      subjectId={props.subjectId}
+                      topicId={props.topicId}
+                      onStarted={() => setView('progress')}
+                      onOpenConfig={() => setView('config')}
+                    />
+                  ) : null}
 
-                {view === 'config' ? (
-                  <ConfigView
-                    assetId={props.assetId}
-                    gripProps={gripProps}
-                    onClose={() => setView('start')}
-                  />
-                ) : null}
+                  {view === 'config' ? (
+                    <ConfigView
+                      assetId={props.assetId}
+                      gripProps={gripProps}
+                      onClose={() => setView('start')}
+                    />
+                  ) : null}
 
-                {view === 'progress' ? (
-                  <ProgressView
-                    gripProps={gripProps}
-                    onOpenDetails={() => setView('progressDetails')}
-                    onFinish={() => setView('review')}
-                  />
-                ) : null}
+                  {view === 'progress' ? (
+                    <ProgressView
+                      gripProps={gripProps}
+                      onOpenDetails={() => setView('progressDetails')}
+                      onFinish={() => setView('review')}
+                    />
+                  ) : null}
 
-                {view === 'progressDetails' ? (
-                  <ProgressDetailsView
-                    gripProps={gripProps}
-                    onClose={() => setView('progress')}
-                    onFinish={() => setView('review')}
-                    onCancel={() => {
-                      cancelAttempt();
-                      setView('start');
-                    }}
-                  />
-                ) : null}
+                  {view === 'progressDetails' ? (
+                    <ProgressDetailsView
+                      gripProps={gripProps}
+                      onClose={() => setView('progress')}
+                      onFinish={() => setView('review')}
+                      onCancel={() => {
+                        cancelAttempt();
+                        setView('start');
+                      }}
+                    />
+                  ) : null}
 
-                {view === 'review' ? (
-                  <ReviewView
-                    gripProps={gripProps}
-                    onClose={() => setView('progress')}
-                    onSave={async (input) => {
-                      if (!active) throw new Error('Keine aktive Session');
-                      await ensureStudySession({
-                        subjectId: active.subjectId,
-                        topicId: active.topicId,
-                        startedAtMs: active.startedAtMs,
-                        plannedDurationMs: active.plannedDurationMs,
-                      });
-                      await logAttempt({
-                        assetId: props.assetId,
-                        problemIdx,
-                        subproblemLabel,
-                        endedAtMs: Date.now(),
-                        result: input.result,
-                        note: input.note,
-                        errorType: input.errorType,
-                      });
-                      setView('next');
-                    }}
-                  />
-                ) : null}
+                  {view === 'review' ? (
+                    <ReviewView
+                      gripProps={gripProps}
+                      onClose={() => setView('progress')}
+                      onSave={async (input) => {
+                        if (!active) throw new Error('Keine aktive Session');
+                        await ensureStudySession({
+                          subjectId: active.subjectId,
+                          topicId: active.topicId,
+                          startedAtMs: active.startedAtMs,
+                          plannedDurationMs: active.plannedDurationMs,
+                        });
+                        await logAttempt({
+                          assetId: props.assetId,
+                          problemIdx,
+                          subproblemLabel,
+                          endedAtMs: Date.now(),
+                          result: input.result,
+                          note: input.note,
+                          errorType: input.errorType,
+                        });
+                        setView('next');
+                      }}
+                    />
+                  ) : null}
 
-                {view === 'next' ? (
-                  <NextView
-                    gripProps={gripProps}
-                    taskDepth={depth}
-                    onNextSubproblem={() => {
-                      if (depth === 3) {
-                        setSubsubproblemLabel(
-                          incrementSuffix((subsubproblemLabel || '1').trim()) || '1',
-                        );
-                      } else {
-                        setSubproblemLabel(incrementSuffix((subproblemLabel || 'a').trim()) || 'a');
-                      }
-                      setView('start');
-                    }}
-                    onNewProblem={() => {
-                      setProblemIdx(problemIdx + 1);
-                      setSubproblemLabel('a');
-                      setSubsubproblemLabel('1');
-                      setView('start');
-                    }}
-                    onMarkProgress={() => {
-                      props.onOpenExerciseReview();
-                      setView('start');
-                    }}
-                    onFinishExercise={async () => {
-                      await setExerciseStatus(props.assetId, 'covered');
-                      props.onOpenExerciseReview();
-                      setView('start');
-                    }}
-                  />
-                ) : null}
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </motion.div>
+                  {view === 'next' ? (
+                    <NextView
+                      gripProps={gripProps}
+                      taskDepth={depth}
+                      onNextSubproblem={() => {
+                        if (depth === 3) {
+                          setSubsubproblemLabel(
+                            incrementSuffix((subsubproblemLabel || '1').trim()) || '1',
+                          );
+                        } else {
+                          setSubproblemLabel(
+                            incrementSuffix((subproblemLabel || 'a').trim()) || 'a',
+                          );
+                        }
+                        setView('start');
+                      }}
+                      onNewProblem={() => {
+                        setProblemIdx(problemIdx + 1);
+                        setSubproblemLabel('a');
+                        setSubsubproblemLabel('1');
+                        setView('start');
+                      }}
+                      onMarkProgress={() => {
+                        props.onOpenExerciseReview();
+                        setView('start');
+                      }}
+                      onFinishExercise={async () => {
+                        await setExerciseStatus(props.assetId, 'covered');
+                        props.onOpenExerciseReview();
+                        setView('start');
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </motion.div>
         </motion.div>
       </motion.div>
     </div>
