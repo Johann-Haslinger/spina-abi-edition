@@ -5,13 +5,13 @@ export function PageHeader(props: {
   breadcrumb?: ReactNode;
   actions?: ReactNode;
 }) {
-  const { title, breadcrumb, actions } = props;
+  const { title, actions } = props;
 
   return (
     <div className="flex items-start pt-40 justify-between gap-4">
       <div>
-        <h1 className="text-[2.5rem] mb-2 font-semibold text-black dark:text-white">{title}</h1>
-        {breadcrumb ? <div>{breadcrumb}</div> : null}
+        <h1 className="text-4xl mb-6 font-semibold text-black dark:text-white">{title}</h1>
+        {/* {breadcrumb ? <div>{breadcrumb}</div> : null} */}
       </div>
 
       {actions ? <div className="shrink-0">{actions}</div> : null}
