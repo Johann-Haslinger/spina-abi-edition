@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoInformation } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';

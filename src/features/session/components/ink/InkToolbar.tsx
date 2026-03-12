@@ -1,6 +1,6 @@
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { Minimize2, Redo2, Undo2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { GhostButton } from '../../../../components/Button';
 import { useInkActions } from '../../../../ink/actions';
 import { useInkStore } from '../../../../ink/inkStore';
@@ -20,15 +20,6 @@ const MORPH_TRANSITION = {
   damping: 42,
   mass: 0.85,
 } as const;
-
-type InkToolId = 'pencil' | 'marker' | 'eraser' | 'select';
-
-type ToolButton = {
-  id: InkToolId;
-  label: string;
-  src: string;
-  overlaySrc?: string;
-};
 
 function ToolPreview(props: {
   baseSrc: string;
@@ -209,7 +200,7 @@ export function InkToolbar(props: {
                               }
                             />
                             <img
-                              src={t.overlaySrc ?? t.src}
+                              src={t.id === 'pencil' || t.id === 'marker' ? t.overlaySrc : t.src}
                               alt=""
                               className="absolute inset-0 h-full w-full object-contain object-bottom"
                               aria-hidden
@@ -271,7 +262,11 @@ export function InkToolbar(props: {
             >
               <ToolPreview
                 baseSrc={activeTool.src}
-                overlaySrc={activeTool.overlaySrc}
+                overlaySrc={
+                  activeTool.id === 'pencil' || activeTool.id === 'marker'
+                    ? activeTool.overlaySrc
+                    : undefined
+                }
                 tintColor={activeTintColor}
                 tintOpacity={activeTintOpacity}
                 sizeClassName="size-16 translate-y-2"
@@ -288,8 +283,18 @@ function useToolButtons() {
   const toolButtons = useMemo(
     () =>
       [
-        { id: 'pencil' as const, label: 'Pencil', src: '/ink/pencil.png' },
-        { id: 'marker' as const, label: 'Marker', src: '/ink/marker.png' },
+        {
+          id: 'pencil' as const,
+          label: 'Pencil',
+          src: '/ink/pencil.png',
+          overlaySrc: '/ink/pencil-transparent.png',
+        },
+        {
+          id: 'marker' as const,
+          label: 'Marker',
+          src: '/ink/marker.png',
+          overlaySrc: '/ink/marker-transparent.png',
+        },
         { id: 'eraser' as const, label: 'Eraser', src: '/ink/eraser.png' },
         { id: 'select' as const, label: 'Auswahl', src: '/ink/select.png' },
       ] as const,
