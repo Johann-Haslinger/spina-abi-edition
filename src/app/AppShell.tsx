@@ -1,17 +1,17 @@
 import { Outlet } from 'react-router-dom';
 import { useThemeDomSync } from '../ui/hooks/useThemeDomSync';
-import { NavBar } from './NavBar';
 import { usePersistLastRoute } from './hooks/usePersistLastRoute';
+import { NavBar } from './NavBar';
 
 export function AppShell() {
   useThemeDomSync();
   usePersistLastRoute();
 
   return (
-    <div className="min-h-screen">
+    <div className="h-full">
       <NavBar />
 
-      <main className="mx-auto h-screen">
+      <main className="mx-auto xl:w-4/5 px-16 h-full">
         <Outlet />
       </main>
     </div>

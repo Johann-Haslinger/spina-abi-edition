@@ -10,7 +10,7 @@ export function PageHeader(props: {
   return (
     <div className="flex items-start pt-40 justify-between gap-4">
       <div>
-        <h1 className="text-4xl mb-6 font-semibold text-black dark:text-white">{title}</h1>
+        <h1 className="text-[2.6rem] mb-4 font-semibold text-black dark:text-white">{title}</h1>
         {/* {breadcrumb ? <div>{breadcrumb}</div> : null} */}
       </div>
 

@@ -137,7 +137,7 @@ async function loadThumbnail(
   if (pending) return pending;
 
   const promise = buildThumbnail(assetId, loadFile)
-    .catch(() => ({ src: null, kind: 'fallback' } satisfies ThumbnailPayload))
+    .catch(() => ({ src: null, kind: 'fallback' }) satisfies ThumbnailPayload)
     .then((result) => {
       thumbnailCache.set(assetId, result);
       thumbnailPending.delete(assetId);
@@ -194,7 +194,7 @@ export function AssetThumbnail(props: {
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [assetId]);
+  }, [assetId, setThumbnail]);
 
   useEffect(() => {
     if (!shouldLoad) return;
@@ -222,7 +222,7 @@ export function AssetThumbnail(props: {
   return (
     <div
       ref={containerRef}
-      className="relative group-hover:scale-105 transition-all duration-300 h-20 w-16 overflow-hidden rounded-lg"
+      className="relative shadow-lg group-hover:scale-105 active:scale-95 transition-all duration-300 h-24 w-16 overflow-hidden rounded-md"
     >
       {thumbnail?.src ? (
         <img

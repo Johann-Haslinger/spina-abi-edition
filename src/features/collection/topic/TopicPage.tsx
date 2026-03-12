@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { IoAdd } from 'react-icons/io5';
+import { IoAdd, IoChevronBack } from 'react-icons/io5';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AutoBreadcrumbs } from '../../../components/AutoBreadcrumbs';
 import { GhostButton } from '../../../components/Button';
 import { PageHeader } from '../../../components/PageHeader';
+import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetType } from '../../../domain/models';
 import { downloadBlob, openBlobInNewTab } from '../../../lib/blob';
 import { exerciseRepo } from '../../../repositories';
@@ -26,6 +26,7 @@ export function TopicPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { active } = useActiveSessionStore();
+  const from = (location.state as { from?: string } | null)?.from;
 
   const { subjects, refresh: refreshSubjects } = useSubjectsStore();
   const { topicsBySubject, refreshBySubject } = useTopicsStore();
@@ -130,6 +131,23 @@ export function TopicPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadType, setUploadType] = useState<AssetType>('exercise');
 
+  const goBack = () => {
+    if (subjectId) {
+      navigate(
+        `/subjects/${subjectId}`,
+        from
+          ? {
+              state: { from },
+            }
+          : undefined,
+      );
+    } else if (from) {
+      navigate(from);
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   function startUpload(type: AssetType) {
     setUploadType(type);
     fileInputRef.current?.click();
@@ -138,7 +156,7 @@ export function TopicPage() {
   async function openAsset(asset: Asset) {
     if (asset.type === 'exercise') {
       const navState = {
-        from: (location.state as { from?: string } | null)?.from,
+        from,
         subjectId,
         topicId,
       };
@@ -162,84 +180,85 @@ export function TopicPage() {
   if (!topic && (topicsBySubject[subjectId]?.length ?? 0) > 0) return <NotFoundPage />;
 
   return (
-    <div className="space-y-6 h-full p-4 flex">
-      <div className="w-2/3 mx-auto">
-        <PageHeader
-          breadcrumb={<AutoBreadcrumbs />}
-          title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
-        />
+    <div className="h-full">
+      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-8 top-18">
+        <IoChevronBack />
+      </ViewerIconButton>
 
-        <div>
-          {/* <TopicFolderSection /> */}
+      <PageHeader
+        title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
+      />
 
-          <section className="lg:col-span-2">
-            {assetsError ? (
-              <div className="mt-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
-                {assetsError}
-              </div>
-            ) : null}
-
-            <div className="flex justify-between items-center">
-              <div className="flex flex-wrap items-center gap-2">
-                <FilterChip
-                  active={assetFilter === 'all'}
-                  onClick={() => setAssetFilter('all')}
-                  label="Alle"
-                />
-                <FilterChip
-                  active={assetFilter === 'exercise'}
-                  onClick={() => setAssetFilter('exercise')}
-                  label="Übungen"
-                />
-                <FilterChip
-                  active={assetFilter === 'cheatsheet'}
-                  onClick={() => setAssetFilter('cheatsheet')}
-                  label="Merkblätter"
-                />
-                <FilterChip
-                  active={assetFilter === 'note'}
-                  onClick={() => setAssetFilter('note')}
-                  label="Notizen"
-                />
-                <FilterChip
-                  active={assetFilter === 'file'}
-                  onClick={() => setAssetFilter('file')}
-                  label="Dateien"
-                />
-              </div>
-              <GhostButton onClick={() => startUpload('exercise')} icon={<IoAdd />} size="sm">
-                Upload
-              </GhostButton>
+      <div>
+        <section className="lg:col-span-2">
+          {assetsError ? (
+            <div className="mt-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
+              {assetsError}
             </div>
+          ) : null}
 
-            {assetsLoading ? (
-              <div className="mt-3 text-sm text-slate-400">Lade…</div>
-            ) : filteredAssets.length === 0 ? (
-              <div className="mt-3 text-sm text-slate-400">Keine Assets in dieser Ansicht.</div>
-            ) : (
-              <ul className="mt-12 grid grid-cols-4 gap-3 lg:grid-cols-6 xl:grid-cols-6">
-                {filteredAssets.map((a) => (
-                  <AssetGridItem
-                    key={a.id}
-                    asset={a}
-                    folderLabel={a.folderId ? folderNameById.get(a.folderId) ?? '—' : 'Ohne Ordner'}
-                    exerciseStatus={
-                      a.type === 'exercise' ? exerciseStatusByAssetId[a.id] : undefined
+          <div className="flex justify-between items-center">
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterChip
+                active={assetFilter === 'all'}
+                onClick={() => setAssetFilter('all')}
+                label="Alle"
+              />
+              <FilterChip
+                active={assetFilter === 'exercise'}
+                onClick={() => setAssetFilter('exercise')}
+                label="Übungen"
+              />
+              <FilterChip
+                active={assetFilter === 'cheatsheet'}
+                onClick={() => setAssetFilter('cheatsheet')}
+                label="Merkblätter"
+              />
+              <FilterChip
+                active={assetFilter === 'note'}
+                onClick={() => setAssetFilter('note')}
+                label="Notizen"
+              />
+              <FilterChip
+                active={assetFilter === 'file'}
+                onClick={() => setAssetFilter('file')}
+                label="Dateien"
+              />
+            </div>
+            <GhostButton
+              onClick={() => startUpload('exercise')}
+              icon={<IoAdd />}
+              className="text-sm"
+            >
+              Upload
+            </GhostButton>
+          </div>
+
+          {assetsLoading ? (
+            <div className="mt-3 text-sm text-slate-400">Lade…</div>
+          ) : filteredAssets.length === 0 ? (
+            <div className="mt-3 text-sm text-slate-400">Keine Assets in dieser Ansicht.</div>
+          ) : (
+            <ul className="mt-12 grid grid-cols-4 gap-3 lg:grid-cols-7 xl:grid-cols-7">
+              {filteredAssets.map((a) => (
+                <AssetGridItem
+                  key={a.id}
+                  asset={a}
+                  folderLabel={a.folderId ? folderNameById.get(a.folderId) ?? '—' : 'Ohne Ordner'}
+                  exerciseStatus={a.type === 'exercise' ? exerciseStatusByAssetId[a.id] : undefined}
+                  loadFile={getFile}
+                  onOpen={() => void openAsset(a)}
+                  onDownload={() => void downloadAsset(a)}
+                  onDelete={() => {
+                    if (window.confirm(`Asset „${a.title}“ löschen?`)) {
+                      void deleteAsset(a.id, topicId);
                     }
-                    loadFile={getFile}
-                    onOpen={() => void openAsset(a)}
-                    onDownload={() => void downloadAsset(a)}
-                    onDelete={() => {
-                      if (window.confirm(`Asset „${a.title}“ löschen?`)) {
-                        void deleteAsset(a.id, topicId);
-                      }
-                    }}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
       {/* <div className="w-1/3 pt-20 h-full">
         <div className="w-full h-full bg-white/5 rounded-3xl shadow-lg border border-white/5 p-4">
