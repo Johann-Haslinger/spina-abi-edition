@@ -11,7 +11,12 @@ export function AssetViewer(props: {
   pageNumber: number;
   onPageNumberChange: (n: number) => void;
   accentColor?: string;
-  ink?: { studySessionId: string; assetId: string; activeAttemptId: string | null } | null;
+  ink?: {
+    studySessionId: string;
+    assetId: string;
+    activeAttemptId: string | null;
+    studyAiConversationKey?: string | null;
+  } | null;
 }) {
   const mime = props.file.mimeType || '';
   const isPdf =

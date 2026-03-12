@@ -54,7 +54,7 @@ export const SecondaryButton = (props: {
   return (
     <ButtonOutline
       icon={props.icon}
-      className={`${props.className} hover:bg-white/15 bg-white/10 text-white border-white/10 backdrop-blur`}
+      className={`${props.className} hover:bg-white/15 bg-white/10 text-white border-white/10`}
       onClick={props.onClick}
       disabled={props.disabled}
     >

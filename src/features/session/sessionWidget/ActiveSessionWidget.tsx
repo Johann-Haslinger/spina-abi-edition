@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoInformation } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
@@ -7,14 +8,15 @@ import { useActiveSessionStore, type ActiveSession } from '../../../stores/activ
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { formatDuration } from '../../../utils/time';
+import { HUD_VARIANTS_TOP_RIGHT } from '../components/studyHud/hudMotion';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { formatTaskPath } from '../utils/formatTaskPath';
 import { ActiveSessionInfoPanel } from './ActiveSessionInfoPanel';
 import { getElapsedMs } from './utils';
 
-export function ActiveSessionWidget(props: { active: ActiveSession }) {
-  const { active } = props;
+export function ActiveSessionWidget(props: { active: ActiveSession; hidden?: boolean }) {
+  const { active, hidden = false } = props;
   const navigate = useNavigate();
   const { end } = useActiveSessionStore();
   const { studySessionId, reset, currentAttempt, taskDepthByAssetId, loadTaskDepth } =
@@ -33,17 +35,17 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
 
   const secondaryLabel = useMemo(() => {
     if (!currentAttempt) return topicName ?? active.topicId;
-    return `${formatTaskPath(currentAttempt, depth)}`;
+    return `Aufgabe ${formatTaskPath(currentAttempt, depth)}`;
   }, [active.topicId, currentAttempt, depth, topicName]);
 
   const elapsedMs = getElapsedMs(active, nowMs);
   const elapsedSeconds = Math.floor(elapsedMs / 1000);
 
   const timerLabel = useMemo(() => {
-    if (!active.plannedDurationMs) return formatDuration(elapsedSeconds, true);
+    if (!active.plannedDurationMs) return formatDuration(elapsedSeconds);
     const remainingSeconds = Math.ceil((active.plannedDurationMs - elapsedMs) / 1000);
-    if (remainingSeconds >= 0) return formatDuration(remainingSeconds, true);
-    return `+${formatDuration(Math.abs(remainingSeconds), true)}`;
+    if (remainingSeconds >= 0) return formatDuration(remainingSeconds);
+    return `+${formatDuration(Math.abs(remainingSeconds))}`;
   }, [active.plannedDurationMs, elapsedMs, elapsedSeconds]);
 
   const stopSession = useCallback(async () => {
@@ -64,20 +66,27 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
   }, [active.subjectId, active.topicId, active.startedAtMs, end, navigate, reset, studySessionId]);
 
   return (
-    <div className="fixed top-6 right-6 w-[200px] z-1000000000 max-w-[calc(100vw-32px)]">
+    <motion.div
+      className="fixed top-6 right-6 w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
+      style={{ pointerEvents: hidden ? 'none' : 'auto' }}
+      variants={HUD_VARIANTS_TOP_RIGHT}
+      initial="hidden"
+      animate={hidden ? 'hidden' : 'shown'}
+      exit="hidden"
+      aria-hidden={hidden}
+    >
       <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5">
-        <div className="flex items-stretch p-1.5">
+        <div className="flex p-1.5">
+          <GhostButton onClick={() => setExpanded((v) => !v)} icon={<IoInformation />} />
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="flex text-sm  cursor-pointer min-w-0 flex-1 items-center px-2.5"
+            className="text-sm pl-1 cursor-pointer min-w-0 text-left"
             aria-expanded={expanded}
           >
-            <span className="tabular-nums font-medium">{timerLabel} · </span>
-            <span className="truncate ml-1 opacity-70">{secondaryLabel}</span>
+            <div className="tabular-nums text-xs font-medium">{timerLabel} </div>
+            <div className="truncate text-xs mt-0.5 opacity-70">{secondaryLabel}</div>
           </button>
-
-          <GhostButton onClick={() => setExpanded((v) => !v)} icon={<IoInformation />} />
         </div>
       </div>
 
@@ -89,7 +98,7 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
         elapsedSeconds={elapsedSeconds}
         onStop={stopSession}
       />
-    </div>
+    </motion.div>
   );
 }
 
