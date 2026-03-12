@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoInformation } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
@@ -8,12 +7,12 @@ import { useActiveSessionStore, type ActiveSession } from '../../../stores/activ
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { formatDuration } from '../../../utils/time';
+import { HUD_VARIANTS_TOP_RIGHT } from '../components/studyHud/hudMotion';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { formatTaskPath } from '../utils/formatTaskPath';
 import { ActiveSessionInfoPanel } from './ActiveSessionInfoPanel';
 import { getElapsedMs } from './utils';
-import { HUD_VARIANTS_TOP_RIGHT } from '../components/studyHud/hudMotion';
 
 export function ActiveSessionWidget(props: { active: ActiveSession; hidden?: boolean }) {
   const { active, hidden = false } = props;
@@ -67,8 +66,8 @@ export function ActiveSessionWidget(props: { active: ActiveSession; hidden?: boo
 
   return (
     <motion.div
-      className="fixed w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
-      style={{ right: 24, top: 24, pointerEvents: hidden ? 'none' : 'auto' }}
+      className="fixed top-6 right-6 w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
+      style={{ pointerEvents: hidden ? 'none' : 'auto' }}
       variants={HUD_VARIANTS_TOP_RIGHT}
       initial="hidden"
       animate={hidden ? 'hidden' : 'shown'}

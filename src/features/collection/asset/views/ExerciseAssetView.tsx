@@ -1,17 +1,15 @@
-import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { IoChevronBack, IoInformationCircle, IoPlay } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
 import { FullscreenViewerFrame } from '../../../../components/FullscreenViewerFrame';
 import { ViewerIconButton } from '../../../../components/ViewerIconButton';
-import type { Asset, AssetFile, ExercisePageStatus } from '../../../../domain/models';
-import { assetFileStore, assetRepo, exerciseRepo } from '../../../../repositories';
+import type { Asset, AssetFile } from '../../../../domain/models';
+import { assetFileStore, assetRepo } from '../../../../repositories';
 import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
 import { useSubjectAccentColor } from '../../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../../common/ErrorPage';
 import { NotFoundPage } from '../../../common/NotFoundPage';
 import { AssetViewer } from '../../../session/viewer/AssetViewer';
-import { formatExerciseStatus } from '../../../session/viewer/viewerUtils';
 
 export function ExerciseAssetView(props: { assetId: string }) {
   const navigate = useNavigate();
@@ -19,10 +17,7 @@ export function ExerciseAssetView(props: { assetId: string }) {
 
   const { asset, file, pdfData, loading, error } = useExerciseAssetData(props.assetId);
   const [pageNumber, setPageNumber] = useState(1);
-  const { exerciseStatus } = useExerciseStatus(asset?.id);
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
-
-  const [infoOpen, setInfoOpen] = useState(false);
 
   const state = useMemo(() => {
     if (loading) return { kind: 'loading' as const };
@@ -73,43 +68,12 @@ export function ExerciseAssetView(props: { assetId: string }) {
           <ViewerIconButton ariaLabel="Session starten" onClick={startSession}>
             <IoPlay />
           </ViewerIconButton>
-          <ViewerIconButton ariaLabel="Info" onClick={() => setInfoOpen(true)}>
+          <ViewerIconButton ariaLabel="Info" onClick={() => {}}>
             <IoInformationCircle />
           </ViewerIconButton>
         </>
       }
-      overlayInfo={
-        infoOpen ? (
-          <div className="w-[min(420px,calc(100vw-24px))] rounded-2xl border border-white/10 bg-slate-950/85 p-4 text-slate-100 shadow-2xl backdrop-blur">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold">Info</div>
-                <div className="mt-1 truncate text-xs text-slate-300">{a.title}</div>
-              </div>
-              <ViewerIconButton ariaLabel="Schließen" onClick={() => setInfoOpen(false)}>
-                <X className="h-5 w-5" />
-              </ViewerIconButton>
-            </div>
-
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-slate-300">Übungsstatus</div>
-              <div className="mt-1 inline-flex items-center rounded-md bg-black/30 px-2 py-1 text-sm">
-                {formatExerciseStatus(exerciseStatus)}
-              </div>
-            </div>
-          </div>
-        ) : null
-      }
     >
-      {infoOpen ? (
-        <button
-          type="button"
-          aria-label="Info schließen"
-          className="absolute inset-0 z-10 cursor-default bg-transparent"
-          onClick={() => setInfoOpen(false)}
-        />
-      ) : null}
-
       {file ? (
         <AssetViewer
           title={a.title}
@@ -128,26 +92,6 @@ export function ExerciseAssetView(props: { assetId: string }) {
       )}
     </FullscreenViewerFrame>
   );
-}
-
-function useExerciseStatus(assetId: string | undefined) {
-  const [exerciseStatus, setExerciseStatus] = useState<ExercisePageStatus>('unknown');
-
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      if (!assetId) return;
-      const ex = await exerciseRepo.getByAsset(assetId);
-      if (cancelled) return;
-      setExerciseStatus(ex?.status ?? 'unknown');
-    }
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [assetId]);
-
-  return { exerciseStatus };
 }
 
 function useExerciseAssetData(assetId: string) {

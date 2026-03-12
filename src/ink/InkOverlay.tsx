@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useStudyStore } from '../features/session/stores/studyStore';
 import { formatTaskPath } from '../features/session/utils/formatTaskPath';
 import { newId } from '../lib/id';
 import { attemptRepo, inkRepo } from '../repositories';
@@ -19,6 +20,7 @@ function isProbablyIpad() {
 }
 
 export function InkOverlay(props: {
+  containerRef: RefObject<HTMLDivElement | null>;
   studySessionId: string;
   assetId: string;
   activeAttemptId: string | null;
@@ -44,9 +46,13 @@ export function InkOverlay(props: {
   const setSelectedAttemptId = useInkStore((s) => s.setSelectedAttemptId);
   const setSelectedStrokeIds = useInkStore((s) => s.setSelectedStrokeIds);
   const clearSelection = useInkStore((s) => s.clearSelection);
+  const setBrush = useInkStore((s) => s.setBrush);
   const applyTranslation = useInkStore((s) => s.applyTranslation);
   const applyTranslationStrokes = useInkStore((s) => s.applyTranslationStrokes);
   const pushCommand = useInkStore((s) => s.pushCommand);
+
+  const taskDepthByAssetId = useStudyStore((s) => s.taskDepthByAssetId);
+  const loadTaskDepth = useStudyStore((s) => s.loadTaskDepth);
 
   const { commitStroke, deleteStrokes } = useInkActions();
 
@@ -54,6 +60,13 @@ export function InkOverlay(props: {
     setActiveAttemptId(props.activeAttemptId);
     if (!props.activeAttemptId) clearSelection();
   }, [props.activeAttemptId, setActiveAttemptId, clearSelection]);
+
+  const prevStrokesLenRef = useRef(0);
+  useEffect(() => {
+    const prev = prevStrokesLenRef.current;
+    prevStrokesLenRef.current = strokes.length;
+    if (prev === 0 && strokes.length > 0) setVisualNonce((n) => n + 1);
+  }, [strokes.length]);
 
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLCanvasElement | null>(null);
@@ -86,6 +99,12 @@ export function InkOverlay(props: {
     }
   }, [size.w, size.h, dpr]);
 
+  useEffect(() => {
+    if (!props.assetId) return;
+    if (taskDepthByAssetId[props.assetId] !== undefined) return;
+    void loadTaskDepth(props.assetId);
+  }, [props.assetId, taskDepthByAssetId, loadTaskDepth]);
+
   const viewport = { pan: props.pan, ratio: props.ratio };
 
   const selectionBBox = useMemo(() => {
@@ -98,14 +117,19 @@ export function InkOverlay(props: {
     if (!selectedAttemptId) return null;
     const selected = strokes.filter((s) => s.attemptId === selectedAttemptId);
     if (selected.length === 0) return null;
-    const bbox = selected.map((s) => s.bbox).reduce((acc, b) => bboxUnion(acc, b));
+    const paddingWorld = 18 / Math.max(0.0001, props.ratio);
+    const bbox = bboxExpand(
+      selected.map((s) => s.bbox).reduce((acc, b) => bboxUnion(acc, b)),
+      paddingWorld,
+    );
     return { attemptId: selectedAttemptId, bbox };
-  }, [selectedAttemptId, selectedStrokeIds, strokes]);
+  }, [selectedAttemptId, selectedStrokeIds, strokes, props.ratio]);
 
   useEffect(() => {
     let cancelled = false;
     async function run() {
       if (!props.studySessionId || !props.assetId) return;
+      const depth = taskDepthByAssetId[props.assetId];
       const rows = await attemptRepo.listForSessionAsset({
         studySessionId: props.studySessionId,
         assetId: props.assetId,
@@ -113,11 +137,14 @@ export function InkOverlay(props: {
       if (cancelled) return;
       const next: Record<string, string> = {};
       for (const r of rows) {
-        next[r.attempt.id] = `Aufgabe ${formatTaskPath({
-          problemIdx: r.problemIdx,
-          subproblemLabel: r.subproblemLabel,
-          subsubproblemLabel: r.subsubproblemLabel,
-        })}`;
+        next[r.attempt.id] = `Aufgabe ${formatTaskPath(
+          {
+            problemIdx: r.problemIdx,
+            subproblemLabel: r.subproblemLabel,
+            subsubproblemLabel: r.subsubproblemLabel,
+          },
+          depth,
+        )}`;
       }
       setAttemptMetaById(next);
     }
@@ -125,7 +152,7 @@ export function InkOverlay(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.studySessionId, props.assetId, props.activeAttemptId]);
+  }, [props.studySessionId, props.assetId, props.activeAttemptId, taskDepthByAssetId]);
 
   const otherAttemptBoxes = useMemo(() => {
     const active = props.activeAttemptId;
@@ -150,6 +177,33 @@ export function InkOverlay(props: {
     return out;
   }, [strokes, props.activeAttemptId, props.ratio]);
 
+  const attemptDominantColorById = useMemo(() => {
+    const perAttempt = new Map<string, Map<string, number>>();
+    for (const s of strokes) {
+      if (!s.attemptId) continue;
+      let colorMap = perAttempt.get(s.attemptId);
+      if (!colorMap) {
+        colorMap = new Map<string, number>();
+        perAttempt.set(s.attemptId, colorMap);
+      }
+      const prev = colorMap.get(s.color) ?? 0;
+      colorMap.set(s.color, prev + s.points.length);
+    }
+    const out: Record<string, string> = {};
+    for (const [attemptId, colorMap] of perAttempt.entries()) {
+      let bestColor: string | null = null;
+      let bestScore = -1;
+      for (const [color, score] of colorMap.entries()) {
+        if (score > bestScore) {
+          bestScore = score;
+          bestColor = color;
+        }
+      }
+      if (bestColor) out[attemptId] = bestColor;
+    }
+    return out;
+  }, [strokes]);
+
   const redrawMain = useRef(0);
   useEffect(() => {
     const canvas = mainRef.current;
@@ -166,37 +220,46 @@ export function InkOverlay(props: {
       const sx = dpr * viewport.ratio;
       ctx.setTransform(sx, 0, 0, sx, dpr * viewport.pan.x, dpr * viewport.pan.y);
 
-      // Background “cards” for other attempts (behind their ink)
       const fontSizeWorld = 11 / Math.max(0.0001, viewport.ratio);
-      const labelPadWorld = 6 / Math.max(0.0001, viewport.ratio);
       for (const box of otherAttemptBoxes) {
         const b = box.bbox;
-        const dragStrokeIds = penRef.current.dragStrokeIds;
-        const isMoveActive =
-          isProbablyIpad() &&
-          penRef.current.mode === 'drag' &&
-          (box.attemptId === selectedAttemptId ||
-            (dragStrokeIds?.length &&
-              strokes.some((s) => s.attemptId === box.attemptId && dragStrokeIds.includes(s.id))));
-
-        ctx.save();
-        if (isMoveActive) {
-          ctx.shadowColor = 'rgba(0,0,0,0.25)';
-          ctx.shadowBlur = 14 / Math.max(0.0001, viewport.ratio);
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 6 / Math.max(0.0001, viewport.ratio);
-        }
-        ctx.fillStyle = 'rgba(255,255,255,0.05)';
-        ctx.fillRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
-        ctx.shadowColor = 'transparent';
-        ctx.restore();
-
         const label = attemptMetaById[box.attemptId] ?? 'Aufgabe';
+        const color = attemptDominantColorById[box.attemptId] ?? '#FACC15';
+
+        const isMoveActive =
+          penRef.current.mode === 'drag' && penRef.current.dragAttemptId === box.attemptId;
+        if (isMoveActive) {
+          const borderPadWorld = 6 / Math.max(0.0001, viewport.ratio);
+          ctx.save();
+          ctx.shadowColor = 'rgba(15,23,42,0.55)';
+          ctx.shadowBlur = 18 / Math.max(0.0001, viewport.ratio);
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 8 / Math.max(0.0001, viewport.ratio);
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.1;
+          ctx.fillRect(
+            b.minX - borderPadWorld,
+            b.minY - borderPadWorld,
+            b.maxX - b.minX + borderPadWorld * 2,
+            b.maxY - b.minY + borderPadWorld * 2,
+          );
+          ctx.restore();
+        }
         ctx.save();
-        ctx.font = `${fontSizeWorld}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-        ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.textBaseline = 'top';
-        ctx.fillText(label, b.minX + labelPadWorld, b.minY + labelPadWorld);
+
+        ctx.font = `300 ${fontSizeWorld}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+        ctx.fillStyle = color;
+        const increasedTopPaddingPl = 6;
+        const labelPadLWorld = increasedTopPaddingPl / Math.max(0.0001, viewport.ratio);
+
+        const increasedLeftPaddingPt = 14;
+        const labelPadTWorld = increasedLeftPaddingPt / Math.max(0.0001, viewport.ratio);
+        ctx.globalAlpha = 0.7;
+
+        ctx.fillText(label, b.minX + labelPadLWorld, b.minY + labelPadTWorld);
+
+        ctx.globalAlpha = 1.0;
+
         ctx.restore();
       }
 
@@ -218,13 +281,20 @@ export function InkOverlay(props: {
     attemptMetaById,
     selectedAttemptId,
     visualNonce,
+    size.w,
+    size.h,
   ]);
+
+  const lastPenTapRef = useRef<{ time: number; world: Point } | null>(null);
+  const DOUBLE_TAP_MS = 350;
+  const DOUBLE_TAP_WORLD_DIST2 = (30 / Math.max(0.0001, props.ratio)) ** 2;
 
   const penRef = useRef<{
     mode: 'draw' | 'erase' | 'hold' | 'drag' | 'lasso' | null;
     pointerId: number | null;
     points: InkPoint[];
     lastPt: Point | null;
+    drawAttemptId: string | null;
     drawTool: Exclude<InkBrush, 'eraser' | 'select'> | null;
     eraserWorldRadius: number;
     dragAttemptId: string | null;
@@ -239,6 +309,7 @@ export function InkOverlay(props: {
     pointerId: null,
     points: [],
     lastPt: null,
+    drawAttemptId: null,
     drawTool: null,
     eraserWorldRadius: 8,
     dragAttemptId: null,
@@ -258,7 +329,11 @@ export function InkOverlay(props: {
   };
 
   const eraseAt = async (world: Point) => {
-    const attemptId = props.activeAttemptId;
+    const attemptId = (() => {
+      const other = hitTestOtherAttempt(world);
+      if (other) return other;
+      return props.activeAttemptId;
+    })();
     if (!attemptId) return;
 
     const radiusWorld = Math.max(3, penRef.current.eraserWorldRadius);
@@ -284,7 +359,6 @@ export function InkOverlay(props: {
   };
 
   const hitTestOtherAttempt = (world: Point) => {
-    // Hit the permanent background boxes (more usable than point-distance)
     for (let i = otherAttemptBoxes.length - 1; i >= 0; i--) {
       const box = otherAttemptBoxes[i]!;
       if (bboxContains(box.bbox, world.x, world.y)) return box.attemptId;
@@ -293,6 +367,7 @@ export function InkOverlay(props: {
   };
 
   const redrawOverlay = useRef(0);
+  const overlayAnimRef = useRef<number | null>(null);
   const drawOverlay = (worldCursor?: Point) => {
     const canvas = overlayRef.current;
     if (!canvas) return;
@@ -343,25 +418,67 @@ export function InkOverlay(props: {
     if (selectionBBox) {
       const b = selectionBBox.bbox;
       const pad = 6 / Math.max(0.0001, viewport.ratio);
-      ctx.save();
-      ctx.lineWidth = 1.5 / Math.max(0.0001, viewport.ratio);
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.setLineDash([6 / Math.max(0.0001, viewport.ratio), 6 / Math.max(0.0001, viewport.ratio)]);
-      ctx.strokeRect(
-        b.minX - pad,
-        b.minY - pad,
-        b.maxX - b.minX + pad * 2,
-        b.maxY - b.minY + pad * 2,
-      );
-      ctx.restore();
+      const minX = b.minX - pad;
+      const minY = b.minY - pad;
+      const width = b.maxX - b.minX + pad * 2;
+      const height = b.maxY - b.minY + pad * 2;
+
+      if ('attemptId' in selectionBBox && selectionBBox.attemptId) {
+        const attemptId = selectionBBox.attemptId;
+        const color = attemptDominantColorById[attemptId] ?? '#FACC15';
+        const dash = 10 / Math.max(0.0001, viewport.ratio);
+        const gap = 7 / Math.max(0.0001, viewport.ratio);
+        const speed = 40 / Math.max(0.0001, viewport.ratio); // world units per second
+        const t = performance.now() / 1000;
+
+        ctx.save();
+        ctx.lineWidth = 1.1 / Math.max(0.0001, viewport.ratio);
+        ctx.strokeStyle = color;
+        ctx.setLineDash([dash, gap]);
+        ctx.lineDashOffset = -(t * speed);
+        ctx.strokeRect(minX, minY, width, height);
+        ctx.restore();
+      } else {
+        // Stroke selection: keep static dashed white outline.
+        ctx.save();
+        ctx.lineWidth = 1.25 / Math.max(0.0001, viewport.ratio);
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.setLineDash([
+          6 / Math.max(0.0001, viewport.ratio),
+          6 / Math.max(0.0001, viewport.ratio),
+        ]);
+        ctx.strokeRect(minX, minY, width, height);
+        ctx.restore();
+      }
     }
   };
 
   useEffect(() => {
-    if (redrawOverlay.current) cancelAnimationFrame(redrawOverlay.current);
-    redrawOverlay.current = requestAnimationFrame(() => drawOverlay());
-    return () => {
+    if (overlayAnimRef.current !== null) cancelAnimationFrame(overlayAnimRef.current);
+    overlayAnimRef.current = null;
+
+    const needsAnim =
+      selectionBBox !== null && 'attemptId' in selectionBBox && Boolean(selectionBBox.attemptId);
+
+    if (!needsAnim) {
       if (redrawOverlay.current) cancelAnimationFrame(redrawOverlay.current);
+      redrawOverlay.current = requestAnimationFrame(() => drawOverlay());
+      return () => {
+        if (redrawOverlay.current) cancelAnimationFrame(redrawOverlay.current);
+      };
+    }
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      drawOverlay();
+      overlayAnimRef.current = requestAnimationFrame(tick);
+    };
+    overlayAnimRef.current = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      if (overlayAnimRef.current !== null) cancelAnimationFrame(overlayAnimRef.current);
+      overlayAnimRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -376,6 +493,9 @@ export function InkOverlay(props: {
     viewport.pan.y,
     viewport.ratio,
     strokes.length,
+    size.w,
+    size.h,
+    attemptDominantColorById,
   ]);
 
   const bboxOverlaps = (a: InkStroke['bbox'], b: InkStroke['bbox']) =>
@@ -413,22 +533,34 @@ export function InkOverlay(props: {
     const cpt = containerPoint(e);
     const world = toWorldPoint(cpt, props.pan, props.ratio);
 
-    if (
-      brush === 'select' &&
-      selectionBBox &&
-      !bboxContains(selectionBBox.bbox, world.x, world.y)
-    ) {
+    if (e.pointerType === 'touch') {
+      const now = Date.now();
+      const last = lastPenTapRef.current;
+      if (
+        last &&
+        now - last.time < DOUBLE_TAP_MS &&
+        dist2(world.x, world.y, last.world.x, last.world.y) < DOUBLE_TAP_WORLD_DIST2
+      ) {
+        lastPenTapRef.current = null;
+        setBrush(brush === 'eraser' ? 'pencil' : 'eraser');
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      lastPenTapRef.current = { time: now, world: { x: world.x, y: world.y } };
+    }
+
+    if (selectionBBox && !bboxContains(selectionBBox.bbox, world.x, world.y)) {
       clearSelection();
       setVisualNonce((n) => n + 1);
     }
 
     if (e.pointerType === 'pen') {
-      if (!props.activeAttemptId) return;
-      e.preventDefault();
-      e.stopPropagation();
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
       if (brush === 'select') {
+        e.preventDefault();
+        e.stopPropagation();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
         if (selectionBBox && bboxContains(selectionBBox.bbox, world.x, world.y)) {
           penRef.current.mode = 'drag';
           penRef.current.pointerId = e.pointerId;
@@ -454,6 +586,21 @@ export function InkOverlay(props: {
         return;
       }
 
+      const attemptIdForPoint = (() => {
+        const other = hitTestOtherAttempt(world);
+        if (other) return other;
+        return props.activeAttemptId;
+      })();
+      if (!attemptIdForPoint) return;
+
+      if (attemptIdForPoint !== props.activeAttemptId) {
+        setSelectedAttemptId(attemptIdForPoint);
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
       if (brush === 'eraser') {
         penRef.current.mode = 'erase';
         penRef.current.pointerId = e.pointerId;
@@ -467,6 +614,7 @@ export function InkOverlay(props: {
       penRef.current.mode = 'draw';
       penRef.current.pointerId = e.pointerId;
       penRef.current.drawTool = brush;
+      penRef.current.drawAttemptId = attemptIdForPoint;
       penRef.current.points = [[world.x, world.y, e.pressure || 0.5, Date.now()]];
       penRef.current.lastPt = world;
       if (redrawOverlay.current) cancelAnimationFrame(redrawOverlay.current);
@@ -508,13 +656,37 @@ export function InkOverlay(props: {
       if (penRef.current.holdTimer) window.clearTimeout(penRef.current.holdTimer);
       penRef.current.holdTimer = window.setTimeout(() => {
         if (penRef.current.mode !== 'hold' || penRef.current.dragAttemptId !== hitAttemptId) return;
+
+        // If the PDF viewer currently owns this touch pointer (for pan),
+        // cancel it before we steal pointer-capture for attempt dragging.
+        const root = props.containerRef?.current;
+        const pid = penRef.current.pointerId;
+        if (root && pid !== null) {
+          try {
+            root.dispatchEvent(
+              new PointerEvent('pointercancel', {
+                pointerId: pid,
+                pointerType: 'touch',
+                bubbles: true,
+              }),
+            );
+          } catch {
+            // noop
+          }
+        }
+
         penRef.current.mode = 'drag';
+        const el = wrapRef.current;
+        if (el && penRef.current.pointerId !== null) {
+          try {
+            (el as HTMLElement).setPointerCapture(penRef.current.pointerId);
+          } catch {
+            // noop
+          }
+        }
         setVisualNonce((n) => n + 1);
       }, 280);
 
-      e.preventDefault();
-      e.stopPropagation();
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       return;
     }
 
@@ -576,8 +748,6 @@ export function InkOverlay(props: {
     }
 
     if (st.mode === 'hold') {
-      e.preventDefault();
-      e.stopPropagation();
       const start = st.holdStartWorld;
       if (start) {
         const moved2 = dist2(start.x, start.y, world.x, world.y);
@@ -626,13 +796,15 @@ export function InkOverlay(props: {
 
       const pts = st.points;
       const tool = st.drawTool;
+      const attemptId = st.drawAttemptId;
       st.mode = null;
       st.pointerId = null;
       st.points = [];
       st.lastPt = null;
       st.drawTool = null;
+      st.drawAttemptId = null;
 
-      if (!props.activeAttemptId || pts.length < 2) {
+      if (!attemptId || pts.length < 2) {
         if (redrawOverlay.current) cancelAnimationFrame(redrawOverlay.current);
         redrawOverlay.current = requestAnimationFrame(() => drawOverlay());
         return;
@@ -643,7 +815,7 @@ export function InkOverlay(props: {
         id: newId(),
         studySessionId: props.studySessionId,
         assetId: props.assetId,
-        attemptId: props.activeAttemptId,
+        attemptId,
         createdAtMs: now,
         updatedAtMs: now,
         tool: tool ?? 'pencil',
@@ -711,8 +883,6 @@ export function InkOverlay(props: {
     }
 
     if (st.mode === 'hold') {
-      e.preventDefault();
-      e.stopPropagation();
       if (st.holdTimer) window.clearTimeout(st.holdTimer);
       st.holdTimer = null;
       st.mode = null;
@@ -763,6 +933,7 @@ export function InkOverlay(props: {
     penRef.current.points = [];
     penRef.current.lastPt = null;
     penRef.current.drawTool = null;
+    penRef.current.drawAttemptId = null;
     penRef.current.dragAttemptId = null;
     penRef.current.dragStrokeIds = null;
     penRef.current.dragLast = null;

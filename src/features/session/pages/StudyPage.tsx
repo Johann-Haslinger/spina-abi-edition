@@ -26,7 +26,6 @@ export function StudyPage() {
   const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId);
   const [pageNumber, setPageNumber] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const {
@@ -93,6 +92,11 @@ export function StudyPage() {
     void loadExerciseStatus(guardState.asset.id);
   }, [guardState.kind, guardState.asset, loadExerciseStatus]);
 
+  const exerciseStatus =
+    guardState.kind === 'ok'
+      ? (exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown')
+      : 'unknown';
+
   const openInfoPanel = () => setInfoOpen(true);
   const closeInfoPanel = () => setInfoOpen(false);
 
@@ -108,18 +112,6 @@ export function StudyPage() {
     }
     navigate(`/subjects/${assetForNav.subjectId}/topics/${assetForNav.topicId}`);
   };
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (guardState.kind !== 'ok') return;
-      if (e.key.toLowerCase() !== 'i') return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (infoOpen) return;
-      openInfoPanel();
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [guardState.kind, infoOpen]);
 
   if (guardState.kind === 'notfound') return <NotFoundPage />;
   if (guardState.kind === 'loading')
@@ -166,15 +158,6 @@ export function StudyPage() {
       //   ) : null
       // }
     >
-      {infoOpen ? (
-        <button
-          type="button"
-          aria-label="Info schließen"
-          className="absolute inset-0 z-10 cursor-default bg-transparent"
-          onClick={closeInfoPanel}
-        />
-      ) : null}
-
       <Modal
         open={guardState.kind === 'needStart'}
         onClose={goToAssetTopic}

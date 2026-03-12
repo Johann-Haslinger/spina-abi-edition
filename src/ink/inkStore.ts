@@ -117,8 +117,8 @@ export const useInkStore = create<InkState>()((set, get) => ({
 
   activeAttemptId: null,
   brush: 'pencil',
-  pencilColor: '#ffffff',
-  markerColor: '#D79E00',
+  pencilColor: '#D79E00',
+  markerColor: '#00AE27',
   opacity: 1,
   baseSize: 2.2,
 
