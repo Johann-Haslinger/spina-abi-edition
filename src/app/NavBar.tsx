@@ -23,7 +23,7 @@ export function NavBar() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50">
-      <div className="mx-auto grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 md:px-8 py-4">
+      <div className="mx-auto flex justify-between items-center px-4 md:px-8 py-4">
         <div className="justify-self-start invisible md:visible flex font-bold items-center pt-2 gap-3 text-xl">
           Spina
         </div>
@@ -39,10 +39,9 @@ export function NavBar() {
             Kalender
           </NavLink>
         </nav> */}
-        <div className="justify-self-end flex items-center gap-2">
-          {/* <ThemeToggle /> */}
-          {!isExerciseOpen ? <SessionWidget /> : null}
-        </div>
+
+        {/* <ThemeToggle /> */}
+        {!isExerciseOpen ? <SessionWidget /> : null}
       </div>
     </header>
   );
