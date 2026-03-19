@@ -1,15 +1,14 @@
 export function FilterChip(props: { active: boolean; label: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
+    <div
       onClick={props.onClick}
       className={
         props.active
-          ? 'rounded-md bg-black dark:bg-white px-3 py-2 text-xs font-semibold text-white dark:text-black'
-          : 'rounded-md bg-black/5 dark:bg-white/5 px-3 py-2 text-xs font-semibold text-black dark:text-white hover:bg-slate-900 hover:text-slate-50'
+          ? 'rounded-full bg-black dark:bg-white px-3 py-1.5 text-xs text-white dark:text-black'
+          : 'rounded-full hover:dark:bg-white/5 px-3 py-2 text-xs text-black dark:text-white'
       }
     >
       {props.label}
-    </button>
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IoChevronBack } from 'react-icons/io5';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { AutoBreadcrumbs } from '../../../components/AutoBreadcrumbs';
 import { PageHeader } from '../../../components/PageHeader';
+import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Topic } from '../../../domain/models';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
@@ -46,13 +47,24 @@ export function SubjectPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Topic | null>(null);
 
+  const goBack = () => {
+    if (from) {
+      navigate(from);
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   if (!subjectId) return <NotFoundPage />;
   if (!subjectsLoading && !subject) return <NotFoundPage />;
 
   return (
     <div className="space-y-4 pb-40">
+      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-8 top-18">
+        <IoChevronBack />
+      </ViewerIconButton>
+
       <PageHeader
-        breadcrumb={<AutoBreadcrumbs />}
         title={
           subject ? `${subject.iconEmoji ? subject.iconEmoji + ' ' : ''}${subject.name}` : 'Fach'
         }
@@ -84,45 +96,41 @@ export function SubjectPage() {
               Noch keine Themen. Lege z.B. „Analysis“, „Stochastik“, „Vektoren“ an.
             </div>
           ) : (
-            <div className="w-full h-full flex">
-              <div className="pt-12 w-full">
-                <ul className="grid grid-cols-4 gap-3">
-                  {topics.map((t) => (
-                    <TopicItem
-                      key={t.id}
-                      subjectId={subjectId}
-                      topic={t}
-                      from={from}
-                      onStartSession={(tid) => {
-                        if (
-                          active &&
-                          !window.confirm('Es läuft bereits eine Session. Neue Session starten?')
-                        ) {
-                          return;
-                        }
-                        start({ subjectId, topicId: tid });
-                        navigate(`/subjects/${subjectId}/topics/${tid}`, {
-                          state: { from },
-                        });
-                      }}
-                      onEdit={(topic) => {
-                        setEditing(topic);
-                        setEditOpen(true);
-                      }}
-                      onDelete={(topic) => {
-                        if (
-                          window.confirm(
-                            `Thema „${topic.name}“ wirklich löschen? (Assets/Folder werden mit gelöscht)`,
-                          )
-                        ) {
-                          void deleteTopic(topic.id, subjectId);
-                        }
-                      }}
-                    />
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <ul className="grid grid-cols-4 gap-3">
+              {topics.map((t) => (
+                <TopicItem
+                  key={t.id}
+                  subjectId={subjectId}
+                  topic={t}
+                  from={from}
+                  onStartSession={(tid) => {
+                    if (
+                      active &&
+                      !window.confirm('Es läuft bereits eine Session. Neue Session starten?')
+                    ) {
+                      return;
+                    }
+                    start({ subjectId, topicId: tid });
+                    navigate(`/subjects/${subjectId}/topics/${tid}`, {
+                      state: { from },
+                    });
+                  }}
+                  onEdit={(topic) => {
+                    setEditing(topic);
+                    setEditOpen(true);
+                  }}
+                  onDelete={(topic) => {
+                    if (
+                      window.confirm(
+                        `Thema „${topic.name}“ wirklich löschen? (Assets/Folder werden mit gelöscht)`,
+                      )
+                    ) {
+                      void deleteTopic(topic.id, subjectId);
+                    }
+                  }}
+                />
+              ))}
+            </ul>
           )}
         </>
       )}
