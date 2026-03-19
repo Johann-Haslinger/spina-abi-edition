@@ -1,8 +1,11 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { drawDottedGrid } from '../../../ink/grid.ts';
 import { InkOverlay } from '../../../ink/InkOverlay';
 import { InkToolbar } from '../components/ink/InkToolbar';
+import { HUD_VARIANTS_DOWN } from '../components/studyHud/hudMotion';
+import { useStudyHudVisibility } from '../stores/studyHudStore';
 import { pdfjs } from './pdfjs';
 import { clamp, hexToRgba, INITIAL_TOP_MARGIN } from './viewerUtils';
 
@@ -11,7 +14,12 @@ type PdfCanvasViewerProps = {
   pageNumber: number;
   onPageNumberChange: (next: number) => void;
   accentColor?: string;
-  ink?: { studySessionId: string; assetId: string; activeAttemptId: string | null } | null;
+  ink?: {
+    studySessionId: string;
+    assetId: string;
+    activeAttemptId: string | null;
+    studyAiConversationKey?: string | null;
+  } | null;
 };
 
 type Point = { x: number; y: number };
@@ -32,6 +40,7 @@ const PAD_X = 16 * 2;
 
 export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   const { data, onPageNumberChange } = props;
+  const { suppressNonStudyAi } = useStudyHudVisibility();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
@@ -600,18 +609,39 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
         ) : null}
 
         {!showLoadingOverlay && props.ink ? (
-          <>
-            <InkOverlay
-              containerRef={containerRef}
-              studySessionId={props.ink.studySessionId}
-              assetId={props.ink.assetId}
-              activeAttemptId={props.ink.activeAttemptId}
-              pan={pan}
-              ratio={ratio}
-            />
-            <InkToolbar activeAttemptId={props.ink.activeAttemptId} />
-          </>
+          <InkOverlay
+            containerRef={containerRef}
+            studySessionId={props.ink.studySessionId}
+            assetId={props.ink.assetId}
+            activeAttemptId={props.ink.activeAttemptId}
+            pan={pan}
+            ratio={ratio}
+          />
         ) : null}
+
+        <AnimatePresence initial={false}>
+          {props.ink ? (
+            <motion.div
+              key="ink-toolbar"
+              className="fixed inset-0 z-50 pointer-events-none"
+              variants={HUD_VARIANTS_DOWN}
+              initial="hidden"
+              animate={suppressNonStudyAi ? 'hidden' : 'shown'}
+              exit="hidden"
+              aria-hidden={suppressNonStudyAi}
+            >
+              <div
+                className="pointer-events-auto"
+                style={{ pointerEvents: suppressNonStudyAi ? 'none' : 'auto' }}
+              >
+                <InkToolbar
+                  activeAttemptId={props.ink.activeAttemptId}
+                  studyAiConversationKey={props.ink.studyAiConversationKey ?? null}
+                />
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         {showLoadingOverlay ? (
           <div className="absolute inset-0 grid place-items-center">

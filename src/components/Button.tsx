@@ -20,8 +20,8 @@ const ButtonOutline = (props: {
         props.icon && props.children
           ? 'flex items-center gap-2 pr-3'
           : props.icon
-          ? 'size-9 items-center flex justify-center'
-          : 'px-4'
+            ? 'size-9 items-center flex justify-center'
+            : 'px-4'
       }`}
       onClick={props.onClick}
       disabled={props.disabled}
@@ -73,7 +73,7 @@ export const SecondaryButton = (props: {
     <ButtonOutline
       size={props.size}
       icon={props.icon}
-      className={`${props.className} hover:bg-white/15 bg-white/5 text-white border-white/5 backdrop-blur`}
+      className={`${props.className} hover:bg-white/15 bg-white/5 text-white border-white/5`}
       onClick={props.onClick}
       disabled={props.disabled}
     >

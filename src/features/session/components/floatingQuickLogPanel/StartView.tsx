@@ -77,7 +77,7 @@ export function StartView(props: {
     if (showSubSub) {
       out.push({
         key: 'subsubproblem',
-        label: 'Unter-Teilaufgabe',
+        label: 'Unteraufgabe',
         right: (
           <Stepper
             key={`subsubproblem:${subsubproblemLabel}`}

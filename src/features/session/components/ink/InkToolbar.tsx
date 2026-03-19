@@ -22,17 +22,19 @@ const MORPH_TRANSITION = {
 } as const;
 
 function ToolPreview(props: {
-  src: string;
+  baseSrc: string;
+  overlaySrc?: string;
   tintColor: string | null;
   tintOpacity?: number;
   sizeClassName?: string;
 }) {
-  const { src, tintColor, tintOpacity = 1, sizeClassName = 'h-7 w-7' } = props;
+  const { baseSrc, overlaySrc, tintColor, tintOpacity = 1, sizeClassName = 'h-7 w-7' } = props;
+  const topSrc = overlaySrc ?? baseSrc;
 
   if (!tintColor) {
     return (
       <img
-        src={src}
+        src={topSrc}
         alt=""
         className={`${sizeClassName} object-contain object-bottom`}
         aria-hidden
@@ -48,8 +50,8 @@ function ToolPreview(props: {
           {
             backgroundColor: tintColor,
             opacity: tintOpacity,
-            WebkitMaskImage: `url(${src})`,
-            maskImage: `url(${src})`,
+            WebkitMaskImage: `url(${baseSrc})`,
+            maskImage: `url(${baseSrc})`,
             WebkitMaskMode: 'luminance',
             maskMode: 'luminance',
             WebkitMaskSize: 'contain',
@@ -62,18 +64,24 @@ function ToolPreview(props: {
         }
       />
       <img
-        src={src}
+        src={topSrc}
         alt=""
         className="absolute inset-0 h-full w-full object-contain object-bottom"
-        style={{ filter: 'url(#ink-toolbar-white-to-transparent)' }}
         aria-hidden
       />
     </div>
   );
 }
 
-export function InkToolbar(props: { activeAttemptId: string | null }) {
+export function InkToolbar(props: {
+  activeAttemptId: string | null;
+  studyAiConversationKey?: string | null;
+}) {
   const [open, setOpen] = useState(false);
+  const layout = useInkToolbarStudyAiLayout({
+    studyAiConversationKey: props.studyAiConversationKey,
+  });
+
   const brush = useInkStore((s) => s.brush);
   const setBrush = useInkStore((s) => s.setBrush);
   const pencilColor = useInkStore((s) => s.pencilColor);
@@ -86,48 +94,33 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
   const { undoWithPersist, redoWithPersist } = useInkActions();
 
   const canEdit = props.activeAttemptId ?? selectedAttemptId;
+
   if (!isProbablyIpad()) return null;
   if (!canEdit) return null;
 
   const activeTool = toolButtons.find((t) => t.id === brush) ?? toolButtons[0]!;
   const activeTintColor =
     brush === 'pencil' ? pencilColor : brush === 'marker' ? markerColor : null;
-  const activeTintOpacity = brush === 'marker' ? 0.6 : 1;
+  const activeTintOpacity = brush === 'marker' ? 0.9 : 1;
 
   return (
     <LayoutGroup id="ink-toolbar">
-      <svg width={0} height={0} className="absolute pointer-events-none">
-        <defs>
-          <filter
-            id="ink-toolbar-white-to-transparent"
-            colorInterpolationFilters="sRGB"
-            x="-20%"
-            y="-20%"
-            width="140%"
-            height="140%"
-            filterUnits="objectBoundingBox"
-          >
-            <feColorMatrix in="SourceGraphic" type="luminanceToAlpha" result="luma" />
-            <feComponentTransfer in="luma" result="alphaMask">
-              <feFuncA type="discrete" tableValues="1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0" />
-            </feComponentTransfer>
-            <feComposite in="SourceGraphic" in2="alphaMask" operator="in" result="masked" />
-            <feComposite in="masked" in2="SourceAlpha" operator="in" />
-          </filter>
-        </defs>
-      </svg>
       <AnimatePresence initial={false} mode="popLayout">
         {open ? (
           <div
             key="open"
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto"
+            className="fixed bottom-6 z-50 pointer-events-auto"
+            style={{
+              left: '50%',
+              transform: `translateX(calc(-50% + ${layout.openCenterShiftPx}px))`,
+            }}
             onPointerDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
             <motion.div
               layoutId="ink-toolbar-surface"
               transition={MORPH_TRANSITION}
-              className="w-fit rounded-full border overflow-hidden px-6 border-[#3C4E68] bg-[#243957]/70 shadow-lg backdrop-blur dark:border-white/5"
+              className="w-fit rounded-full border overflow-hidden px-6 border-[#3C4E68] bg-[#243957]/70 shadow-lg backdrop-blur-xs dark:border-white/5"
             >
               <motion.div
                 key="content"
@@ -188,7 +181,7 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
                             }`}
                           >
                             <div
-                              className="absolute inset-0 h-full w-full"
+                              className="absolute inset-0 h-full backdrop-blur-xl w-full"
                               style={
                                 {
                                   backgroundColor: tintColor,
@@ -207,10 +200,9 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
                               }
                             />
                             <img
-                              src={t.src}
+                              src={t.id === 'pencil' || t.id === 'marker' ? t.overlaySrc : t.src}
                               alt=""
                               className="absolute inset-0 h-full w-full object-contain object-bottom"
-                              style={{ filter: 'url(#ink-toolbar-white-to-transparent)' }}
                               aria-hidden
                             />
                           </div>
@@ -248,7 +240,8 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
         ) : (
           <div
             key="closed"
-            className="fixed bottom-6 left-6 z-50 pointer-events-auto"
+            className="fixed bottom-6 z-50 pointer-events-auto"
+            style={{ left: layout.closedLeftPx }}
             onPointerDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           >
@@ -268,7 +261,12 @@ export function InkToolbar(props: { activeAttemptId: string | null }) {
               className="size-18 overflow-hidden rounded-full border border-white/5 bg-[#243957]/70 shadow-xl backdrop-blur active:scale-[0.98] flex items-center justify-center"
             >
               <ToolPreview
-                src={activeTool.src}
+                baseSrc={activeTool.src}
+                overlaySrc={
+                  activeTool.id === 'pencil' || activeTool.id === 'marker'
+                    ? activeTool.overlaySrc
+                    : undefined
+                }
                 tintColor={activeTintColor}
                 tintOpacity={activeTintOpacity}
                 sizeClassName="size-16 translate-y-2"
@@ -285,8 +283,18 @@ function useToolButtons() {
   const toolButtons = useMemo(
     () =>
       [
-        { id: 'pencil' as const, label: 'Pencil', src: '/ink/pencil.png' },
-        { id: 'marker' as const, label: 'Marker', src: '/ink/marker.png' },
+        {
+          id: 'pencil' as const,
+          label: 'Pencil',
+          src: '/ink/pencil.png',
+          overlaySrc: '/ink/pencil-transparent.png',
+        },
+        {
+          id: 'marker' as const,
+          label: 'Marker',
+          src: '/ink/marker.png',
+          overlaySrc: '/ink/marker-transparent.png',
+        },
         { id: 'eraser' as const, label: 'Eraser', src: '/ink/eraser.png' },
         { id: 'select' as const, label: 'Auswahl', src: '/ink/select.png' },
       ] as const,
@@ -317,4 +325,85 @@ function useToolButtons() {
   }, [toolButtons]);
 
   return toolButtons;
+}
+
+import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
+import { useStudyAiChatStore, type StudyAiUiMode } from '../../stores/studyAiChatStore';
+
+export type InkToolbarStudyAiLayoutConfig = {
+  closedLeftFallbackPx: number;
+  gapPx: number;
+
+  buttonModeLeftInsetPx: number;
+  buttonModeWidthPx: number;
+
+  floatingModeLeftInsetPx: number;
+  floatingModeWidthPx: number;
+
+  openCenterShiftWhenStudyAiFloatingPx: number;
+  openCenterShiftWhenQuickLogDetailsOrReviewPx: number;
+};
+
+const INK_TOOLBAR_STUDY_AI_LAYOUT_DEFAULTS: InkToolbarStudyAiLayoutConfig = {
+  closedLeftFallbackPx: 24,
+  gapPx: 12,
+
+  buttonModeLeftInsetPx: 40,
+  buttonModeWidthPx: 56,
+
+  floatingModeLeftInsetPx: 24,
+  floatingModeWidthPx: 360,
+
+  openCenterShiftWhenStudyAiFloatingPx: 100,
+  openCenterShiftWhenQuickLogDetailsOrReviewPx: -50,
+};
+
+function useInkToolbarStudyAiLayout(params: {
+  studyAiConversationKey?: string | null;
+  config?: Partial<InkToolbarStudyAiLayoutConfig>;
+}): {
+  studyAiMode: StudyAiUiMode | null;
+  closedLeftPx: number;
+  openCenterShiftPx: number;
+} {
+  const cfg = useMemo(
+    () => ({ ...INK_TOOLBAR_STUDY_AI_LAYOUT_DEFAULTS, ...(params.config ?? {}) }),
+    [params.config],
+  );
+
+  const mode = useStudyAiChatStore((s) => {
+    const key = params.studyAiConversationKey;
+    if (!key) return null;
+    return s.uiByConversation[key]?.mode ?? 'button';
+  });
+
+  const quickLogView = useFloatingQuickLogPanelStore((s) => s.view);
+  const quickLogShift =
+    quickLogView === 'progressDetails' || quickLogView === 'review'
+      ? cfg.openCenterShiftWhenQuickLogDetailsOrReviewPx
+      : 0;
+
+  return useMemo(() => {
+    let closedLeftPx: number;
+    let openCenterShiftPx: number;
+
+    if (mode === 'button') {
+      closedLeftPx = cfg.buttonModeLeftInsetPx + cfg.buttonModeWidthPx + cfg.gapPx;
+      openCenterShiftPx = 0;
+    } else if (mode === 'floating') {
+      closedLeftPx = cfg.floatingModeLeftInsetPx + cfg.floatingModeWidthPx + cfg.gapPx;
+      openCenterShiftPx = cfg.openCenterShiftWhenStudyAiFloatingPx;
+    } else {
+      closedLeftPx = cfg.closedLeftFallbackPx;
+      openCenterShiftPx = 0;
+    }
+
+    openCenterShiftPx += quickLogShift;
+
+    return {
+      studyAiMode: mode,
+      closedLeftPx,
+      openCenterShiftPx,
+    };
+  }, [cfg, mode, quickLogShift]);
 }

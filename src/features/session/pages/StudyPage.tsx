@@ -11,8 +11,10 @@ import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
+import { StudyAiWidget } from '../components/studyAi/StudyAiWidget';
 import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
+import { useStudyHudStore } from '../stores/studyHudStore';
 import { useStudyStore } from '../stores/studyStore';
 import { AssetViewer } from '../viewer/AssetViewer';
 
@@ -27,6 +29,7 @@ export function StudyPage() {
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const {
+    boundSessionKey,
     studySessionId,
     bindToSession,
     ensureStudySession,
@@ -34,6 +37,8 @@ export function StudyPage() {
     reset,
     currentAttempt,
   } = useStudyStore();
+
+  const setStudyAiConversationKey = useStudyHudStore((s) => s.setStudyAiConversationKey);
 
   useEffect(() => {
     if (!active) return;
@@ -59,6 +64,17 @@ export function StudyPage() {
     }
     return { kind: 'ok' as const, asset };
   }, [assetId, loading, error, asset, active]);
+
+  const studyAiConversationKey = useMemo(() => {
+    if (guardState.kind !== 'ok') return null;
+    if (!boundSessionKey) return null;
+    return `${boundSessionKey}:${guardState.asset.id}`;
+  }, [boundSessionKey, guardState]);
+
+  useEffect(() => {
+    setStudyAiConversationKey(studyAiConversationKey);
+    return () => setStudyAiConversationKey(null);
+  }, [setStudyAiConversationKey, studyAiConversationKey]);
 
   useEffect(() => {
     if (guardState.kind !== 'ok') return;
@@ -190,6 +206,9 @@ export function StudyPage() {
                       studySessionId,
                       assetId: guardState.asset.id,
                       activeAttemptId: currentAttempt?.attemptId ?? null,
+                      studyAiConversationKey: boundSessionKey
+                        ? `${boundSessionKey}:${guardState.asset.id}`
+                        : null,
                     }
                   : null
               }
@@ -201,6 +220,13 @@ export function StudyPage() {
               subjectId={guardState.asset.subjectId}
               topicId={guardState.asset.topicId}
               onOpenExerciseReview={() => setReviewOpen(true)}
+            />
+
+            <StudyAiWidget
+              assetId={guardState.asset.id}
+              pdfData={pdfData}
+              boundSessionKey={boundSessionKey}
+              currentAttemptId={currentAttempt?.attemptId ?? null}
             />
           </>
         ) : (
