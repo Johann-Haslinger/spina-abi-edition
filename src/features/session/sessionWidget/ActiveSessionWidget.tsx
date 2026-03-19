@@ -65,7 +65,7 @@ export function ActiveSessionWidget(props: { active: ActiveSession }) {
 
   return (
     <div className="fixed top-6 right-6 w-[200px] z-1000000000 max-w-[calc(100vw-32px)]">
-      <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur shadow-lg dark:border-white/5">
+      <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur dark:border-white/5">
         <div className="flex items-stretch p-1.5">
           <button
             type="button"
