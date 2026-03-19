@@ -2,10 +2,9 @@ import { motion } from 'framer-motion';
 import { Bot, Maximize2 } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { IoClose } from 'react-icons/io5';
-import { SecondaryButton } from '../../../../../components/Button';
+import { GhostButton, SecondaryButton } from '../../../../../components/Button';
 import type { StudyAiMessage, StudyAiUiMode } from '../../../stores/studyAiChatStore';
 import { StudyAiGeneratingDots } from './StudyAiGeneratingDots';
-import { StudyAiIconButton } from './StudyAiIconButton';
 import { StudyAiInputRow } from './StudyAiInputRow';
 import { StudyAiMessageList } from './StudyAiMessageList';
 
@@ -29,6 +28,7 @@ export function StudyAiMorphShell(props: {
 }) {
   const { stageClass, shellClass } = useStudyAiMorphLayout(props.mode);
   const floatingScrollRef = useRef<HTMLDivElement | null>(null);
+  const prevModeRef = useRef<StudyAiUiMode | null>(null);
 
   useEffect(() => {
     const el = floatingScrollRef.current;
@@ -42,6 +42,31 @@ export function StudyAiMorphShell(props: {
     });
     return () => cancelAnimationFrame(raf);
   }, [props.messages.length, props.sending]);
+
+  useEffect(() => {
+    // Beim Wechsel in den Floating-Mode einmalig ans Ende springen.
+    if (props.mode !== 'floating') {
+      prevModeRef.current = props.mode;
+      return;
+    }
+
+    if (prevModeRef.current === 'floating') return;
+    prevModeRef.current = props.mode;
+
+    const el = floatingScrollRef.current;
+    if (!el) return;
+
+    const scrollToBottom = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+
+    // Warte auf Layout/Render, damit scrollHeight sicher korrekt ist.
+    const raf = requestAnimationFrame(() => {
+      scrollToBottom();
+      requestAnimationFrame(scrollToBottom);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [props.mode]);
 
   return (
     <div
@@ -95,17 +120,10 @@ export function StudyAiMorphShell(props: {
 
         {props.mode === 'floating' ? (
           <>
-            <div className="flex gap-2 absolute right-3 top-3">
-              {/* <StudyAiIconButton
-                ariaLabel="Leeren"
-                onClick={props.onClear}
-                disabled={props.sending}
-              >
-                <Trash2 className="size-4" />
-              </StudyAiIconButton> */}
-              <StudyAiIconButton ariaLabel="Maximieren" onClick={props.onMaximize}>
+            <div className="flex  w-full justify-between gap-2 absolute right-0 px-3 top-4">
+              <GhostButton onClick={props.onMaximize}>
                 <Maximize2 className="size-4" />
-              </StudyAiIconButton>
+              </GhostButton>
               <SecondaryButton
                 className="bg-white/10!"
                 onClick={props.onClose}
