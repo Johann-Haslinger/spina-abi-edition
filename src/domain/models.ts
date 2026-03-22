@@ -68,6 +68,36 @@ export type StudySession = {
   endedAtMs?: number;
 };
 
+export type PlannedItemType = 'studySession' | 'event';
+
+export type WeeklyRecurrence = {
+  kind: 'weekly';
+  intervalWeeks: number;
+  untilAtMs?: number;
+  occurrenceCount?: number;
+};
+
+export type PlannedItem = {
+  id: Id;
+  type: PlannedItemType;
+
+  // For planned study sessions (type === 'studySession')
+  subjectId?: Id;
+  topicId?: Id;
+
+  // For generic events (type === 'event')
+  title?: string;
+
+  startAtMs: number;
+  durationMs: number;
+
+  // When unset/undefined => no recurrence.
+  recurrence?: WeeklyRecurrence;
+
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
 export type Exercise = {
   id: Id;
   assetId: Id;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PageHeader } from '../../components/PageHeader';
 import type { Subject } from '../../domain/models';
 import { useSubjectsStore } from '../../stores/subjectsStore';
@@ -31,13 +32,21 @@ export function DashboardPage() {
       <PageHeader
         title="Dashboard"
         actions={
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-          >
-            Fach anlegen
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openCreate}
+              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+            >
+              Fach anlegen
+            </button>
+            <Link
+              to="/planning"
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
+            >
+              Session Planung
+            </Link>
+          </div>
         }
       />
 

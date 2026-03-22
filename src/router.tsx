@@ -5,6 +5,7 @@ import { AssetPage, CollectionPage, SubjectPage, TopicPage } from './features/co
 import { NotFoundPage } from './features/common';
 import { DashboardPage } from './features/dashboard';
 import { StudyPage } from './features/session';
+import { PlanningPage } from './features/planning';
 
 export const router = createBrowserRouter([
   {
@@ -12,6 +13,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <LastVisitedRedirect /> },
       { path: '/dashboard', element: <DashboardPage />, handle: { crumb: 'dashboard' } },
+      { path: '/planning', element: <PlanningPage />, handle: { crumb: 'planning' } },
       { path: '/collection', element: <CollectionPage />, handle: { crumb: 'collection' } },
       { path: '/subjects/:subjectId', element: <SubjectPage />, handle: { crumb: 'subject' } },
       {

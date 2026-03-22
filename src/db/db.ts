@@ -7,6 +7,7 @@ import type {
   Folder,
   InkStroke,
   Problem,
+  PlannedItem,
   StudySession,
   Subject,
   Subproblem,
@@ -29,6 +30,8 @@ export class AbiDb extends Dexie {
   subsubproblems!: Table<Subsubproblem, string>;
   attempts!: Table<Attempt, string>;
   inkStrokes!: Table<InkStroke, string>;
+
+  plannedItems!: Table<PlannedItem, string>;
 
   constructor() {
     super('abi-lernapp');
@@ -198,6 +201,28 @@ export class AbiDb extends Dexie {
             if (typeof ex.taskDepth !== 'number') ex.taskDepth = 2;
           });
       });
+
+    // v10: Planning calendar (future sessions + events)
+    this.version(10).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+
+      studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+      exercises: 'id, assetId, status',
+      problems: 'id, [exerciseId+idx], exerciseId, idx',
+      subproblems: 'id, [problemId+label], problemId, label',
+      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+      attempts:
+        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result',
+
+      inkStrokes:
+        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+
+      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+    });
   }
 }
 

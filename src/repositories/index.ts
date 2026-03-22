@@ -14,6 +14,7 @@ import {
   LocalSubproblemRepository,
   LocalSubsubproblemRepository,
 } from './study/local/LocalStudyRepositories';
+import { LocalPlannedItemRepository } from './planning/local/LocalPlannedItemRepository';
 
 export const subjectRepo = new LocalSubjectRepository();
 export const topicRepo = new LocalTopicRepository();
@@ -28,3 +29,5 @@ export const subproblemRepo = new LocalSubproblemRepository();
 export const subsubproblemRepo = new LocalSubsubproblemRepository();
 export const attemptRepo = new LocalAttemptRepository();
 export const inkRepo = new LocalInkRepository();
+
+export const plannedItemRepo = new LocalPlannedItemRepository();
