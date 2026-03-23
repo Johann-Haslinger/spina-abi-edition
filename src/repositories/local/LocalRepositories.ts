@@ -61,11 +61,77 @@ export class LocalSubjectRepository implements SubjectRepository {
   async delete(id: string): Promise<void> {
     await db.transaction(
       'rw',
-      [db.subjects, db.topics, db.folders, db.assets, db.assetFiles],
+      [
+        db.subjects,
+        db.topics,
+        db.folders,
+        db.assets,
+        db.assetFiles,
+        db.exercises,
+        db.problems,
+        db.subproblems,
+        db.subsubproblems,
+        db.attempts,
+        db.attemptRequirementLinks,
+        db.attemptAiReviews,
+        db.attemptReviewJobs,
+        db.inkStrokes,
+        db.curriculumDocuments,
+        db.chapters,
+        db.requirements,
+        db.scheduledReviews,
+      ],
       async () => {
         const topicIds = await db.topics.where('subjectId').equals(id).primaryKeys();
         const assetIds = await db.assets.where('subjectId').equals(id).primaryKeys();
+        const exerciseIds =
+          assetIds.length > 0
+            ? await db.exercises.where('assetId').anyOf(assetIds as string[]).primaryKeys()
+            : [];
+        const problemIds =
+          exerciseIds.length > 0
+            ? await db.problems.where('exerciseId').anyOf(exerciseIds as string[]).primaryKeys()
+            : [];
+        const subproblemIds =
+          problemIds.length > 0
+            ? await db.subproblems.where('problemId').anyOf(problemIds as string[]).primaryKeys()
+            : [];
+        const attemptIds =
+          subproblemIds.length > 0
+            ? await db.attempts.where('subproblemId').anyOf(subproblemIds as string[]).primaryKeys()
+            : [];
+        const chapterIds =
+          topicIds.length > 0 ? await db.chapters.where('topicId').anyOf(topicIds as string[]).primaryKeys() : [];
+        const requirementIds =
+          chapterIds.length > 0
+            ? await db.requirements.where('chapterId').anyOf(chapterIds as string[]).primaryKeys()
+            : [];
 
+        await db.curriculumDocuments.where('subjectId').equals(id).delete();
+        await db.scheduledReviews.where('subjectId').equals(id).delete();
+        if (attemptIds.length) {
+          await db.attemptRequirementLinks.where('attemptId').anyOf(attemptIds as string[]).delete();
+          await db.attemptAiReviews
+            .filter((row) => attemptIds.includes(row.attemptId))
+            .delete();
+          await db.attemptReviewJobs
+            .filter((row) => attemptIds.includes(row.attemptId))
+            .delete();
+          await db.attempts.bulkDelete(attemptIds as string[]);
+        }
+        if (subproblemIds.length) {
+          await db.subsubproblems.where('subproblemId').anyOf(subproblemIds as string[]).delete();
+          await db.subproblems.bulkDelete(subproblemIds as string[]);
+        }
+        if (problemIds.length) await db.problems.bulkDelete(problemIds as string[]);
+        if (exerciseIds.length) await db.exercises.bulkDelete(exerciseIds as string[]);
+        if (assetIds.length) {
+          await db.inkStrokes.where('assetId').anyOf(assetIds as string[]).delete();
+        }
+        if (requirementIds.length) {
+          await db.requirements.bulkDelete(requirementIds as string[]);
+        }
+        if (chapterIds.length) await db.chapters.bulkDelete(chapterIds as string[]);
         await db.assetFiles.bulkDelete(assetIds as string[]);
         await db.assets.where('subjectId').equals(id).delete();
         await db.folders
@@ -117,13 +183,77 @@ export class LocalTopicRepository implements TopicRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await db.transaction('rw', db.topics, db.folders, db.assets, db.assetFiles, async () => {
+    await db.transaction(
+      'rw',
+      [
+        db.topics,
+        db.folders,
+        db.assets,
+        db.assetFiles,
+        db.exercises,
+        db.problems,
+        db.subproblems,
+        db.subsubproblems,
+        db.attempts,
+        db.attemptRequirementLinks,
+        db.attemptAiReviews,
+        db.attemptReviewJobs,
+        db.inkStrokes,
+        db.chapters,
+        db.requirements,
+        db.scheduledReviews,
+      ],
+      async () => {
       const assetIds = await db.assets.where('topicId').equals(id).primaryKeys();
+      const exerciseIds =
+        assetIds.length > 0
+          ? await db.exercises.where('assetId').anyOf(assetIds as string[]).primaryKeys()
+          : [];
+      const problemIds =
+        exerciseIds.length > 0
+          ? await db.problems.where('exerciseId').anyOf(exerciseIds as string[]).primaryKeys()
+          : [];
+      const subproblemIds =
+        problemIds.length > 0
+          ? await db.subproblems.where('problemId').anyOf(problemIds as string[]).primaryKeys()
+          : [];
+      const attemptIds =
+        subproblemIds.length > 0
+          ? await db.attempts.where('subproblemId').anyOf(subproblemIds as string[]).primaryKeys()
+          : [];
+      const chapterIds = await db.chapters.where('topicId').equals(id).primaryKeys();
+      const requirementIds =
+        chapterIds.length > 0
+          ? await db.requirements.where('chapterId').anyOf(chapterIds as string[]).primaryKeys()
+          : [];
+      if (attemptIds.length) {
+        await db.attemptRequirementLinks.where('attemptId').anyOf(attemptIds as string[]).delete();
+        await db.attemptAiReviews
+          .filter((row) => attemptIds.includes(row.attemptId))
+          .delete();
+        await db.attemptReviewJobs
+          .filter((row) => attemptIds.includes(row.attemptId))
+          .delete();
+        await db.attempts.bulkDelete(attemptIds as string[]);
+      }
+      if (subproblemIds.length) {
+        await db.subsubproblems.where('subproblemId').anyOf(subproblemIds as string[]).delete();
+        await db.subproblems.bulkDelete(subproblemIds as string[]);
+      }
+      if (problemIds.length) await db.problems.bulkDelete(problemIds as string[]);
+      if (exerciseIds.length) await db.exercises.bulkDelete(exerciseIds as string[]);
       await db.assetFiles.bulkDelete(assetIds as string[]);
+      if (assetIds.length) await db.inkStrokes.where('assetId').anyOf(assetIds as string[]).delete();
       await db.assets.where('topicId').equals(id).delete();
+      await db.scheduledReviews.where('topicId').equals(id).delete();
+      if (requirementIds.length) {
+        await db.requirements.bulkDelete(requirementIds as string[]);
+      }
+      if (chapterIds.length) await db.chapters.bulkDelete(chapterIds as string[]);
       await db.folders.where('topicId').equals(id).delete();
       await db.topics.delete(id);
-    });
+      },
+    );
   }
 }
 

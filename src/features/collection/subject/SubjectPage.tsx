@@ -1,33 +1,45 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { GhostButton } from '../../../components/Button';
+import { Modal } from '../../../components/Modal';
 import { PageHeader } from '../../../components/PageHeader';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Topic } from '../../../domain/models';
+import { requirementRepo, scheduledReviewRepo } from '../../../repositories';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useCurriculumStore } from '../../../stores/curriculumStore';
+import { useNotificationsStore } from '../../../stores/notificationsStore';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { TopicItem } from './components/TopicItem';
 import { UpsertTopicModal } from './modals/UpsertTopicModal';
 
+const EMPTY_TOPICS: Topic[] = [];
+
 export function SubjectPage() {
   const { subjectId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { active, start } = useActiveSessionStore();
+  const active = useActiveSessionStore((state) => state.active);
+  const start = useActiveSessionStore((state) => state.start);
+  const pushNotification = useNotificationsStore((state) => state.push);
   const from = (location.state as { from?: string } | null)?.from;
 
-  const { subjects, loading: subjectsLoading, refresh: refreshSubjects } = useSubjectsStore();
-  const {
-    topicsBySubject,
-    loadingBySubject,
-    errorBySubject,
-    refreshBySubject,
-    createTopic,
-    renameTopic,
-    deleteTopic,
-  } = useTopicsStore();
+  const subjects = useSubjectsStore((state) => state.subjects);
+  const subjectsLoading = useSubjectsStore((state) => state.loading);
+  const refreshSubjects = useSubjectsStore((state) => state.refresh);
+  const topicsBySubject = useTopicsStore((state) => state.topicsBySubject);
+  const loadingBySubject = useTopicsStore((state) => state.loadingBySubject);
+  const errorBySubject = useTopicsStore((state) => state.errorBySubject);
+  const refreshBySubject = useTopicsStore((state) => state.refreshBySubject);
+  const createTopic = useTopicsStore((state) => state.createTopic);
+  const renameTopic = useTopicsStore((state) => state.renameTopic);
+  const deleteTopic = useTopicsStore((state) => state.deleteTopic);
+
+  const refreshSubjectDocuments = useCurriculumStore((state) => state.refreshSubjectDocuments);
+  const importCurriculum = useCurriculumStore((state) => state.importCurriculum);
 
   useEffect(() => {
     void refreshSubjects();
@@ -35,17 +47,24 @@ export function SubjectPage() {
 
   useEffect(() => {
     if (subjectId) void refreshBySubject(subjectId);
-  }, [subjectId, refreshBySubject]);
+  }, [refreshBySubject, subjectId]);
+
+  useEffect(() => {
+    if (subjectId) void refreshSubjectDocuments(subjectId);
+  }, [refreshSubjectDocuments, subjectId]);
 
   const subject = useMemo(() => subjects.find((s) => s.id === subjectId), [subjects, subjectId]);
-  const topics = subjectId ? topicsBySubject[subjectId] ?? [] : [];
-  const topicsLoading = subjectId ? loadingBySubject[subjectId] ?? false : false;
+  const topics = subjectId ? (topicsBySubject[subjectId] ?? EMPTY_TOPICS) : EMPTY_TOPICS;
+  const topicsLoading = subjectId ? (loadingBySubject[subjectId] ?? false) : false;
   const topicsError = subjectId ? errorBySubject[subjectId] : undefined;
 
   const [createOpen, setCreateOpen] = useState(false);
-
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<Topic | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [curriculumFile, setCurriculumFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const goBack = () => {
     if (from) {
@@ -69,15 +88,55 @@ export function SubjectPage() {
           subject ? `${subject.iconEmoji ? subject.iconEmoji + ' ' : ''}${subject.name}` : 'Fach'
         }
         actions={
-          <button
-            type="button"
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-            className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
-          >
-            Thema anlegen
-          </button>
+          <div className="flex items-center gap-2">
+            <GhostButton onClick={() => fileInputRef.current?.click()} className="text-sm">
+              Lehrplan hochladen
+            </GhostButton>
+            <GhostButton
+              onClick={async () => {
+                const due = await scheduledReviewRepo.listDueBySubject(subjectId, Date.now());
+                if (!due.length) {
+                  pushNotification({
+                    tone: 'info',
+                    title: 'Keine Wiederholung fällig',
+                    message: 'Fällige Aufgaben erscheinen hier automatisch.',
+                  });
+                  return;
+                }
+                const ranked = await Promise.all(
+                  due.map(async (entry) => ({
+                    entry,
+                    mastery: entry.requirementId
+                      ? ((await requirementRepo.get(entry.requirementId))?.mastery ?? 1)
+                      : 1,
+                  })),
+                );
+                ranked.sort((a, b) => a.mastery - b.mastery || a.entry.dueAtMs - b.entry.dueAtMs);
+                const next = ranked[0].entry;
+                if (
+                  active &&
+                  (active.subjectId !== subjectId || active.topicId !== next.topicId) &&
+                  !window.confirm('Es läuft bereits eine Session. Für die Wiederholung wechseln?')
+                ) {
+                  return;
+                }
+                start({ subjectId, topicId: next.topicId });
+                navigate(`/study/${next.assetId}`);
+              }}
+              className="text-sm"
+            >
+              Wiederholung starten
+            </GhostButton>
+            <button
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+              }}
+              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+            >
+              Thema anlegen
+            </button>
+          </div>
         }
       />
 
@@ -96,7 +155,7 @@ export function SubjectPage() {
               Noch keine Themen. Lege z.B. „Analysis“, „Stochastik“, „Vektoren“ an.
             </div>
           ) : (
-            <ul className="grid grid-cols-4 gap-3">
+            <ul className="grid grid-cols-4 gap-4">
               {topics.map((t) => (
                 <TopicItem
                   key={t.id}
@@ -152,6 +211,84 @@ export function SubjectPage() {
         onSave={async (input) => {
           if (!editing) return;
           await renameTopic(editing.id, subjectId, input);
+        }}
+      />
+
+      <Modal
+        open={importOpen}
+        onClose={() => {
+          if (importing) return;
+          setImportOpen(false);
+          setCurriculumFile(null);
+        }}
+        footer={
+          <>
+            <GhostButton
+              onClick={() => {
+                if (importing) return;
+                setImportOpen(false);
+                setCurriculumFile(null);
+              }}
+              disabled={importing}
+            >
+              Abbrechen
+            </GhostButton>
+            <button
+              type="button"
+              disabled={importing || !curriculumFile}
+              onClick={async () => {
+                if (!curriculumFile) return;
+                setImporting(true);
+                try {
+                  await importCurriculum({ subjectId, file: curriculumFile });
+                  await refreshBySubject(subjectId);
+                  pushNotification({
+                    tone: 'success',
+                    title: 'Lehrplan importiert',
+                    message: 'Die Themenstruktur wurde vollständig ersetzt.',
+                  });
+                  setImportOpen(false);
+                  setCurriculumFile(null);
+                } catch (error) {
+                  pushNotification({
+                    tone: 'error',
+                    title: 'Import fehlgeschlagen',
+                    message: error instanceof Error ? error.message : 'Unbekannter Fehler',
+                  });
+                } finally {
+                  setImporting(false);
+                }
+              }}
+              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
+            >
+              {importing ? 'Importiere…' : 'Import starten'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-sm text-slate-300">
+          <div className="text-lg font-semibold text-white">Lehrplan importieren</div>
+          <p>
+            Der Import ersetzt alle bestehenden Topics dieses Fachs inklusive ihrer Assets durch die
+            neue KI-generierte Struktur.
+          </p>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white/80">
+            Datei: {curriculumFile?.name ?? 'Keine Datei gewählt'}
+          </div>
+        </div>
+      </Modal>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.txt,.md"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          event.currentTarget.value = '';
+          if (!file) return;
+          setCurriculumFile(file);
+          setImportOpen(true);
         }}
       />
     </div>

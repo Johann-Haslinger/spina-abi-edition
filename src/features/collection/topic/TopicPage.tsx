@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { IoAdd, IoChevronBack } from 'react-icons/io5';
+import { IoChevronBack } from 'react-icons/io5';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { GhostButton } from '../../../components/Button';
 import { PageHeader } from '../../../components/PageHeader';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetType } from '../../../domain/models';
@@ -17,8 +16,8 @@ import {
   SessionReviewModal,
   type SessionSummaryState,
 } from '../../session/modals/SessionReviewModal';
-import { AssetGridItem } from './components/AssetGridItem';
-import { FilterChip } from './components/FilterChip';
+import { TopicAssetsView } from './components/TopicAssetsView';
+import { TopicCurriculumView } from './components/TopicCurriculumView';
 import { UploadAssetModal } from './modals/UploadAssetModal';
 
 export function TopicPage() {
@@ -80,6 +79,7 @@ export function TopicPage() {
   }, [folders]);
 
   const [assetFilter, setAssetFilter] = useState<'all' | AssetType>('all');
+  const [viewMode, setViewMode] = useState<'assets' | 'curriculum'>('assets');
 
   const [sessionSummary, setSessionSummary] = useState<SessionSummaryState | null>(null);
   useEffect(() => {
@@ -187,76 +187,44 @@ export function TopicPage() {
 
       <PageHeader
         title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
+        actions={
+          <button
+            type="button"
+            onClick={() => setViewMode((current) => (current === 'assets' ? 'curriculum' : 'assets'))}
+            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+          >
+            {viewMode === 'assets' ? 'Kapitel & Skills' : 'Übungen'}
+          </button>
+        }
       />
 
       <div>
         <section className="lg:col-span-2">
-          {assetsError ? (
-            <div className="mt-3 rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
-              {assetsError}
-            </div>
-          ) : null}
-
-          <div className="flex justify-between items-center">
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterChip
-                active={assetFilter === 'all'}
-                onClick={() => setAssetFilter('all')}
-                label="Alle"
-              />
-              <FilterChip
-                active={assetFilter === 'exercise'}
-                onClick={() => setAssetFilter('exercise')}
-                label="Übungen"
-              />
-              <FilterChip
-                active={assetFilter === 'cheatsheet'}
-                onClick={() => setAssetFilter('cheatsheet')}
-                label="Merkblätter"
-              />
-              <FilterChip
-                active={assetFilter === 'note'}
-                onClick={() => setAssetFilter('note')}
-                label="Notizen"
-              />
-              <FilterChip
-                active={assetFilter === 'file'}
-                onClick={() => setAssetFilter('file')}
-                label="Dateien"
-              />
-            </div>
-            <GhostButton
-              onClick={() => startUpload('exercise')}
-              icon={<IoAdd />}
-              className="text-sm"
-            >
-              Upload
-            </GhostButton>
-          </div>
-
-          {assetsLoading ? (
-            <div className="mt-3 text-sm text-slate-400">Lade…</div>
-          ) : filteredAssets.length === 0 ? (
-            <div className="mt-3 text-sm text-slate-400">Keine Assets in dieser Ansicht.</div>
+          {viewMode === 'assets' ? (
+            <TopicAssetsView
+              assetsError={assetsError}
+              assetFilter={assetFilter}
+              onFilterChange={setAssetFilter}
+              onUpload={() => startUpload('exercise')}
+              assetsLoading={assetsLoading}
+              assets={filteredAssets}
+              folderNameById={folderNameById}
+              exerciseStatusByAssetId={exerciseStatusByAssetId}
+              loadFile={getFile}
+              onOpen={openAsset}
+              onDownload={downloadAsset}
+              onDelete={(asset) => {
+                if (window.confirm(`Asset „${asset.title}“ löschen?`)) {
+                  void deleteAsset(asset.id, topicId);
+                }
+              }}
+            />
           ) : (
-            <ul className="mt-12 grid grid-cols-4 gap-3 lg:grid-cols-7 xl:grid-cols-7">
-              {filteredAssets.map((a) => (
-                <AssetGridItem
-                  key={a.id}
-                  asset={a}
-                  folderLabel={a.folderId ? folderNameById.get(a.folderId) ?? '—' : 'Ohne Ordner'}
-                  exerciseStatus={a.type === 'exercise' ? exerciseStatusByAssetId[a.id] : undefined}
-                  loadFile={getFile}
-                  onOpen={() => void openAsset(a)}
-                  onDownload={() => void downloadAsset(a)}
-                  onDelete={() => {
-                    if (window.confirm(`Asset „${a.title}“ löschen?`)) {
-                      void deleteAsset(a.id, topicId);
-                    }
-                  }}
-                />
-              ))}
-            </ul>
+            <TopicCurriculumView
+              subjectId={subjectId}
+              topicId={topicId}
+              assets={assets}
+            />
           )}
         </section>
       </div>

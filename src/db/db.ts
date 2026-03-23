@@ -3,11 +3,18 @@ import type {
   Asset,
   AssetFile,
   Attempt,
+  AttemptAiReview,
+  AttemptRequirementLink,
+  AttemptReviewJob,
+  Chapter,
+  CurriculumDocument,
   Exercise,
   Folder,
   InkStroke,
   Problem,
   PlannedItem,
+  Requirement,
+  ScheduledReview,
   StudySession,
   Subject,
   Subproblem,
@@ -22,6 +29,9 @@ export class AbiDb extends Dexie {
   folders!: Table<Folder, string>;
   assets!: Table<Asset, string>;
   assetFiles!: Table<AssetFile, string>;
+  curriculumDocuments!: Table<CurriculumDocument, string>;
+  chapters!: Table<Chapter, string>;
+  requirements!: Table<Requirement, string>;
 
   studySessions!: Table<StudySession, string>;
   exercises!: Table<Exercise, string>;
@@ -29,9 +39,13 @@ export class AbiDb extends Dexie {
   subproblems!: Table<Subproblem, string>;
   subsubproblems!: Table<Subsubproblem, string>;
   attempts!: Table<Attempt, string>;
+  attemptRequirementLinks!: Table<AttemptRequirementLink, string>;
+  attemptAiReviews!: Table<AttemptAiReview, string>;
+  attemptReviewJobs!: Table<AttemptReviewJob, string>;
   inkStrokes!: Table<InkStroke, string>;
 
   plannedItems!: Table<PlannedItem, string>;
+  scheduledReviews!: Table<ScheduledReview, string>;
 
   constructor() {
     super('abi-lernapp');
@@ -223,6 +237,115 @@ export class AbiDb extends Dexie {
 
       plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
     });
+
+    this.version(11).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+
+      curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+      chapters: 'id, topicId, orderIndex',
+      requirements: 'id, chapterId, difficulty, mastery',
+
+      studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+      exercises: 'id, assetId, status',
+      problems: 'id, [exerciseId+idx], exerciseId, idx',
+      subproblems: 'id, [problemId+label], problemId, label',
+      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+      attempts:
+        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+      attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+      attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+      attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+      inkStrokes:
+        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+
+      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+      scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+    }).upgrade(async (tx) => {
+      await tx
+        .table('attempts')
+        .toCollection()
+        .modify((attempt: { reviewStatus?: unknown }) => {
+          if (typeof attempt.reviewStatus !== 'string') attempt.reviewStatus = 'none';
+        });
+    });
+
+    this.version(12).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+
+      curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+      chapters: 'id, topicId, orderIndex',
+      requirements: 'id, chapterId, difficulty, mastery',
+
+      studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+      exercises: 'id, assetId, status',
+      problems: 'id, [exerciseId+idx], exerciseId, idx',
+      subproblems: 'id, [problemId+label], problemId, label',
+      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+      attempts:
+        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+      attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+      attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+      attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+      inkStrokes:
+        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+
+      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+      scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+    });
+
+    this.version(13)
+      .stores({
+        subjects: 'id, name',
+        topics: 'id, subjectId, orderIndex',
+        folders: 'id, topicId, parentFolderId, orderIndex',
+        assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+        assetFiles: 'assetId',
+
+        curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+        chapters: 'id, topicId, orderIndex',
+        requirements: 'id, chapterId, difficulty, mastery',
+
+        studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+        exercises: 'id, assetId, status',
+        problems: 'id, [exerciseId+idx], exerciseId, idx',
+        subproblems: 'id, [problemId+label], problemId, label',
+        subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+        attempts:
+          'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+        attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+        attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+        attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+        inkStrokes:
+          'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+
+        plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+        scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('problems').toCollection().modify((row: { requirementIds?: unknown }) => {
+          if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
+        });
+        await tx.table('subproblems').toCollection().modify((row: { requirementIds?: unknown }) => {
+          if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
+        });
+        await tx.table('subsubproblems').toCollection().modify((row: { requirementIds?: unknown }) => {
+          if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
+        });
+        await tx.table('attempts').toCollection().modify((row: { writtenAnswer?: unknown }) => {
+          if ('writtenAnswer' in row) delete row.writtenAnswer;
+        });
+      });
   }
 }
 

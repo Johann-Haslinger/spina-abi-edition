@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PrimaryButton, SecondaryButton } from '../../../components/Button';
 import { Modal } from '../../../components/Modal';
-import type { Attempt } from '../../../domain/models';
-import { attemptRepo, studySessionRepo } from '../../../repositories';
+import type { Attempt, AttemptAiReview } from '../../../domain/models';
+import { attemptAiReviewRepo, attemptRepo, studySessionRepo } from '../../../repositories';
 import { formatClockTime, formatDuration } from '../../../utils/time';
 import { formatTaskPath } from '../utils/formatTaskPath';
 
@@ -11,6 +11,7 @@ type Row = {
   problemIdx: number;
   subproblemLabel: string;
   subsubproblemLabel?: string;
+  aiReview?: AttemptAiReview;
 };
 
 export function ExerciseReviewModal(props: {
@@ -37,11 +38,26 @@ export function ExerciseReviewModal(props: {
       setError(null);
       try {
         await studySessionRepo.get(props.studySessionId);
-        const r = await attemptRepo.listForSessionAsset({
+        const attempts = await attemptRepo.listForSessionAsset({
           studySessionId: props.studySessionId,
           assetId: props.assetId,
         });
-        if (!cancelled) setRows(r);
+        const aiReviews = await Promise.all(
+          attempts.map(async (row) => ({
+            attemptId: row.attempt.id,
+            review: await attemptAiReviewRepo.getByAttempt(row.attempt.id),
+          })),
+        );
+        const aiReviewByAttemptId = new Map(
+          aiReviews.filter((row) => row.review).map((row) => [row.attemptId, row.review as AttemptAiReview]),
+        );
+        if (!cancelled)
+          setRows(
+            attempts.map((row) => ({
+              ...row,
+              aiReview: aiReviewByAttemptId.get(row.attempt.id),
+            })),
+          );
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Fehler');
       } finally {
@@ -177,12 +193,28 @@ export function ExerciseReviewModal(props: {
                                     <div className="mt-1 text-xs text-slate-400">Kein Versuch</div>
                                   )}
                                 </div>
-                                {a ? <ResultBadge result={a.result} /> : null}
+                                {a ? (
+                                  <ResultBadge result={a.result} reviewStatus={a.reviewStatus} />
+                                ) : null}
                               </div>
 
                               {a?.errorType ? (
                                 <div className="mt-2 text-xs text-rose-200">
                                   Fehler: {a.errorType}
+                                </div>
+                              ) : null}
+                              {leaf.attempts[0] && leaf.attempts[0].reviewStatus !== 'none' ? (
+                                <div className="mt-1 text-xs text-white/60">
+                                  Review: {formatReviewStatus(leaf.attempts[0].reviewStatus)}
+                                </div>
+                              ) : null}
+                              {leaf.attempts[0] && rows.find((row) => row.attempt.id === leaf.attempts[0].id)?.aiReview
+                                ?.messageToUser ? (
+                                <div className="mt-2 text-xs text-emerald-100">
+                                  KI: {
+                                    rows.find((row) => row.attempt.id === leaf.attempts[0].id)?.aiReview
+                                      ?.messageToUser
+                                  }
                                 </div>
                               ) : null}
                               {a?.note ? (
@@ -208,7 +240,21 @@ export function ExerciseReviewModal(props: {
   );
 }
 
-function ResultBadge(props: { result: Attempt['result'] }) {
+function ResultBadge(props: { result: Attempt['result']; reviewStatus: Attempt['reviewStatus'] }) {
+  if (props.reviewStatus === 'queued' || props.reviewStatus === 'processing') {
+    return (
+      <span className="inline-flex items-center rounded-md border px-2 py-1 m-0.5 border-sky-500/10 bg-sky-500/5 text-sky-200">
+        KI prüft…
+      </span>
+    );
+  }
+  if (props.reviewStatus === 'manual_required') {
+    return (
+      <span className="inline-flex items-center rounded-md border px-2 py-1 m-0.5 border-amber-500/10 bg-amber-500/5 text-amber-200">
+        Manuell prüfen
+      </span>
+    );
+  }
   const label = props.result === 'correct' ? '✅' : props.result === 'partial' ? '🟨' : '❌';
   const cls =
     props.result === 'correct'
@@ -221,4 +267,21 @@ function ResultBadge(props: { result: Attempt['result'] }) {
       {label}
     </span>
   );
+}
+
+function formatReviewStatus(status: Attempt['reviewStatus']) {
+  switch (status) {
+    case 'queued':
+      return 'wartet';
+    case 'processing':
+      return 'in Bearbeitung';
+    case 'done':
+      return 'fertig';
+    case 'failed':
+      return 'fehlgeschlagen';
+    case 'manual_required':
+      return 'manuell nötig';
+    default:
+      return 'manuell';
+  }
 }

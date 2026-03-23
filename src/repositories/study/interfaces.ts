@@ -1,6 +1,10 @@
 import type {
   Attempt,
+  AttemptAiReview,
+  AttemptRequirementLink,
   AttemptResult,
+  AttemptReviewJob,
+  AttemptReviewStatus,
   Exercise,
   ExercisePageStatus,
   ExerciseTaskDepth,
@@ -55,7 +59,10 @@ export interface AttemptRepository {
     result: AttemptResult;
     note?: string;
     errorType?: string;
+    reviewStatus: AttemptReviewStatus;
   }): Promise<Attempt>;
+  update(id: string, patch: Partial<Attempt>): Promise<Attempt>;
+  get(id: string): Promise<Attempt | undefined>;
   listBySubproblem(subproblemId: string): Promise<Attempt[]>;
   listBySubproblemIds(subproblemIds: string[]): Promise<Attempt[]>;
   listByStudySession(studySessionId: string): Promise<Attempt[]>;
@@ -68,10 +75,7 @@ export interface AttemptRepository {
       subsubproblemLabel?: string;
     }>
   >;
-  listForSessionAsset(input: {
-    studySessionId: string;
-    assetId: string;
-  }): Promise<
+  listForSessionAsset(input: { studySessionId: string; assetId: string }): Promise<
     Array<{
       attempt: Attempt;
       problemIdx: number;
@@ -79,4 +83,23 @@ export interface AttemptRepository {
       subsubproblemLabel?: string;
     }>
   >;
+}
+
+export interface AttemptReviewJobRepository {
+  create(input: Omit<AttemptReviewJob, 'id'> & { id?: string }): Promise<AttemptReviewJob>;
+  update(id: string, patch: Partial<AttemptReviewJob>): Promise<AttemptReviewJob>;
+  getByAttempt(attemptId: string): Promise<AttemptReviewJob | undefined>;
+}
+
+export interface AttemptAiReviewRepository {
+  upsert(input: Omit<AttemptAiReview, 'id'> & { id?: string }): Promise<AttemptAiReview>;
+  getByAttempt(attemptId: string): Promise<AttemptAiReview | undefined>;
+}
+
+export interface AttemptRequirementLinkRepository {
+  replaceForAttempt(
+    attemptId: string,
+    links: Omit<AttemptRequirementLink, 'id' | 'attemptId'>[],
+  ): Promise<void>;
+  listByAttemptIds(attemptIds: string[]): Promise<AttemptRequirementLink[]>;
 }

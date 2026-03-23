@@ -28,6 +28,7 @@ export type Topic = {
   subjectId: Id;
   name: string;
   iconEmoji?: string;
+  description?: string;
 };
 
 export type Folder = {
@@ -57,6 +58,36 @@ export type AssetFile = {
   blob: Blob;
 };
 
+export type CurriculumImportStatus = 'processing' | 'ready' | 'failed';
+
+export type CurriculumDocument = {
+  id: Id;
+  subjectId: Id;
+  sourceName: string;
+  uploadedAtMs: number;
+  status: CurriculumImportStatus;
+  outlineJson?: string;
+  error?: string;
+};
+
+export type Chapter = {
+  id: Id;
+  topicId: Id;
+  name: string;
+  description?: string;
+  orderIndex: number;
+  explanationAssetId?: Id;
+};
+
+export type Requirement = {
+  id: Id;
+  chapterId: Id;
+  name: string;
+  description?: string;
+  difficulty: 1 | 2 | 3 | 4 | 5;
+  mastery: number;
+};
+
 export type ExercisePageStatus = 'unknown' | 'partial' | 'captured' | 'covered';
 
 export type StudySession = {
@@ -80,8 +111,6 @@ export type WeeklyRecurrence = {
 export type PlannedItem = {
   id: Id;
   type: PlannedItemType;
-
-  // For planned study sessions (type === 'studySession')
   subjectId?: Id;
   topicId?: Id;
 
@@ -111,21 +140,32 @@ export type Problem = {
   id: Id;
   exerciseId: Id;
   idx: number;
+  requirementIds: Id[];
 };
 
 export type Subproblem = {
   id: Id;
   problemId: Id;
   label: string;
+  requirementIds: Id[];
 };
 
 export type Subsubproblem = {
   id: Id;
   subproblemId: Id;
   label: string;
+  requirementIds: Id[];
 };
 
 export type AttemptResult = 'correct' | 'partial' | 'wrong';
+
+export type AttemptReviewStatus =
+  | 'none'
+  | 'queued'
+  | 'processing'
+  | 'done'
+  | 'failed'
+  | 'manual_required';
 
 export type Attempt = {
   id: Id;
@@ -138,6 +178,63 @@ export type Attempt = {
   result: AttemptResult;
   note?: string;
   errorType?: string;
+  reviewStatus: AttemptReviewStatus;
+};
+
+export type AttemptRequirementLink = {
+  id: Id;
+  attemptId: Id;
+  requirementId: Id;
+  confidence: number;
+  masteryDelta: number;
+};
+
+export type AttemptAiReview = {
+  id: Id;
+  attemptId: Id;
+  score: number;
+  result: AttemptResult;
+  messageToUser?: string;
+  notes?: string;
+  errorExplanation?: string;
+  solutionExplanation?: string;
+  createdAtMs: number;
+  chapterIds: Id[];
+};
+
+export type AttemptReviewJobStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'manual_required';
+
+export type AttemptReviewJob = {
+  id: Id;
+  attemptId: Id;
+  assetId: Id;
+  subjectId: Id;
+  topicId: Id;
+  status: AttemptReviewJobStatus;
+  requestedAtMs: number;
+  completedAtMs?: number;
+  error?: string;
+  manualFallbackReason?: string;
+};
+
+export type ScheduledReviewStatus = 'pending' | 'completed' | 'dismissed';
+
+export type ScheduledReview = {
+  id: Id;
+  subjectId: Id;
+  topicId: Id;
+  assetId: Id;
+  requirementId?: Id;
+  attemptId?: Id;
+  dueAtMs: number;
+  status: ScheduledReviewStatus;
+  createdAtMs: number;
+  completedAtMs?: number;
 };
 
 export type InkTool = 'pencil' | 'pen' | 'marker';

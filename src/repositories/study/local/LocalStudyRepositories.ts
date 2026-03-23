@@ -1,6 +1,9 @@
 import { db } from '../../../db/db';
 import type {
   Attempt,
+  AttemptAiReview,
+  AttemptRequirementLink,
+  AttemptReviewJob,
   Exercise,
   Problem,
   StudySession,
@@ -9,7 +12,10 @@ import type {
 } from '../../../domain/models';
 import { newId } from '../../../lib/id';
 import type {
+  AttemptAiReviewRepository,
   AttemptRepository,
+  AttemptRequirementLinkRepository,
+  AttemptReviewJobRepository,
   ExerciseRepository,
   ProblemRepository,
   StudySessionRepository,
@@ -94,7 +100,12 @@ export class LocalProblemRepository implements ProblemRepository {
       .first();
     if (existing) return existing;
 
-    const row: Problem = { id: newId(), exerciseId: input.exerciseId, idx: input.idx };
+    const row: Problem = {
+      id: newId(),
+      exerciseId: input.exerciseId,
+      idx: input.idx,
+      requirementIds: [],
+    };
     await db.problems.add(row);
     return row;
   }
@@ -116,6 +127,7 @@ export class LocalSubproblemRepository implements SubproblemRepository {
       id: newId(),
       problemId: input.problemId,
       label: input.label.trim(),
+      requirementIds: [],
     };
     await db.subproblems.add(row);
     return row;
@@ -139,6 +151,7 @@ export class LocalSubsubproblemRepository implements SubsubproblemRepository {
       id: newId(),
       subproblemId: input.subproblemId,
       label: input.label.trim(),
+      requirementIds: [],
     };
     await db.subsubproblems.add(row);
     return row;
@@ -162,6 +175,7 @@ export class LocalAttemptRepository implements AttemptRepository {
     result: Attempt['result'];
     note?: string;
     errorType?: string;
+    reviewStatus: Attempt['reviewStatus'];
   }): Promise<Attempt> {
     const row: Attempt = {
       id: input.id ?? newId(),
@@ -174,9 +188,27 @@ export class LocalAttemptRepository implements AttemptRepository {
       result: input.result,
       note: input.note?.trim() || undefined,
       errorType: input.errorType?.trim() || undefined,
+      reviewStatus: input.reviewStatus,
     };
     await db.attempts.add(row);
     return row;
+  }
+
+  async update(id: string, patch: Partial<Attempt>): Promise<Attempt> {
+    const current = await db.attempts.get(id);
+    if (!current) throw new Error('Attempt not found');
+    const next: Attempt = {
+      ...current,
+      ...patch,
+      ...(patch.note !== undefined ? { note: patch.note?.trim() || undefined } : {}),
+      ...(patch.errorType !== undefined ? { errorType: patch.errorType?.trim() || undefined } : {}),
+    };
+    await db.attempts.put(next);
+    return next;
+  }
+
+  async get(id: string): Promise<Attempt | undefined> {
+    return db.attempts.get(id);
   }
 
   async listBySubproblem(subproblemId: string): Promise<Attempt[]> {
@@ -244,10 +276,7 @@ export class LocalAttemptRepository implements AttemptRepository {
       .sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
   }
 
-  async listForSessionAsset(input: {
-    studySessionId: string;
-    assetId: string;
-  }): Promise<
+  async listForSessionAsset(input: { studySessionId: string; assetId: string }): Promise<
     Array<{
       attempt: Attempt;
       problemIdx: number;
@@ -304,5 +333,75 @@ export class LocalAttemptRepository implements AttemptRepository {
         };
       })
       .sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
+  }
+}
+
+export class LocalAttemptReviewJobRepository implements AttemptReviewJobRepository {
+  async create(input: Omit<AttemptReviewJob, 'id'> & { id?: string }): Promise<AttemptReviewJob> {
+    const row: AttemptReviewJob = {
+      ...input,
+      id: input.id ?? newId(),
+    };
+    await db.attemptReviewJobs.put(row);
+    return row;
+  }
+
+  async update(id: string, patch: Partial<AttemptReviewJob>): Promise<AttemptReviewJob> {
+    const current = await db.attemptReviewJobs.get(id);
+    if (!current) throw new Error('Attempt review job not found');
+    const next: AttemptReviewJob = { ...current, ...patch };
+    await db.attemptReviewJobs.put(next);
+    return next;
+  }
+
+  async getByAttempt(attemptId: string): Promise<AttemptReviewJob | undefined> {
+    return db.attemptReviewJobs.where('attemptId').equals(attemptId).first();
+  }
+}
+
+export class LocalAttemptAiReviewRepository implements AttemptAiReviewRepository {
+  async upsert(input: Omit<AttemptAiReview, 'id'> & { id?: string }): Promise<AttemptAiReview> {
+    const existing = await db.attemptAiReviews.where('attemptId').equals(input.attemptId).first();
+    const row: AttemptAiReview = {
+      ...(existing ?? { id: input.id ?? newId() }),
+      ...input,
+      id: existing?.id ?? input.id ?? newId(),
+    };
+    await db.attemptAiReviews.put(row);
+    return row;
+  }
+
+  async getByAttempt(attemptId: string): Promise<AttemptAiReview | undefined> {
+    return db.attemptAiReviews.where('attemptId').equals(attemptId).first();
+  }
+}
+
+export class LocalAttemptRequirementLinkRepository implements AttemptRequirementLinkRepository {
+  async replaceForAttempt(
+    attemptId: string,
+    links: Omit<AttemptRequirementLink, 'id' | 'attemptId'>[],
+  ): Promise<void> {
+    await db.transaction('rw', db.attemptRequirementLinks, async () => {
+      const existing = await db.attemptRequirementLinks
+        .where('attemptId')
+        .equals(attemptId)
+        .toArray();
+      if (existing.length)
+        await db.attemptRequirementLinks.bulkDelete(existing.map((row) => row.id));
+      if (!links.length) return;
+      const rows: AttemptRequirementLink[] = links.map((link) => ({
+        id: newId(),
+        attemptId,
+        requirementId: link.requirementId,
+        confidence: link.confidence,
+        masteryDelta: link.masteryDelta,
+      }));
+      await db.attemptRequirementLinks.bulkAdd(rows);
+    });
+  }
+
+  async listByAttemptIds(attemptIds: string[]): Promise<AttemptRequirementLink[]> {
+    if (attemptIds.length === 0) return [];
+    return db.attemptRequirementLinks.where('attemptId').anyOf(attemptIds).toArray();
   }
 }

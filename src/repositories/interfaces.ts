@@ -2,7 +2,11 @@ import type {
   Asset,
   AssetFile,
   AssetType,
+  Chapter,
+  CurriculumDocument,
   Folder,
+  Requirement,
+  ScheduledReview,
   Subject,
   SubjectColorAssignment,
   Topic,
@@ -59,6 +63,42 @@ export type AssetUpdateInput = {
   type?: AssetType;
 };
 
+export type CurriculumDocumentCreateInput = {
+  subjectId: string;
+  sourceName: string;
+  status: CurriculumDocument['status'];
+  outlineJson?: string;
+  error?: string;
+};
+
+export type CurriculumDocumentUpdateInput = Partial<
+  Pick<CurriculumDocument, 'status' | 'outlineJson' | 'error'>
+>;
+
+export type ChapterCreateInput = {
+  topicId: string;
+  name: string;
+  description?: string;
+  orderIndex: number;
+  explanationAssetId?: string;
+};
+
+export type ChapterUpdateInput = Partial<
+  Pick<Chapter, 'name' | 'description' | 'orderIndex' | 'explanationAssetId'>
+>;
+
+export type RequirementCreateInput = {
+  chapterId: string;
+  name: string;
+  description?: string;
+  difficulty: Requirement['difficulty'];
+  mastery?: number;
+};
+
+export type RequirementUpdateInput = Partial<
+  Pick<Requirement, 'name' | 'description' | 'difficulty' | 'mastery'>
+>;
+
 export interface SubjectRepository {
   list(): Promise<Subject[]>;
   get(id: string): Promise<Subject | undefined>;
@@ -95,4 +135,33 @@ export interface AssetFileStore {
   put(assetId: string, file: File): Promise<AssetFile>;
   get(assetId: string): Promise<AssetFile | undefined>;
   delete(assetId: string): Promise<void>;
+}
+
+export interface CurriculumDocumentRepository {
+  listBySubject(subjectId: string): Promise<CurriculumDocument[]>;
+  create(input: CurriculumDocumentCreateInput): Promise<CurriculumDocument>;
+  update(id: string, patch: CurriculumDocumentUpdateInput): Promise<CurriculumDocument>;
+  deleteBySubject(subjectId: string): Promise<void>;
+}
+
+export interface ChapterRepository {
+  listByTopic(topicId: string): Promise<Chapter[]>;
+  create(input: ChapterCreateInput): Promise<Chapter>;
+  update(id: string, patch: ChapterUpdateInput): Promise<Chapter>;
+  deleteByTopic(topicId: string): Promise<void>;
+}
+
+export interface RequirementRepository {
+  get(id: string): Promise<Requirement | undefined>;
+  listByChapterIds(chapterIds: string[]): Promise<Requirement[]>;
+  create(input: RequirementCreateInput): Promise<Requirement>;
+  update(id: string, patch: RequirementUpdateInput): Promise<Requirement>;
+  deleteByChapterIds(chapterIds: string[]): Promise<void>;
+}
+
+export interface ScheduledReviewRepository {
+  listBySubject(subjectId: string): Promise<ScheduledReview[]>;
+  listDueBySubject(subjectId: string, nowMs: number): Promise<ScheduledReview[]>;
+  upsert(input: Omit<ScheduledReview, 'id' | 'createdAtMs'> & { id?: string }): Promise<ScheduledReview>;
+  markCompleted(id: string, completedAtMs: number): Promise<void>;
 }

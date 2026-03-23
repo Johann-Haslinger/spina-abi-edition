@@ -1,6 +1,8 @@
 import { AnimatePresence, motion, useDragControls, useMotionValue } from 'framer-motion';
 import { useCallback, useEffect, useMemo } from 'react';
+import { renderAttemptCompositePngDataUrl } from '../../../ink/attemptComposite';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { startAttemptAutoReview } from '../review/processAttemptReview';
 import { useFloatingQuickLogPanelStore } from '../stores/floatingQuickLogPanelStore';
 import { useStudyAiChatStore } from '../stores/studyAiChatStore';
 import { useStudyHudStore, useStudyHudVisibility } from '../stores/studyHudStore';
@@ -21,6 +23,7 @@ export function FloatingQuickLogPanel(props: {
   pageNumber: number;
   subjectId: string;
   topicId: string;
+  pdfData: Uint8Array | null;
   onOpenExerciseReview: () => void;
 }) {
   const { suppressNonStudyAi } = useStudyHudVisibility();
@@ -74,6 +77,70 @@ export function FloatingQuickLogPanel(props: {
   useLoadAssetTaskDepth({ assetId: props.assetId, loadTaskDepth });
 
   const depth = taskDepthByAssetId[props.assetId] ?? 2;
+
+  const finishAttempt = useCallback(async () => {
+    if (!active) throw new Error('Keine aktive Session');
+    if (!currentAttempt) throw new Error('Kein laufender Versuch');
+
+    if (!props.pdfData) {
+      setView('review');
+      return;
+    }
+
+    let attemptImageDataUrl: string;
+    try {
+      attemptImageDataUrl = await renderAttemptCompositePngDataUrl({
+        attemptId: currentAttempt.attemptId,
+        pdfData: props.pdfData,
+        maxPdfBytes: 12 * 1024 * 1024,
+        maxOutputPixels: 12_000_000,
+      });
+    } catch {
+      setView('review');
+      return;
+    }
+
+    await ensureStudySession({
+      subjectId: active.subjectId,
+      topicId: active.topicId,
+      startedAtMs: active.startedAtMs,
+      plannedDurationMs: active.plannedDurationMs,
+    });
+    const logged = await logAttempt({
+      assetId: props.assetId,
+      problemIdx,
+      subproblemLabel,
+      subsubproblemLabel,
+      endedAtMs: Date.now(),
+      result: 'partial',
+      reviewStatus: 'queued',
+    });
+    setView('next');
+    startAttemptAutoReview({
+      attemptId: logged.attemptId,
+      assetId: props.assetId,
+      subjectId: props.subjectId,
+      topicId: props.topicId,
+      pdfData: props.pdfData,
+      problemIdx: logged.problemIdx,
+      subproblemLabel: logged.subproblemLabel,
+      subsubproblemLabel: logged.subsubproblemLabel,
+      attemptImageDataUrl,
+    });
+  }, [
+    active,
+    currentAttempt,
+    ensureStudySession,
+    logAttempt,
+    problemIdx,
+    props.assetId,
+    props.pdfData,
+    props.subjectId,
+    props.topicId,
+    setView,
+    subproblemLabel,
+    subsubproblemLabel,
+  ]);
 
   const gripProps = useMemo(
     () => ({
@@ -151,7 +218,7 @@ export function FloatingQuickLogPanel(props: {
                     <ProgressView
                       gripProps={gripProps}
                       onOpenDetails={() => setView('progressDetails')}
-                      onFinish={() => setView('review')}
+                      onFinish={() => void finishAttempt()}
                     />
                   ) : null}
 
@@ -159,7 +226,7 @@ export function FloatingQuickLogPanel(props: {
                     <ProgressDetailsView
                       gripProps={gripProps}
                       onClose={() => setView('progress')}
-                      onFinish={() => setView('review')}
+                      onFinish={() => void finishAttempt()}
                       onCancel={() => {
                         cancelAttempt();
                         setView('start');
@@ -242,7 +309,7 @@ function usePanelDimensions() {
       start: 310,
       config: 290,
       progress: 64,
-      progressDetails: 240,
+      progressDetails: 360,
       review: 360,
       next: 320,
     }),

@@ -72,7 +72,14 @@ type StudyState = {
     result: AttemptResult;
     note?: string;
     errorType?: string;
-  }) => Promise<void>;
+    reviewStatus?: 'none' | 'queued' | 'processing' | 'done' | 'failed' | 'manual_required';
+  }) => Promise<{
+    attemptId: string;
+    assetId: string;
+    problemIdx: number;
+    subproblemLabel: string;
+    subsubproblemLabel?: string;
+  }>;
 
   reset: () => void;
 };
@@ -326,6 +333,7 @@ export const useStudyStore = create<StudyState>()(
           result: input.result,
           note: input.note,
           errorType: input.errorType,
+          reviewStatus: input.reviewStatus ?? 'none',
         });
 
         set((s) => ({
@@ -335,6 +343,13 @@ export const useStudyStore = create<StudyState>()(
             [assetId]: exercise.status,
           },
         }));
+        return {
+          attemptId: currentAttempt.attemptId,
+          assetId,
+          problemIdx,
+          subproblemLabel,
+          subsubproblemLabel: depth === 3 ? subsubproblemLabel : undefined,
+        };
       },
 
       reset: () =>
@@ -351,7 +366,7 @@ export const useStudyStore = create<StudyState>()(
     }),
     {
       name: 'mathe-abi-2026:study-store',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         // v1 stored `attemptStartedAtMs`; v2 uses `currentAttempt`.
         if (version === 1 && persisted && typeof persisted === 'object') {
@@ -366,6 +381,7 @@ export const useStudyStore = create<StudyState>()(
                 startedAtMs: p.attemptStartedAtMs,
                 problemIdx: p.problemIdx ?? 1,
                 subproblemLabel: p.subproblemLabel ?? 'a',
+                subsubproblemLabel: '1',
               },
             };
           }

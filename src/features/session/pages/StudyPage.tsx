@@ -10,6 +10,7 @@ import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
+import { AiErrorReviewPanel } from '../components/AiErrorReviewPanel';
 import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
 import { StudyAiWidget } from '../components/studyAi/StudyAiWidget';
 import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
@@ -17,11 +18,14 @@ import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyHudStore } from '../stores/studyHudStore';
 import { useStudyStore } from '../stores/studyStore';
 import { AssetViewer } from '../viewer/AssetViewer';
+import { useNotificationsStore } from '../../../stores/notificationsStore';
 
 export function StudyPage() {
   const { assetId } = useParams();
   const navigate = useNavigate();
   const { active, start, end } = useActiveSessionStore();
+  const activeAttemptReview = useNotificationsStore((state) => state.activeAttemptReview);
+  const closeAttemptReview = useNotificationsStore((state) => state.closeAttemptReview);
 
   const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId);
   const [pageNumber, setPageNumber] = useState(1);
@@ -219,6 +223,7 @@ export function StudyPage() {
               pageNumber={pageNumber}
               subjectId={guardState.asset.subjectId}
               topicId={guardState.asset.topicId}
+              pdfData={pdfData}
               onOpenExerciseReview={() => setReviewOpen(true)}
             />
 
@@ -227,6 +232,15 @@ export function StudyPage() {
               pdfData={pdfData}
               boundSessionKey={boundSessionKey}
               currentAttemptId={currentAttempt?.attemptId ?? null}
+            />
+
+            <AiErrorReviewPanel
+              attemptId={
+                activeAttemptReview?.assetId === guardState.asset.id
+                  ? activeAttemptReview.attemptId
+                  : null
+              }
+              onClose={closeAttemptReview}
             />
           </>
         ) : (
