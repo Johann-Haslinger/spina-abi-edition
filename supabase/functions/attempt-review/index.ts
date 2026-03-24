@@ -131,8 +131,14 @@ serve(async (req) => {
       '  "requirements": [{ "requirementId"?: string, "requirementName": string, "confidence": number, "masteryDelta": number }]',
       '}',
       'Bewerte nach Ergebnis (40%), Rechenweg (40%), Verständnis (20%).',
+      'Kleine Rundungsabweichungen oder leicht andere aber aequivalente Schreibweise (z.B. 0,33 vs 1/3, nur anderer Zwischenschritt) gelten als korrekt. Nur bei inhaltlich falschem Ergebnis oder wesentlichem Logikfehler setze partial oder wrong.',
       'Abi-Lernen bedeutet viele Attempts pro Thema. Ein einzelner Attempt darf nur ein sehr kleines Fortschrittssignal sein.',
-      'Vergib masteryDelta deshalb sehr sparsam. In der Regel liegt masteryDelta pro Requirement zwischen -0.01 und 0.015, nur selten am Rand und niemals als großer Sprung.',
+      'Vergib masteryDelta deshalb sehr sparsam. Typisch pro Requirement etwa -0.01 bis 0.015 je nach Evidenz; niemals grosse Spruenge.',
+      'Auch bei result = partial duerfen passende Requirements einen kleinen positiven masteryDelta bekommen, der aber geringer ausfaellt als bei clearly correct.',
+      usedAiHelp
+        ? 'StudyAI-Hilfe wurde bei diesem Attempt genutzt: Vergib trotzdem kleine masteryDelta-Werte wo angebracht, aber staerker konservativ als ohne Hilfe. Erwaehne in messageToUser knapp, dass der Fortschritt wegen KI-Hilfe begrenzt ist, ohne zu behaupten es gaebe gar keinen Fortschritt.'
+        : 'Ohne KI-Hilfe: vergib realistische, kleine masteryDelta-Werte.',
+      'Feld notes: Kurze, kontextfreie Lernerinnerung fuer den Nutzer (max 1-2 Saetze). Keine Aufgabenstellung zitieren, keine konkreten Zahlen aus dieser Aufgabe. Nur uebertragbare Fehlermuster oder Staerken (z.B. Rechenweg sauber, Einheiten pruefen, etc.).',
       `Teilaufgabe: ${formatTaskPath(body.problemIdx, body.subproblemLabel, body.subsubproblemLabel)}`,
       'Die eigentliche Nutzerlösung steckt im angehängten Bild.',
       `Kapitel: ${JSON.stringify(chapters)}`,
@@ -140,9 +146,6 @@ serve(async (req) => {
       'Nutze nur Requirement-IDs, die in der Liste vorkommen.',
       'Setze scheduleReview nur, wenn die Leistung klar wiederholt werden sollte.',
       'Wenn du nicht sicher genug bist, setze manualFallbackReason.',
-      usedAiHelp
-        ? 'Wichtig: Bei diesem Attempt wurde StudyAI-Hilfe genutzt. Vergib deshalb fuer alle Requirements masteryDelta = 0. messageToUser muss klar sagen, dass keine Requirement-Prozente gutgeschrieben werden, weil KI-Hilfe genutzt wurde.'
-        : 'Wenn keine KI-Hilfe genutzt wurde, gib nur kleine, realistische masteryDelta-Werte zurueck.',
     ].join('\n');
 
     const openaiRes = await fetch('https://api.openai.com/v1/responses', {
@@ -184,7 +187,7 @@ serve(async (req) => {
     return json(200, {
       score: clampNumber(parsed.score, 0, 1, 0.5),
       result: normalizeResult(parsed.result),
-      messageToUser: usedAiHelp ? buildAiHelpMessage(rawMessageToUser) : rawMessageToUser,
+      messageToUser: rawMessageToUser,
       notes: asOptionalString(parsed.notes),
       errorExplanation: asOptionalString(parsed.errorExplanation),
       solutionExplanation: asOptionalString(parsed.solutionExplanation),
@@ -212,7 +215,12 @@ serve(async (req) => {
                     : undefined,
                 requirementName: row.requirementName,
                 confidence: clampNumber(row.confidence, 0, 1, 0.5),
-                masteryDelta: usedAiHelp ? 0 : clampNumber(row.masteryDelta, -0.02, 0.02, 0),
+                masteryDelta: clampNumber(
+                  row.masteryDelta,
+                  usedAiHelp ? -0.01 : -0.02,
+                  usedAiHelp ? 0.01 : 0.02,
+                  0,
+                ),
               };
             })
             .filter(Boolean)
@@ -268,14 +276,6 @@ function json(status: number, body: unknown) {
 
 function normalizeResult(value: unknown): 'correct' | 'partial' | 'wrong' {
   return value === 'correct' || value === 'wrong' || value === 'partial' ? value : 'partial';
-}
-
-function buildAiHelpMessage(messageToUser?: string) {
-  const suffix =
-    'Keine Requirement-Prozente wurden gutgeschrieben, weil du bei diesem Attempt KI-Hilfe genutzt hast.';
-  if (!messageToUser) return suffix;
-  if (messageToUser.includes(suffix)) return messageToUser;
-  return `${messageToUser}\n${suffix}`;
 }
 
 function asOptionalString(value: unknown) {

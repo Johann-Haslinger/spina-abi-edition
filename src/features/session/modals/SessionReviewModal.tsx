@@ -3,8 +3,21 @@ import { IoClose } from 'react-icons/io5';
 import { PrimaryButton, SecondaryButton } from '../../../components/Button';
 import { Modal } from '../../../components/Modal';
 import type { Attempt, StudySession } from '../../../domain/models';
-import { assetRepo, attemptRepo, studySessionRepo } from '../../../repositories';
-import { formatClockTime, formatDuration } from '../../../utils/time';
+import {
+  assetRepo,
+  attemptRepo,
+  chapterRepo,
+  requirementRepo,
+  studySessionRepo,
+} from '../../../repositories';
+import {
+  formatClockTime,
+  formatDuration,
+  formatDurationForAiReview,
+} from '../../../utils/time';
+import { requestReviewSummary } from '../ai/aiClient';
+import type { ReviewSummaryResponse } from '../ai/reviewSummaryTypes';
+import { AiReviewSummaryCard } from '../components/AiReviewSummaryCard';
 import { formatTaskPath } from '../utils/formatTaskPath';
 
 export type SessionSummaryState = {
@@ -32,6 +45,17 @@ export function SessionReviewModal(props: {
 
   const groups = useSessionExerciseGroups(details, assetTitleById);
 
+  const { aiSummary, aiSummaryLoading, aiSummaryError } = useSessionAiReviewSummary({
+    open: props.open,
+    summary: props.summary,
+    topicName: props.topicName,
+    loading,
+    error,
+    details,
+    assetTitleById,
+    stats,
+  });
+
   return (
     <Modal
       open={props.open}
@@ -39,17 +63,11 @@ export function SessionReviewModal(props: {
       footer={<PrimaryButton onClick={props.onClose}>Weiter</PrimaryButton>}
     >
       <div className="space-y-2">
-        <div className="flex justify-between">
-          <div className="text-2xl font-semibold text-white pb-4 leading-9 mt-4">
-            <span className="text-white/70"> {props.topicName} Session </span> <br />
-            erfolgreich beendet 🎉
-          </div>
-          <SecondaryButton
-            className="absolute right-6 top-6"
-            icon={<IoClose />}
-            onClick={props.onClose}
-          />
-        </div>
+        <SecondaryButton
+          className="absolute right-6 top-6"
+          icon={<IoClose />}
+          onClick={props.onClose}
+        />
 
         {loading ? <div className="text-sm text-slate-400">Lade…</div> : null}
         {error ? (
@@ -60,23 +78,31 @@ export function SessionReviewModal(props: {
 
         {!loading && !error ? (
           <>
-            <div className="rounded-xl flex justify-between border bg-white/3 border-white/3 px-3 py-2 text-sm">
-              <div> {message}</div>
-              <div>🚀</div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <StatCard label="Dauer" value={formatDuration(stats.totalSeconds)} />
-              <StatCard label="Arbeitszeit" value={formatDuration(stats.workSeconds)} />
-              <StatCard label="Teilaufgaben" value={String(stats.attempts)} />
-              <StatCard
-                label="Ergebnis"
-                value={`✅ ${stats.correct}    🟨 ${stats.partial}  ❌ ${stats.wrong}`}
-              />
-            </div>
+            <AiReviewSummaryCard
+              loading={aiSummaryLoading}
+              error={aiSummaryError}
+              data={aiSummary}
+              fallback={
+                <div className="flex justify-between gap-3">
+                  <span>{message}</span>
+                  <span aria-hidden>🚀</span>
+                </div>
+              }
+              details={
+                <div className="grid grid-cols-2 gap-2">
+                  <StatCard label="Dauer" value={formatDuration(stats.totalSeconds)} />
+                  <StatCard label="Arbeitszeit" value={formatDuration(stats.workSeconds)} />
+                  <StatCard label="Teilaufgaben" value={String(stats.attempts)} />
+                  <StatCard
+                    label="Ergebnis"
+                    value={`✅ ${stats.correct}    🟨 ${stats.partial}  ❌ ${stats.wrong}`}
+                  />
+                </div>
+              }
+            />
 
             <div className="mt-8 space-y-2">
-              <div className="text-xs font-semibold text-white/50 mb-4">Bearbeitete Übungen</div>
+              <div className="text-xs font-semibold text-white/50 mb-1">BEARBEITETE ÜBUNGEN</div>
               {groups.length === 0 ? (
                 <div className="text-sm text-white/70">
                   Keine Übungen bearbeitet (keine Attempts).
@@ -141,14 +167,7 @@ export function SessionReviewModal(props: {
                                 <ResultBadge result={r.attempt.result} />
                               </div>
                               {r.attempt.errorType ? (
-                                <div className="mt-2 text-xs text-rose-200">
-                                  Fehler: {r.attempt.errorType}
-                                </div>
-                              ) : null}
-                              {r.attempt.note ? (
-                                <div className="mt-1 text-xs text-slate-200">
-                                  Notiz: {r.attempt.note}
-                                </div>
+                                <div className="mt-2 text-xs text-rose-200">{r.attempt.note}</div>
                               ) : null}
                             </div>
                           ))}
@@ -258,79 +277,235 @@ function useMotivationMessage(stats: { attempts: number; correct: number; wrong:
   }, [stats.attempts, stats.correct, stats.wrong]);
 }
 
-function useSessionExerciseGroups(
-  details: Array<{
+type SessionDetailRow = {
+  attempt: Attempt;
+  assetId: string;
+  problemIdx: number;
+  subproblemLabel: string;
+  subsubproblemLabel?: string;
+};
+
+type SessionExerciseGroup = {
+  key: string;
+  assetId: string;
+  title: string;
+  rows: Array<{
     attempt: Attempt;
-    assetId: string;
     problemIdx: number;
     subproblemLabel: string;
     subsubproblemLabel?: string;
-  }>,
+  }>;
+  stats: {
+    attempts: number;
+    correct: number;
+    partial: number;
+    wrong: number;
+    workSeconds: number;
+  };
+};
+
+function buildSessionExerciseGroups(
+  details: SessionDetailRow[],
+  assetTitleById: Record<string, string>,
+): SessionExerciseGroup[] {
+  const map = new Map<string, SessionExerciseGroup>();
+  for (const d of details) {
+    const key = `${d.assetId}`;
+    const title = `${assetTitleById[d.assetId] ?? 'Übung'}`;
+    const existing = map.get(key);
+    const row = {
+      attempt: d.attempt,
+      problemIdx: d.problemIdx,
+      subproblemLabel: d.subproblemLabel,
+      subsubproblemLabel: d.subsubproblemLabel,
+    };
+    if (!existing) {
+      map.set(key, {
+        key,
+        assetId: d.assetId,
+        title,
+        rows: [row],
+        stats: {
+          attempts: 0,
+          correct: 0,
+          partial: 0,
+          wrong: 0,
+          workSeconds: 0,
+        },
+      });
+    } else {
+      existing.rows.push(row);
+    }
+  }
+
+  const groups = Array.from(map.values());
+  for (const g of groups) {
+    g.rows.sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
+    g.stats.attempts = g.rows.length;
+    g.stats.correct = g.rows.filter((r) => r.attempt.result === 'correct').length;
+    g.stats.partial = g.rows.filter((r) => r.attempt.result === 'partial').length;
+    g.stats.wrong = g.rows.filter((r) => r.attempt.result === 'wrong').length;
+    g.stats.workSeconds = g.rows.reduce((acc, r) => acc + r.attempt.seconds, 0);
+  }
+  groups.sort((a, b) => a.title.localeCompare(b.title));
+  return groups;
+}
+
+function useSessionExerciseGroups(
+  details: SessionDetailRow[],
   assetTitleById: Record<string, string>,
 ) {
-  return useMemo(() => {
-    type Row = {
-      attempt: Attempt;
-      problemIdx: number;
-      subproblemLabel: string;
-      subsubproblemLabel?: string;
-    };
-    type Group = {
-      key: string;
-      assetId: string;
-      title: string;
-      rows: Row[];
-      stats: {
-        attempts: number;
-        correct: number;
-        partial: number;
-        wrong: number;
-        workSeconds: number;
-      };
-    };
+  return useMemo(
+    () => buildSessionExerciseGroups(details, assetTitleById),
+    [details, assetTitleById],
+  );
+}
 
-    const map = new Map<string, Group>();
-    for (const d of details) {
-      const key = `${d.assetId}`;
-      const title = `${assetTitleById[d.assetId] ?? 'Übung'}`;
-      const existing = map.get(key);
-      const row: Row = {
-        attempt: d.attempt,
-        problemIdx: d.problemIdx,
-        subproblemLabel: d.subproblemLabel,
-        subsubproblemLabel: d.subsubproblemLabel,
-      };
-      if (!existing) {
-        map.set(key, {
-          key,
-          assetId: d.assetId,
-          title,
-          rows: [row],
-          stats: {
-            attempts: 0,
-            correct: 0,
-            partial: 0,
-            wrong: 0,
-            workSeconds: 0,
+function useSessionAiReviewSummary(input: {
+  open: boolean;
+  summary: SessionSummaryState | null;
+  topicName?: string;
+  loading: boolean;
+  error: string | null;
+  details: SessionDetailRow[];
+  assetTitleById: Record<string, string>;
+  stats: {
+    correct: number;
+    partial: number;
+    wrong: number;
+    workSeconds: number;
+    totalSeconds: number;
+    attempts: number;
+  };
+}) {
+  const [aiSummary, setAiSummary] = useState<ReviewSummaryResponse | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
+
+  const detailKey = useMemo(
+    () =>
+      input.details.length
+        ? input.details
+            .map((d) => d.attempt.id)
+            .sort()
+            .join(',')
+        : '',
+    [input.details],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!input.open || !input.summary || input.loading || input.error || !detailKey) {
+      setAiSummary(null);
+      setAiSummaryLoading(false);
+      setAiSummaryError(null);
+      return;
+    }
+
+    setAiSummaryLoading(true);
+    setAiSummaryError(null);
+    setAiSummary(null);
+
+    void (async () => {
+      const summaryState = input.summary;
+      if (!summaryState) return;
+      try {
+        const groups = buildSessionExerciseGroups(input.details, input.assetTitleById);
+        const chapters = await chapterRepo.listByTopic(summaryState.topicId);
+        const chapterIds = chapters.map((c) => c.id);
+        const requirements =
+          chapterIds.length > 0 ? await requirementRepo.listByChapterIds(chapterIds) : [];
+
+        const reqsByChapter = new Map<string, typeof requirements>();
+        for (const r of requirements) {
+          const list = reqsByChapter.get(r.chapterId) ?? [];
+          list.push(r);
+          reqsByChapter.set(r.chapterId, list);
+        }
+
+        let totalMastery = 0;
+        for (const r of requirements) totalMastery += r.mastery;
+        const avgRequirementMastery =
+          requirements.length > 0 ? totalMastery / requirements.length : 0;
+
+        const chapterSnapshots = chapters.slice(0, 8).map((ch) => {
+          const rs = reqsByChapter.get(ch.id) ?? [];
+          const avg = rs.length ? rs.reduce((s, x) => s + x.mastery, 0) / rs.length : 0;
+          return { name: ch.name, avgMastery: avg, requirementCount: rs.length };
+        });
+
+        const weakest = [...requirements]
+          .sort((a, b) => a.mastery - b.mastery)
+          .slice(0, 5)
+          .map((r) => ({ name: r.name, mastery: r.mastery }));
+
+        const topicContext = {
+          topicName: input.topicName,
+          avgRequirementMastery,
+          chapters: chapterSnapshots,
+          weakest,
+        };
+
+        const totals = {
+          attempts: input.stats.attempts,
+          correct: input.stats.correct,
+          partial: input.stats.partial,
+          wrong: input.stats.wrong,
+          workTime: formatDurationForAiReview(input.stats.workSeconds),
+        };
+
+        const exercises = groups.map((g) => ({
+          title: g.title,
+          totals: {
+            attempts: g.stats.attempts,
+            correct: g.stats.correct,
+            partial: g.stats.partial,
+            wrong: g.stats.wrong,
+            workTime: formatDurationForAiReview(g.stats.workSeconds),
+          },
+        }));
+
+        const data = await requestReviewSummary({
+          scope: 'session',
+          session: {
+            sessionDuration: formatDurationForAiReview(input.stats.totalSeconds),
+            workTime: formatDurationForAiReview(input.stats.workSeconds),
+            exerciseCount: groups.length,
+            totals,
+            exercises,
+            topicContext,
           },
         });
-      } else {
-        existing.rows.push(row);
+        if (!cancelled) setAiSummary(data);
+      } catch (e) {
+        if (!cancelled)
+          setAiSummaryError(e instanceof Error ? e.message : 'KI-Zusammenfassung fehlgeschlagen');
+      } finally {
+        if (!cancelled) setAiSummaryLoading(false);
       }
-    }
+    })();
 
-    const groups = Array.from(map.values());
-    for (const g of groups) {
-      g.rows.sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
-      g.stats.attempts = g.rows.length;
-      g.stats.correct = g.rows.filter((r) => r.attempt.result === 'correct').length;
-      g.stats.partial = g.rows.filter((r) => r.attempt.result === 'partial').length;
-      g.stats.wrong = g.rows.filter((r) => r.attempt.result === 'wrong').length;
-      g.stats.workSeconds = g.rows.reduce((acc, r) => acc + r.attempt.seconds, 0);
-    }
-    groups.sort((a, b) => a.title.localeCompare(b.title));
-    return groups;
-  }, [details, assetTitleById]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    input.open,
+    input.summary,
+    input.loading,
+    input.error,
+    input.topicName,
+    detailKey,
+    input.details,
+    input.assetTitleById,
+    input.stats.attempts,
+    input.stats.correct,
+    input.stats.partial,
+    input.stats.wrong,
+    input.stats.workSeconds,
+    input.stats.totalSeconds,
+  ]);
+
+  return { aiSummary, aiSummaryLoading, aiSummaryError };
 }
 
 function ResultBadge(props: { result: Attempt['result'] }) {
@@ -339,8 +514,8 @@ function ResultBadge(props: { result: Attempt['result'] }) {
     props.result === 'correct'
       ? 'bg-emerald-950/40 text-emerald-200 border-emerald-900/50'
       : props.result === 'partial'
-      ? 'bg-amber-950/40 text-amber-200 border-amber-900/50'
-      : 'bg-rose-950/40 text-rose-200 border-rose-900/50';
+        ? 'bg-amber-950/40 text-amber-200 border-amber-900/50'
+        : 'bg-rose-950/40 text-rose-200 border-rose-900/50';
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-1 text-sm ${cls}`}>
       {label}

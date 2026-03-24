@@ -1,4 +1,5 @@
 import { useActiveSessionStore } from '../../stores/activeSessionStore'
+import { useNotificationsStore } from '../../stores/notificationsStore'
 import { useStudyHudVisibility } from './stores/studyHudStore'
 import { ActiveSessionWidget } from './sessionWidget/ActiveSessionWidget'
 import { NoActiveSessionWidget } from './sessionWidget/NoActiveSessionWidget'
@@ -6,6 +7,14 @@ import { NoActiveSessionWidget } from './sessionWidget/NoActiveSessionWidget'
 export function SessionWidget() {
   const { active } = useActiveSessionStore()
   const { suppressNonStudyAi } = useStudyHudVisibility()
-  if (active) return <ActiveSessionWidget active={active} hidden={suppressNonStudyAi} />
+  const attemptReviewPanelOpen = useNotificationsStore((s) => s.attemptReviewPanelOpen)
+  if (active)
+    return (
+      <ActiveSessionWidget
+        active={active}
+        hidden={suppressNonStudyAi || attemptReviewPanelOpen}
+        offscreenMode={attemptReviewPanelOpen ? 'review' : suppressNonStudyAi ? 'studyAi' : null}
+      />
+    )
   return <NoActiveSessionWidget />
 }

@@ -79,26 +79,23 @@ async function runAttemptAutoReview(input: {
     });
 
     const matchedRequirements = resolveRequirements(review.requirements, requirements);
-    const progressRequirements = usedAiHelp
-      ? matchedRequirements.map((entry) => ({ ...entry, masteryDelta: 0 }))
-      : matchedRequirements;
     await attemptRequirementLinkRepo.replaceForAttempt(
       input.attemptId,
-      progressRequirements.map((entry) => ({
+      matchedRequirements.map((entry) => ({
         requirementId: entry.requirement.id,
         confidence: entry.confidence,
         masteryDelta: entry.masteryDelta,
       })),
     );
 
-    for (const entry of progressRequirements) {
+    for (const entry of matchedRequirements) {
       await requirementRepo.update(entry.requirement.id, {
         mastery: clamp(entry.requirement.mastery + entry.masteryDelta),
       });
     }
     await attachRequirementsToTask(
       input.attemptId,
-      progressRequirements.map((entry) => entry.requirement.id),
+      matchedRequirements.map((entry) => entry.requirement.id),
     );
 
     await attemptAiReviewRepo.upsert({
@@ -141,7 +138,7 @@ async function runAttemptAutoReview(input: {
         subjectId: input.subjectId,
         topicId: input.topicId,
         assetId: input.assetId,
-        requirementId: progressRequirements[0]?.requirement.id,
+        requirementId: matchedRequirements[0]?.requirement.id,
         attemptId: input.attemptId,
         dueAtMs: review.scheduleReview.dueAtMs,
         status: 'pending',
@@ -153,41 +150,29 @@ async function runAttemptAutoReview(input: {
       });
     }
 
-    notifications.push({
-      tone:
-        review.result === 'correct' ? 'success' : review.result === 'partial' ? 'warning' : 'error',
-      title: 'KI-Bewertung abgeschlossen',
-      message: review.messageToUser || review.notes || 'Die Analyse ist jetzt verfügbar.',
-      details:
-        review.result === 'correct'
-          ? {
-              kind: 'attemptReviewSuccess',
-              score: review.score,
-              messageToUser: review.messageToUser,
-              notes: review.notes,
-              solutionExplanation: review.solutionExplanation,
-              requirementUpdates: progressRequirements
-                .filter((entry) => entry.masteryDelta !== 0)
-                .map((entry) => ({
-                  requirementId: entry.requirement.id,
-                  requirementName: entry.requirement.name,
-                  masteryDelta: entry.masteryDelta,
-                })),
-            }
-          : undefined,
-      action:
-        review.result === 'correct'
-          ? undefined
-          : {
-              kind: 'openAttemptReview',
-              subjectId: input.subjectId,
-              topicId: input.topicId,
-              assetId: input.assetId,
-              attemptId: input.attemptId,
-            },
-    });
+    if (review.result === 'correct') {
+      notifications.push({
+        tone: 'success',
+        title: 'KI-Bewertung abgeschlossen',
+        message: review.messageToUser || review.notes || 'Die Analyse ist jetzt verfügbar.',
+        details: {
+          kind: 'attemptReviewSuccess',
+          score: review.score,
+          messageToUser: review.messageToUser,
+          notes: review.notes,
+          solutionExplanation: review.solutionExplanation,
+          requirementUpdates: matchedRequirements
+            .filter((entry) => entry.masteryDelta !== 0)
+            .map((entry) => ({
+              requirementId: entry.requirement.id,
+              requirementName: entry.requirement.name,
+              masteryDelta: entry.masteryDelta,
+            })),
+        },
+      });
+    }
 
-    if (review.result !== 'correct' && (review.errorExplanation || review.solutionExplanation)) {
+    if (review.result !== 'correct') {
       useNotificationsStore.getState().openAttemptReview({
         subjectId: input.subjectId,
         topicId: input.topicId,

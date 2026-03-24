@@ -31,6 +31,22 @@ export function formatDurationClock(totalSeconds: number) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * Dauer für KI-Prompts: unter 60 Min nur Minuten, ab 60 Min Stunden (+ Restminuten).
+ * Einfacher lesbar als Rohsekunden.
+ */
+export function formatDurationForAiReview(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const totalMinutes = Math.round(seconds / 60);
+  if (totalMinutes < 60) {
+    return `${totalMinutes} Min`;
+  }
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (m === 0) return `${h} Std`;
+  return `${h} Std ${m} Min`;
+}
+
 export function formatClockTime(ms: number) {
   const hhmm = new Intl.DateTimeFormat('de-DE', {
     hour: '2-digit',

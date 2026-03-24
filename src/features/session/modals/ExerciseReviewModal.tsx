@@ -2,8 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { PrimaryButton, SecondaryButton } from '../../../components/Button';
 import { Modal } from '../../../components/Modal';
 import type { Attempt, AttemptAiReview } from '../../../domain/models';
-import { attemptAiReviewRepo, attemptRepo, studySessionRepo } from '../../../repositories';
-import { formatClockTime, formatDuration } from '../../../utils/time';
+import {
+  assetRepo,
+  attemptAiReviewRepo,
+  attemptRepo,
+  studySessionRepo,
+} from '../../../repositories';
+import {
+  formatClockTime,
+  formatDuration,
+  formatDurationForAiReview,
+} from '../../../utils/time';
+import { requestReviewSummary } from '../ai/aiClient';
+import type { ReviewSummaryResponse } from '../ai/reviewSummaryTypes';
+import { AiReviewSummaryCard } from '../components/AiReviewSummaryCard';
 import { formatTaskPath } from '../utils/formatTaskPath';
 
 type Row = {
@@ -25,6 +37,9 @@ export function ExerciseReviewModal(props: {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<ReviewSummaryResponse | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [aiSummaryError, setAiSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,7 +64,9 @@ export function ExerciseReviewModal(props: {
           })),
         );
         const aiReviewByAttemptId = new Map(
-          aiReviews.filter((row) => row.review).map((row) => [row.attemptId, row.review as AttemptAiReview]),
+          aiReviews
+            .filter((row) => row.review)
+            .map((row) => [row.attemptId, row.review as AttemptAiReview]),
         );
         if (!cancelled)
           setRows(
@@ -69,6 +86,67 @@ export function ExerciseReviewModal(props: {
       cancelled = true;
     };
   }, [props.open, props.studySessionId, props.assetId]);
+
+  const rowsFingerprint = useMemo(
+    () => rows.map((r) => `${r.attempt.id}:${r.attempt.endedAtMs}`).join('|'),
+    [rows],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!props.open || !props.studySessionId || rows.length === 0) {
+      setAiSummary(null);
+      setAiSummaryLoading(false);
+      setAiSummaryError(null);
+      return;
+    }
+    setAiSummaryLoading(true);
+    setAiSummaryError(null);
+    setAiSummary(null);
+    void (async () => {
+      try {
+        const asset = await assetRepo.get(props.assetId);
+        const title = asset?.title?.trim() || 'Übung';
+        const correct = rows.filter((r) => r.attempt.result === 'correct').length;
+        const partial = rows.filter((r) => r.attempt.result === 'partial').length;
+        const wrong = rows.filter((r) => r.attempt.result === 'wrong').length;
+        const workSeconds = rows.reduce((acc, r) => acc + r.attempt.seconds, 0);
+        const items = rows.map((r) => ({
+          path: formatTaskPath({
+            problemIdx: r.problemIdx,
+            subproblemLabel: r.subproblemLabel,
+            subsubproblemLabel: r.subsubproblemLabel,
+          }),
+          result: r.attempt.result,
+          duration: formatDurationForAiReview(r.attempt.seconds),
+          ...(r.aiReview?.score !== undefined ? { aiScore: r.aiReview.score } : {}),
+        }));
+        const data = await requestReviewSummary({
+          scope: 'exercise',
+          exercise: {
+            title,
+            totals: {
+              attempts: rows.length,
+              correct,
+              partial,
+              wrong,
+              workTime: formatDurationForAiReview(workSeconds),
+            },
+            items,
+          },
+        });
+        if (!cancelled) setAiSummary(data);
+      } catch (e) {
+        if (!cancelled)
+          setAiSummaryError(e instanceof Error ? e.message : 'KI-Zusammenfassung fehlgeschlagen');
+      } finally {
+        if (!cancelled) setAiSummaryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.open, props.studySessionId, props.assetId, rowsFingerprint]);
 
   const stats = useMemo(() => {
     const totalSeconds = rows.reduce((acc, r) => acc + r.attempt.seconds, 0);
@@ -129,23 +207,33 @@ export function ExerciseReviewModal(props: {
       }
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2 text-xs text-slate-300">
-          <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
-            Aufgaben: {stats.count}
-          </span>
-          <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
-            ✅ {stats.correct}
-          </span>
-          <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
-            🟨 {stats.partial}
-          </span>
-          <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
-            ❌ {stats.wrong}
-          </span>
-          <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
-            Zeit: {formatDuration(stats.totalSeconds)}
-          </span>
-        </div>
+        {!loading && !error && rows.length > 0 ? (
+          <AiReviewSummaryCard
+            loading={aiSummaryLoading}
+            error={aiSummaryError}
+            data={aiSummary}
+            fallback="Die KI-Zusammenfassung konnte nicht geladen werden."
+            details={
+              <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
+                  Aufgaben: {stats.count}
+                </span>
+                <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
+                  ✅ {stats.correct}
+                </span>
+                <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
+                  🟨 {stats.partial}
+                </span>
+                <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
+                  ❌ {stats.wrong}
+                </span>
+                <span className="rounded-full bg-white/5 px-3 py-1.5 border border-white/5">
+                  Zeit: {formatDuration(stats.totalSeconds)}
+                </span>
+              </div>
+            }
+          />
+        ) : null}
 
         {loading ? <div className="text-sm text-slate-400">Lade…</div> : null}
         {error ? (
@@ -203,22 +291,12 @@ export function ExerciseReviewModal(props: {
                                   Fehler: {a.errorType}
                                 </div>
                               ) : null}
-                              {leaf.attempts[0] && leaf.attempts[0].reviewStatus !== 'none' ? (
-                                <div className="mt-1 text-xs text-white/60">
-                                  Review: {formatReviewStatus(leaf.attempts[0].reviewStatus)}
-                                </div>
-                              ) : null}
-                              {leaf.attempts[0] && rows.find((row) => row.attempt.id === leaf.attempts[0].id)?.aiReview
-                                ?.messageToUser ? (
-                                <div className="mt-2 text-xs text-emerald-100">
-                                  KI: {
-                                    rows.find((row) => row.attempt.id === leaf.attempts[0].id)?.aiReview
-                                      ?.messageToUser
-                                  }
-                                </div>
-                              ) : null}
+
                               {a?.note ? (
-                                <div className="mt-1 text-xs text-slate-200">Notiz: {a.note}</div>
+                                <div className="mt-1 text-xs text-slate-200">
+                                  <span className="text-white/80 font-semibold">Notiz:</span>{' '}
+                                  {a.note}
+                                </div>
                               ) : null}
                             </>
                           );
@@ -260,28 +338,11 @@ function ResultBadge(props: { result: Attempt['result']; reviewStatus: Attempt['
     props.result === 'correct'
       ? 'bg-emerald-500/5 text-emerald-200 border-emerald-500/10'
       : props.result === 'partial'
-      ? 'bg-amber-500/5 text-amber-200 border-amber-500/10'
-      : 'bg-rose-500/5 text-rose-200 border-rose-500/10';
+        ? 'bg-amber-500/5 text-amber-200 border-amber-500/10'
+        : 'bg-rose-500/5 text-rose-200 border-rose-500/10';
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-1 m-0.5 ${cls}`}>
       {label}
     </span>
   );
-}
-
-function formatReviewStatus(status: Attempt['reviewStatus']) {
-  switch (status) {
-    case 'queued':
-      return 'wartet';
-    case 'processing':
-      return 'in Bearbeitung';
-    case 'done':
-      return 'fertig';
-    case 'failed':
-      return 'fehlgeschlagen';
-    case 'manual_required':
-      return 'manuell nötig';
-    default:
-      return 'manuell';
-  }
 }

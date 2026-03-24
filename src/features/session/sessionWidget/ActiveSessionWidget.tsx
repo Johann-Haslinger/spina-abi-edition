@@ -8,15 +8,19 @@ import { useActiveSessionStore, type ActiveSession } from '../../../stores/activ
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { formatDuration } from '../../../utils/time';
-import { HUD_VARIANTS_TOP_RIGHT } from '../components/studyHud/hudMotion';
+import { HUD_SPRING, HUD_VARIANTS_TOP_RIGHT } from '../components/studyHud/hudMotion';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyStore } from '../stores/studyStore';
 import { formatTaskPath } from '../utils/formatTaskPath';
 import { ActiveSessionInfoPanel } from './ActiveSessionInfoPanel';
 import { getElapsedMs } from './utils';
 
-export function ActiveSessionWidget(props: { active: ActiveSession; hidden?: boolean }) {
-  const { active, hidden = false } = props;
+export function ActiveSessionWidget(props: {
+  active: ActiveSession;
+  hidden?: boolean;
+  offscreenMode?: 'studyAi' | 'review' | null;
+}) {
+  const { active, hidden = false, offscreenMode = null } = props;
   const navigate = useNavigate();
   const { end } = useActiveSessionStore();
   const { studySessionId, reset, currentAttempt, taskDepthByAssetId, loadTaskDepth } =
@@ -65,11 +69,19 @@ export function ActiveSessionWidget(props: { active: ActiveSession; hidden?: boo
     });
   }, [active.subjectId, active.topicId, active.startedAtMs, end, navigate, reset, studySessionId]);
 
+  const variants =
+    offscreenMode === 'review'
+      ? {
+          shown: { x: 0, y: 0, opacity: 1, scale: 1, transition: HUD_SPRING },
+          hidden: { x: 480, y: -160, opacity: 0, scale: 0.95, transition: HUD_SPRING },
+        }
+      : HUD_VARIANTS_TOP_RIGHT;
+
   return (
     <motion.div
       className="fixed top-6 right-6 w-[200px] z-1000000000 max-w-[calc(100vw-32px)]"
       style={{ pointerEvents: hidden ? 'none' : 'auto' }}
-      variants={HUD_VARIANTS_TOP_RIGHT}
+      variants={variants}
       initial="hidden"
       animate={hidden ? 'hidden' : 'shown'}
       exit="hidden"

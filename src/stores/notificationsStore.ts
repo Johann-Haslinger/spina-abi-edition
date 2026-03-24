@@ -39,6 +39,8 @@ type NotificationsState = {
     assetId: string;
     attemptId: string;
   } | null;
+  /** True while AiErrorReviewPanel actually shows review content (not loading). */
+  attemptReviewPanelOpen: boolean;
   push: (input: Omit<AppNotification, 'id' | 'createdAtMs'>) => void;
   dismiss: (id: string) => void;
   openAttemptReview: (input: {
@@ -48,11 +50,13 @@ type NotificationsState = {
     attemptId: string;
   }) => void;
   closeAttemptReview: () => void;
+  setAttemptReviewPanelOpen: (open: boolean) => void;
 };
 
 export const useNotificationsStore = create<NotificationsState>((set) => ({
   notifications: [],
   activeAttemptReview: null,
+  attemptReviewPanelOpen: false,
   push: (input) =>
     set((state) => ({
       notifications: [
@@ -73,5 +77,6 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
       notifications: state.notifications.filter((notification) => notification.id !== id),
     })),
   openAttemptReview: (input) => set({ activeAttemptReview: input }),
-  closeAttemptReview: () => set({ activeAttemptReview: null }),
+  closeAttemptReview: () => set({ activeAttemptReview: null, attemptReviewPanelOpen: false }),
+  setAttemptReviewPanelOpen: (open) => set({ attemptReviewPanelOpen: open }),
 }));

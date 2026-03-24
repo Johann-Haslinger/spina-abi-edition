@@ -3,6 +3,7 @@ import { pdfBytesSha256Hex, pdfBytesToBase64 } from '../../../ink/attemptComposi
 import { getSupabaseClient } from '../../../lib/supabaseClient';
 import { openAiPdfFileCacheRepo } from '../../../repositories';
 import type { StudyAiMessage } from '../stores/studyAiChatStore';
+import type { ReviewSummaryRequest, ReviewSummaryResponse } from './reviewSummaryTypes';
 
 const MAX_PDF_BYTES = 12 * 1024 * 1024;
 const MAX_ATTEMPT_IMAGE_CHARS = 6_000_000;
@@ -246,6 +247,31 @@ export type AttemptReviewResponse = {
     masteryDelta: number;
   }>;
 };
+
+export async function requestReviewSummary(input: ReviewSummaryRequest): Promise<ReviewSummaryResponse> {
+  const supabase = getSupabaseClient();
+  const body =
+    input.scope === 'exercise'
+      ? { scope: 'exercise', exercise: input.exercise }
+      : { scope: 'session', session: input.session };
+  const { data, error } = await supabase.functions.invoke('review-summary', { body });
+  const payload = await unwrapFunctionResponse(data, error);
+  if (!payload || typeof payload !== 'object') throw new Error('Ungültige Summary-Antwort');
+  const p = payload as Record<string, unknown>;
+  const headline = typeof p.headline === 'string' ? p.headline.trim() : '';
+  const summary = typeof p.summary === 'string' ? p.summary.trim() : '';
+  const tip = typeof p.tip === 'string' ? p.tip.trim() : '';
+  const focusAreas = Array.isArray(p.focusAreas)
+    ? p.focusAreas.filter((x): x is string => typeof x === 'string' && Boolean(x.trim()))
+    : [];
+  if (!summary || !tip) throw new Error('Summary-Antwort unvollständig');
+  return {
+    headline: headline || 'KI-Zusammenfassung',
+    summary,
+    tip,
+    focusAreas,
+  };
+}
 
 export async function requestAttemptReview(input: {
   attemptId: string;

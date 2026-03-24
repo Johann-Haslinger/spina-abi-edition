@@ -36,8 +36,21 @@ export function NotificationCenter() {
         {notifications.map((notification) => {
           const successDetails =
             notification.details?.kind === 'attemptReviewSuccess' ? notification.details : null;
-          const isExpandedSuccess =
-            Boolean(successDetails) && activeExpandedNotificationId === notification.id;
+          const bodyText = successDetails
+            ? successDetails.messageToUser ||
+              notification.message ||
+              'Die Aufgabe wurde erfolgreich bewertet.'
+            : notification.message;
+          const hasExtraSuccessContent = Boolean(
+            successDetails &&
+            (successDetails.solutionExplanation || successDetails.requirementUpdates.length > 0),
+          );
+          const messageNeedsClamp =
+            Boolean(bodyText) && (bodyText!.length > 85 || (bodyText?.includes('\n') ?? false));
+          const canExpand = Boolean(successDetails && hasExtraSuccessContent) || messageNeedsClamp;
+
+          const isExpanded = activeExpandedNotificationId === notification.id;
+
           return (
             <motion.div
               key={notification.id}
@@ -53,7 +66,7 @@ export function NotificationCenter() {
                 layout
                 transition={{ type: 'spring', stiffness: 500, damping: 42 }}
                 onClick={() => {
-                  if (successDetails) {
+                  if (canExpand) {
                     setExpandedNotificationId((current) =>
                       current === notification.id ? null : notification.id,
                     );
@@ -73,23 +86,23 @@ export function NotificationCenter() {
                   dismiss(notification.id);
                 }}
                 className={`pointer-events-auto flex rounded-3xl border border-white/10 bg-[#243957]/80 text-left shadow-lg backdrop-blur ${
-                  isExpandedSuccess
+                  isExpanded
                     ? 'w-120 max-w-[calc(100vw-1rem)] items-start gap-3 px-5 py-5'
                     : 'w-104 max-w-[calc(100vw-1rem)] items-center'
                 }`}
               >
-                <div className={isExpandedSuccess ? 'min-w-0 flex-1' : 'px-3 py-3 pr-4'}>
+                <div className={isExpanded ? 'min-w-0 flex-1' : 'px-3 py-3 pr-4'}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-semibold">{notification.title}</div>
-                      {successDetails ? (
-                        <div className="mt-1 text-sm text-white/75">
-                          {successDetails.messageToUser ||
-                            notification.message ||
-                            'Die Aufgabe wurde erfolgreich bewertet.'}
+                      {bodyText ? (
+                        <div
+                          className={`mt-1 text-sm text-white/75 whitespace-pre-wrap ${
+                            !isExpanded ? 'line-clamp-2' : ''
+                          }`}
+                        >
+                          {bodyText}
                         </div>
-                      ) : notification.message ? (
-                        <div className="mt-1 text-sm text-white/75">{notification.message}</div>
                       ) : null}
                     </div>
 
@@ -101,7 +114,7 @@ export function NotificationCenter() {
                   </div>
 
                   <AnimatePresence initial={false}>
-                    {isExpandedSuccess ? (
+                    {isExpanded && successDetails && hasExtraSuccessContent ? (
                       <motion.div
                         key="expanded-success-content"
                         initial={{ opacity: 0, height: 0 }}
@@ -110,13 +123,13 @@ export function NotificationCenter() {
                         transition={{ duration: 0.2, ease: 'easeInOut' }}
                         className="overflow-hidden"
                       >
-                        {successDetails?.solutionExplanation ? (
+                        {successDetails.solutionExplanation ? (
                           <div className="mt-3 rounded-2xl border border-[#00AE27]/10 bg-[#00AE27]/10 px-3 py-2 text-sm text-white whitespace-pre-wrap">
                             {successDetails.solutionExplanation}
                           </div>
                         ) : null}
 
-                        {successDetails?.requirementUpdates.length ? (
+                        {successDetails.requirementUpdates.length ? (
                           <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
                             <div className="text-xs font-semibold uppercase tracking-wide text-white/50">
                               Fortschritt in Requirements
@@ -142,13 +155,13 @@ export function NotificationCenter() {
                     ) : null}
                   </AnimatePresence>
 
-                  {successDetails ? (
+                  {canExpand ? (
                     <div className="mt-2 text-xs font-medium text-white/55">
-                      {isExpandedSuccess ? 'Tippen zum Einklappen' : 'Tippen fur Details'}
+                      {isExpanded ? 'Tippen zum Einklappen' : 'Tippen für Details'}
                     </div>
                   ) : null}
 
-                  {notification.action ? (
+                  {notification.action && !canExpand ? (
                     <div className="mt-2 text-xs font-medium text-white/55">Tippen zum Öffnen</div>
                   ) : null}
                 </div>
