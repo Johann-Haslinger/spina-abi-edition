@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { db } from '../../../db/db';
 import type { AttemptResult, ExercisePageStatus, ExerciseTaskDepth } from '../../../domain/models';
+import { appendAttemptAiHelpNote } from '../review/attemptAiHelp';
 import { newId } from '../../../lib/id';
 import {
   attemptRepo,
@@ -23,6 +24,7 @@ type CurrentAttempt = {
   problemIdx: number;
   subproblemLabel: string;
   subsubproblemLabel: string;
+  usedAiHelp?: boolean;
 };
 
 type StudyState = {
@@ -58,6 +60,7 @@ type StudyState = {
     subproblemLabel?: string;
     subsubproblemLabel?: string;
   }) => void;
+  markCurrentAttemptUsedAiHelp: () => void;
   cancelAttempt: () => void;
 
   loadExerciseStatus: (assetId: string) => Promise<void>;
@@ -258,9 +261,15 @@ export const useStudyStore = create<StudyState>()(
             problemIdx: snapshotProblemIdx,
             subproblemLabel: snapshotSubproblemLabel,
             subsubproblemLabel: snapshotSubsubproblemLabel,
+            usedAiHelp: false,
           },
         });
       },
+
+      markCurrentAttemptUsedAiHelp: () =>
+        set((s) => ({
+          currentAttempt: s.currentAttempt ? { ...s.currentAttempt, usedAiHelp: true } : null,
+        })),
 
       cancelAttempt: () => set({ currentAttempt: null }),
 
@@ -331,7 +340,7 @@ export const useStudyStore = create<StudyState>()(
           endedAtMs,
           seconds,
           result: input.result,
-          note: input.note,
+          note: currentAttempt.usedAiHelp ? appendAttemptAiHelpNote(input.note) : input.note,
           errorType: input.errorType,
           reviewStatus: input.reviewStatus ?? 'none',
         });

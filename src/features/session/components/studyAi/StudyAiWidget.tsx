@@ -7,6 +7,7 @@ import { useNotificationsStore } from '../../../../stores/notificationsStore';
 import { sendStudyAiMessage } from '../../ai/aiClient';
 import { appendAttemptAiHelpNote, hasAttemptUsedAiHelp } from '../../review/attemptAiHelp';
 import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
+import { useStudyStore } from '../../stores/studyStore';
 import {
   useStudyAiChatStore,
   type StudyAiMessage,
@@ -60,6 +61,7 @@ export function StudyAiWidget(props: {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const pushNotification = useNotificationsStore((s) => s.push);
+  const markCurrentAttemptUsedAiHelp = useStudyStore((s) => s.markCurrentAttemptUsedAiHelp);
 
   const isCompactDevice = useMemo(() => getIsCompactDevice(), []);
 
@@ -100,8 +102,9 @@ export function StudyAiWidget(props: {
     try {
       if (props.currentAttemptId) {
         const currentAttempt = await attemptRepo.get(props.currentAttemptId);
-        if (!currentAttempt) throw new Error('Aktueller Attempt konnte nicht geladen werden.');
-        if (!hasAttemptUsedAiHelp(currentAttempt.note)) {
+        if (!currentAttempt) {
+          markCurrentAttemptUsedAiHelp();
+        } else if (!hasAttemptUsedAiHelp(currentAttempt.note)) {
           await attemptRepo.update(props.currentAttemptId, {
             note: appendAttemptAiHelpNote(currentAttempt.note),
           });
