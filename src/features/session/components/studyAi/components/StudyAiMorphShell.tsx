@@ -143,7 +143,7 @@ export function StudyAiMorphShell(props: {
               />
               {props.sending ? (
                 <div className="mt-2">
-                  <StudyAiGeneratingDots compact />
+                  <StudyAiGeneratingDots />
                 </div>
               ) : null}
               {props.error ? <div className="mt-2 text-xs text-rose-200">{props.error}</div> : null}
