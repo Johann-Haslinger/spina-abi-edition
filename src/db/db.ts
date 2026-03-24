@@ -11,8 +11,9 @@ import type {
   Exercise,
   Folder,
   InkStroke,
-  Problem,
+  OpenAiPdfFileCache,
   PlannedItem,
+  Problem,
   Requirement,
   ScheduledReview,
   StudySession,
@@ -43,6 +44,7 @@ export class AbiDb extends Dexie {
   attemptAiReviews!: Table<AttemptAiReview, string>;
   attemptReviewJobs!: Table<AttemptReviewJob, string>;
   inkStrokes!: Table<InkStroke, string>;
+  openAiPdfFileCache!: Table<OpenAiPdfFileCache, string>;
 
   plannedItems!: Table<PlannedItem, string>;
   scheduledReviews!: Table<ScheduledReview, string>;
@@ -229,8 +231,7 @@ export class AbiDb extends Dexie {
       problems: 'id, [exerciseId+idx], exerciseId, idx',
       subproblems: 'id, [problemId+label], problemId, label',
       subsubproblems: 'id, [subproblemId+label], subproblemId, label',
-      attempts:
-        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result',
+      attempts: 'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result',
 
       inkStrokes:
         'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
@@ -238,41 +239,43 @@ export class AbiDb extends Dexie {
       plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
     });
 
-    this.version(11).stores({
-      subjects: 'id, name',
-      topics: 'id, subjectId, orderIndex',
-      folders: 'id, topicId, parentFolderId, orderIndex',
-      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
-      assetFiles: 'assetId',
+    this.version(11)
+      .stores({
+        subjects: 'id, name',
+        topics: 'id, subjectId, orderIndex',
+        folders: 'id, topicId, parentFolderId, orderIndex',
+        assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+        assetFiles: 'assetId',
 
-      curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
-      chapters: 'id, topicId, orderIndex',
-      requirements: 'id, chapterId, difficulty, mastery',
+        curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+        chapters: 'id, topicId, orderIndex',
+        requirements: 'id, chapterId, difficulty, mastery',
 
-      studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
-      exercises: 'id, assetId, status',
-      problems: 'id, [exerciseId+idx], exerciseId, idx',
-      subproblems: 'id, [problemId+label], problemId, label',
-      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
-      attempts:
-        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
-      attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
-      attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
-      attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+        studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+        exercises: 'id, assetId, status',
+        problems: 'id, [exerciseId+idx], exerciseId, idx',
+        subproblems: 'id, [problemId+label], problemId, label',
+        subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+        attempts:
+          'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+        attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+        attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+        attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
 
-      inkStrokes:
-        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+        inkStrokes:
+          'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
 
-      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
-      scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
-    }).upgrade(async (tx) => {
-      await tx
-        .table('attempts')
-        .toCollection()
-        .modify((attempt: { reviewStatus?: unknown }) => {
-          if (typeof attempt.reviewStatus !== 'string') attempt.reviewStatus = 'none';
-        });
-    });
+        plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+        scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('attempts')
+          .toCollection()
+          .modify((attempt: { reviewStatus?: unknown }) => {
+            if (typeof attempt.reviewStatus !== 'string') attempt.reviewStatus = 'none';
+          });
+      });
 
     this.version(12).stores({
       subjects: 'id, name',
@@ -333,19 +336,61 @@ export class AbiDb extends Dexie {
         scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
       })
       .upgrade(async (tx) => {
-        await tx.table('problems').toCollection().modify((row: { requirementIds?: unknown }) => {
-          if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
-        });
-        await tx.table('subproblems').toCollection().modify((row: { requirementIds?: unknown }) => {
-          if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
-        });
-        await tx.table('subsubproblems').toCollection().modify((row: { requirementIds?: unknown }) => {
-          if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
-        });
-        await tx.table('attempts').toCollection().modify((row: { writtenAnswer?: unknown }) => {
-          if ('writtenAnswer' in row) delete row.writtenAnswer;
-        });
+        await tx
+          .table('problems')
+          .toCollection()
+          .modify((row: { requirementIds?: unknown }) => {
+            if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
+          });
+        await tx
+          .table('subproblems')
+          .toCollection()
+          .modify((row: { requirementIds?: unknown }) => {
+            if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
+          });
+        await tx
+          .table('subsubproblems')
+          .toCollection()
+          .modify((row: { requirementIds?: unknown }) => {
+            if (!Array.isArray(row.requirementIds)) row.requirementIds = [];
+          });
+        await tx
+          .table('attempts')
+          .toCollection()
+          .modify((row: { writtenAnswer?: unknown }) => {
+            if ('writtenAnswer' in row) delete row.writtenAnswer;
+          });
       });
+
+    this.version(14).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+
+      curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+      chapters: 'id, topicId, orderIndex',
+      requirements: 'id, chapterId, difficulty, mastery',
+
+      studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+      exercises: 'id, assetId, status',
+      problems: 'id, [exerciseId+idx], exerciseId, idx',
+      subproblems: 'id, [problemId+label], problemId, label',
+      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+      attempts:
+        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+      attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+      attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+      attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+      inkStrokes:
+        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+      openAiPdfFileCache: 'pdfSha256, updatedAtMs',
+
+      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+      scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+    });
   }
 }
 

@@ -1,21 +1,23 @@
 import { IndexedDbAssetFileStore } from './local/IndexedDbAssetFileStore';
 import {
-  LocalAssetRepository,
-  LocalFolderRepository,
-  LocalSubjectRepository,
-  LocalTopicRepository,
-} from './local/LocalRepositories';
-import {
   LocalChapterRepository,
   LocalCurriculumDocumentRepository,
   LocalRequirementRepository,
   LocalScheduledReviewRepository,
 } from './local/LocalCurriculumRepositories';
+import { LocalOpenAiPdfFileCacheRepository } from './local/LocalOpenAiPdfFileCacheRepository';
+import {
+  LocalAssetRepository,
+  LocalFolderRepository,
+  LocalSubjectRepository,
+  LocalTopicRepository,
+} from './local/LocalRepositories';
+import { LocalPlannedItemRepository } from './planning/local/LocalPlannedItemRepository';
 import { LocalInkRepository } from './study/local/LocalInkRepository';
 import {
   LocalAttemptAiReviewRepository,
-  LocalAttemptRequirementLinkRepository,
   LocalAttemptRepository,
+  LocalAttemptRequirementLinkRepository,
   LocalAttemptReviewJobRepository,
   LocalExerciseRepository,
   LocalProblemRepository,
@@ -23,7 +25,6 @@ import {
   LocalSubproblemRepository,
   LocalSubsubproblemRepository,
 } from './study/local/LocalStudyRepositories';
-import { LocalPlannedItemRepository } from './planning/local/LocalPlannedItemRepository';
 
 export const subjectRepo = new LocalSubjectRepository();
 export const topicRepo = new LocalTopicRepository();
@@ -44,6 +45,7 @@ export const attemptReviewJobRepo = new LocalAttemptReviewJobRepository();
 export const attemptAiReviewRepo = new LocalAttemptAiReviewRepository();
 export const attemptRequirementLinkRepo = new LocalAttemptRequirementLinkRepository();
 export const inkRepo = new LocalInkRepository();
+export const openAiPdfFileCacheRepo = new LocalOpenAiPdfFileCacheRepository();
 
 export const plannedItemRepo = new LocalPlannedItemRepository();
 export const scheduledReviewRepo = new LocalScheduledReviewRepository();

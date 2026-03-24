@@ -1,7 +1,10 @@
 import { AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderAttemptCompositePngDataUrl } from '../../../../ink/attemptComposite';
+import { useInkStore } from '../../../../ink/inkStore';
+import { attemptRepo } from '../../../../repositories';
 import { sendStudyAiMessage } from '../../ai/aiClient';
+import { appendAttemptAiHelpNote, hasAttemptUsedAiHelp } from '../../review/attemptAiHelp';
 import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
 import {
   useStudyAiChatStore,
@@ -36,10 +39,10 @@ export function StudyAiWidget(props: {
 
   const ensureConversation = useStudyAiChatStore((s) => s.ensureConversation);
   const conv = useStudyAiChatStore((s) =>
-    conversationKey ? s.conversations[conversationKey] ?? FALLBACK_CONV : FALLBACK_CONV,
+    conversationKey ? (s.conversations[conversationKey] ?? FALLBACK_CONV) : FALLBACK_CONV,
   );
   const ui = useStudyAiChatStore((s) =>
-    conversationKey ? s.uiByConversation[conversationKey] ?? FALLBACK_UI : FALLBACK_UI,
+    conversationKey ? (s.uiByConversation[conversationKey] ?? FALLBACK_UI) : FALLBACK_UI,
   );
   const setUiMode = useStudyAiChatStore((s) => s.setUiMode);
   const append = useStudyAiChatStore((s) => s.append);
@@ -66,6 +69,7 @@ export function StudyAiWidget(props: {
   }, [ui.mode]);
 
   const getConversation = useStudyAiChatStore((s) => s.getConversation);
+  const selectedInkAttemptId = useInkStore((s) => s.selectedAttemptId);
 
   const send = async (text: string) => {
     if (!conversationKey) {
@@ -81,29 +85,45 @@ export function StudyAiWidget(props: {
 
     setSending(true);
     setSendError(null);
-    append(conversationKey, { role: 'user', content: trimmed });
-    setDraft('');
-    const panelView = useFloatingQuickLogPanelStore.getState().view;
-    if (panelView === 'progressDetails' || panelView === 'review') {
-      useFloatingQuickLogPanelStore.getState().setView('progress');
-    }
-    setUiMode(conversationKey, 'overlay');
 
     try {
+      if (props.currentAttemptId) {
+        const currentAttempt = await attemptRepo.get(props.currentAttemptId);
+        if (!currentAttempt) throw new Error('Aktueller Attempt konnte nicht geladen werden.');
+        if (!hasAttemptUsedAiHelp(currentAttempt.note)) {
+          await attemptRepo.update(props.currentAttemptId, {
+            note: appendAttemptAiHelpNote(currentAttempt.note),
+          });
+        }
+      }
+
+      append(conversationKey, { role: 'user', content: trimmed });
+      setDraft('');
+      const panelView = useFloatingQuickLogPanelStore.getState().view;
+      if (panelView === 'progressDetails' || panelView === 'review') {
+        useFloatingQuickLogPanelStore.getState().setView('progress');
+      }
+      setUiMode(conversationKey, 'overlay');
+
       const currentConv = getConversation(conversationKey);
       const messagesForRequest = currentConv.messages;
 
+      const attemptIdForAiImage = props.currentAttemptId ?? selectedInkAttemptId;
       let attemptImageDataUrl: string | null = null;
-      if (props.currentAttemptId && props.pdfData) {
+      if (attemptIdForAiImage && props.pdfData) {
         try {
           attemptImageDataUrl = await renderAttemptCompositePngDataUrl({
-            attemptId: props.currentAttemptId,
+            attemptId: attemptIdForAiImage,
             pdfData: props.pdfData,
             maxPdfBytes: 12 * 1024 * 1024,
             maxOutputPixels: 12_000_000,
           });
         } catch {
-          // Ohne Attempt-Bild fortsetzen; Edge Function funktioniert auch ohne
+          if (props.currentAttemptId) {
+            throw new Error(
+              'Aktuelles Attempt-Bild konnte nicht erzeugt werden. Bitte kurz erneut versuchen.',
+            );
+          }
         }
       }
 
@@ -114,10 +134,10 @@ export function StudyAiWidget(props: {
           docId,
           pdfData,
           attemptImageDataUrl,
+          requireAttemptImage: Boolean(props.currentAttemptId),
         });
 
-      const shouldSendPdf = !currentConv.docId;
-      const res = await doSend(currentConv.docId, shouldSendPdf ? props.pdfData : null);
+      const res = await doSend(currentConv.docId, props.pdfData);
 
       if (res.docId && res.docId !== currentConv.docId) setDocId(conversationKey, res.docId);
       append(conversationKey, { role: 'assistant', content: res.assistantMessage });

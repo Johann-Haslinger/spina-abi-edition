@@ -58,6 +58,12 @@ export type AssetFile = {
   blob: Blob;
 };
 
+export type OpenAiPdfFileCache = {
+  pdfSha256: string;
+  openAiFileId: string;
+  updatedAtMs: number;
+};
+
 export type CurriculumImportStatus = 'processing' | 'ready' | 'failed';
 
 export type CurriculumDocument = {

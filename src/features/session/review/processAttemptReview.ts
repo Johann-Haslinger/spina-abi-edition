@@ -11,6 +11,7 @@ import {
 } from '../../../repositories';
 import { useNotificationsStore } from '../../../stores/notificationsStore';
 import { requestAttemptReview } from '../ai/aiClient';
+import { hasAttemptUsedAiHelp, mergeAttemptNotes } from './attemptAiHelp';
 
 export function startAttemptAutoReview(input: {
   attemptId: string;
@@ -55,6 +56,8 @@ async function runAttemptAutoReview(input: {
     const requirements = await requirementRepo.listByChapterIds(
       chapters.map((chapter) => chapter.id),
     );
+    const attemptBeforeReview = await attemptRepo.get(input.attemptId);
+    const usedAiHelp = hasAttemptUsedAiHelp(attemptBeforeReview?.note);
     const job = await attemptReviewJobRepo.getByAttempt(input.attemptId);
     if (!job) throw new Error('Review-Job konnte nicht angelegt werden');
     await attemptReviewJobRepo.update(job.id, { status: 'processing' });
@@ -72,26 +75,30 @@ async function runAttemptAutoReview(input: {
       attemptImageDataUrl: input.attemptImageDataUrl,
       chapters,
       requirements,
+      usedAiHelp,
     });
 
     const matchedRequirements = resolveRequirements(review.requirements, requirements);
+    const progressRequirements = usedAiHelp
+      ? matchedRequirements.map((entry) => ({ ...entry, masteryDelta: 0 }))
+      : matchedRequirements;
     await attemptRequirementLinkRepo.replaceForAttempt(
       input.attemptId,
-      matchedRequirements.map((entry) => ({
+      progressRequirements.map((entry) => ({
         requirementId: entry.requirement.id,
         confidence: entry.confidence,
         masteryDelta: entry.masteryDelta,
       })),
     );
 
-    for (const entry of matchedRequirements) {
+    for (const entry of progressRequirements) {
       await requirementRepo.update(entry.requirement.id, {
         mastery: clamp(entry.requirement.mastery + entry.masteryDelta),
       });
     }
     await attachRequirementsToTask(
       input.attemptId,
-      matchedRequirements.map((entry) => entry.requirement.id),
+      progressRequirements.map((entry) => entry.requirement.id),
     );
 
     await attemptAiReviewRepo.upsert({
@@ -109,7 +116,7 @@ async function runAttemptAutoReview(input: {
     const reviewStatus = review.manualFallbackReason ? 'manual_required' : 'done';
     await attemptRepo.update(input.attemptId, {
       result: review.result,
-      note: review.notes,
+      note: mergeAttemptNotes(attemptBeforeReview?.note, review.notes),
       errorType: review.result === 'wrong' ? 'KI-Analyse: Fehler erkannt' : undefined,
       reviewStatus,
     });
@@ -134,7 +141,7 @@ async function runAttemptAutoReview(input: {
         subjectId: input.subjectId,
         topicId: input.topicId,
         assetId: input.assetId,
-        requirementId: matchedRequirements[0]?.requirement.id,
+        requirementId: progressRequirements[0]?.requirement.id,
         attemptId: input.attemptId,
         dueAtMs: review.scheduleReview.dueAtMs,
         status: 'pending',
@@ -159,7 +166,7 @@ async function runAttemptAutoReview(input: {
               messageToUser: review.messageToUser,
               notes: review.notes,
               solutionExplanation: review.solutionExplanation,
-              requirementUpdates: matchedRequirements
+              requirementUpdates: progressRequirements
                 .filter((entry) => entry.masteryDelta !== 0)
                 .map((entry) => ({
                   requirementId: entry.requirement.id,
@@ -200,7 +207,7 @@ async function runAttemptAutoReview(input: {
     }
     await attemptRepo.update(input.attemptId, {
       reviewStatus: 'manual_required',
-      note: message,
+      note: mergeAttemptNotes((await attemptRepo.get(input.attemptId))?.note, message),
     });
     notifications.push({
       tone: 'error',

@@ -77,6 +77,7 @@ serve(async (req) => {
       subsubproblemLabel?: string;
       pdfBase64?: string;
       attemptImageDataUrl?: string;
+      usedAiHelp?: boolean;
       chapters?: Array<{ id: string; name: string; description?: string }>;
       requirements?: Array<{
         id: string;
@@ -94,6 +95,7 @@ serve(async (req) => {
 
     const apiKey = assertEnv('OPENAI_API_KEY');
     const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
+    const usedAiHelp = body.usedAiHelp === true;
     const requirements = Array.isArray(body.requirements) ? body.requirements : [];
     const chapters = Array.isArray(body.chapters) ? body.chapters : [];
     cleanupOpenAiFileCache(Date.now());
@@ -129,6 +131,8 @@ serve(async (req) => {
       '  "requirements": [{ "requirementId"?: string, "requirementName": string, "confidence": number, "masteryDelta": number }]',
       '}',
       'Bewerte nach Ergebnis (40%), Rechenweg (40%), Verständnis (20%).',
+      'Abi-Lernen bedeutet viele Attempts pro Thema. Ein einzelner Attempt darf nur ein sehr kleines Fortschrittssignal sein.',
+      'Vergib masteryDelta deshalb sehr sparsam. In der Regel liegt masteryDelta pro Requirement zwischen -0.01 und 0.015, nur selten am Rand und niemals als großer Sprung.',
       `Teilaufgabe: ${formatTaskPath(body.problemIdx, body.subproblemLabel, body.subsubproblemLabel)}`,
       'Die eigentliche Nutzerlösung steckt im angehängten Bild.',
       `Kapitel: ${JSON.stringify(chapters)}`,
@@ -136,6 +140,9 @@ serve(async (req) => {
       'Nutze nur Requirement-IDs, die in der Liste vorkommen.',
       'Setze scheduleReview nur, wenn die Leistung klar wiederholt werden sollte.',
       'Wenn du nicht sicher genug bist, setze manualFallbackReason.',
+      usedAiHelp
+        ? 'Wichtig: Bei diesem Attempt wurde StudyAI-Hilfe genutzt. Vergib deshalb fuer alle Requirements masteryDelta = 0. messageToUser muss klar sagen, dass keine Requirement-Prozente gutgeschrieben werden, weil KI-Hilfe genutzt wurde.'
+        : 'Wenn keine KI-Hilfe genutzt wurde, gib nur kleine, realistische masteryDelta-Werte zurueck.',
     ].join('\n');
 
     const openaiRes = await fetch('https://api.openai.com/v1/responses', {
@@ -172,10 +179,12 @@ serve(async (req) => {
       return json(500, { error: 'Review-Antwort konnte nicht gelesen werden' });
     }
 
+    const rawMessageToUser = asOptionalString(parsed.messageToUser);
+
     return json(200, {
       score: clampNumber(parsed.score, 0, 1, 0.5),
       result: normalizeResult(parsed.result),
-      messageToUser: asOptionalString(parsed.messageToUser),
+      messageToUser: usedAiHelp ? buildAiHelpMessage(rawMessageToUser) : rawMessageToUser,
       notes: asOptionalString(parsed.notes),
       errorExplanation: asOptionalString(parsed.errorExplanation),
       solutionExplanation: asOptionalString(parsed.solutionExplanation),
@@ -203,7 +212,7 @@ serve(async (req) => {
                     : undefined,
                 requirementName: row.requirementName,
                 confidence: clampNumber(row.confidence, 0, 1, 0.5),
-                masteryDelta: clampNumber(row.masteryDelta, -0.3, 0.3, 0),
+                masteryDelta: usedAiHelp ? 0 : clampNumber(row.masteryDelta, -0.02, 0.02, 0),
               };
             })
             .filter(Boolean)
@@ -259,6 +268,14 @@ function json(status: number, body: unknown) {
 
 function normalizeResult(value: unknown): 'correct' | 'partial' | 'wrong' {
   return value === 'correct' || value === 'wrong' || value === 'partial' ? value : 'partial';
+}
+
+function buildAiHelpMessage(messageToUser?: string) {
+  const suffix =
+    'Keine Requirement-Prozente wurden gutgeschrieben, weil du bei diesem Attempt KI-Hilfe genutzt hast.';
+  if (!messageToUser) return suffix;
+  if (messageToUser.includes(suffix)) return messageToUser;
+  return `${messageToUser}\n${suffix}`;
 }
 
 function asOptionalString(value: unknown) {

@@ -8,10 +8,12 @@ type InputMessage = { role: 'user' | 'assistant'; content: string };
 type ReqBody = {
   conversationKey: string;
   docId?: string;
+  openAiFileId?: string;
   pdfBase64?: string;
   pdfFilename?: string;
   messages: InputMessage[];
   attemptImageDataUrl?: string;
+  requireAttemptImage?: boolean;
 };
 
 type CachedOpenAiFile = {
@@ -69,7 +71,7 @@ function b64ToBytes(b64: string) {
 }
 
 async function sha256Hex(bytes: Uint8Array) {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const digest = await crypto.subtle.digest('SHA-256', bytes.slice().buffer as ArrayBuffer);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -83,7 +85,7 @@ async function uploadPdfToOpenAiFile(args: {
   form.append('purpose', 'user_data');
   form.append(
     'file',
-    new Blob([args.pdfBytes], { type: 'application/pdf' }),
+    new Blob([args.pdfBytes.slice().buffer as ArrayBuffer], { type: 'application/pdf' }),
     args.pdfFilename || 'exercise.pdf',
   );
 
@@ -149,7 +151,9 @@ serve(async (req) => {
 
     log(reqId, 'request_received', {
       conversationKey: safeSnippet(String(body.conversationKey), 120),
-      hasDocId: typeof body.docId === 'string' && Boolean(body.docId),
+      hasOpenAiFileId:
+        (typeof body.openAiFileId === 'string' && Boolean(body.openAiFileId)) ||
+        (typeof body.docId === 'string' && Boolean(body.docId)),
       hasPdfBase64: typeof body.pdfBase64 === 'string' && Boolean(body.pdfBase64),
       pdfBase64Chars: typeof body.pdfBase64 === 'string' ? body.pdfBase64.length : 0,
       messagesCount: body.messages.length,
@@ -164,28 +168,40 @@ serve(async (req) => {
 
     cleanupOpenAiFileCache(Date.now());
 
-    const requestedDocId = typeof body.docId === 'string' && body.docId ? body.docId : null;
+    const requestedOpenAiFileId =
+      typeof body.openAiFileId === 'string' && body.openAiFileId
+        ? body.openAiFileId
+        : typeof body.docId === 'string' && body.docId && !/^[a-f0-9]{64}$/i.test(body.docId)
+        ? body.docId
+        : null;
     const pdfB64 = typeof body.pdfBase64 === 'string' ? body.pdfBase64 : '';
     const hasPdf = Boolean(pdfB64);
-    if (!hasPdf && !requestedDocId) return jsonResponse(400, { error: 'pdfBase64 oder docId fehlt' });
+    if (!hasPdf && !requestedOpenAiFileId)
+      return jsonResponse(400, { error: 'pdfBase64 oder openAiFileId fehlt' });
 
     const pdfBytes = hasPdf ? b64ToBytes(pdfB64) : null;
-    const docId = pdfBytes ? await sha256Hex(pdfBytes) : requestedDocId;
-    if (!docId) return jsonResponse(400, { error: 'docId konnte nicht bestimmt werden' });
+    const pdfHash = pdfBytes ? await sha256Hex(pdfBytes) : null;
     const pdfFilename =
       typeof body.pdfFilename === 'string' && body.pdfFilename ? body.pdfFilename : 'exercise.pdf';
 
-    const cachedFile = openAiFileCache.get(docId) ?? null;
-    let pdfFileId = cachedFile?.fileId ?? null;
+    const cachedFile = pdfHash ? (openAiFileCache.get(pdfHash) ?? null) : null;
+    let pdfFileId = requestedOpenAiFileId ?? cachedFile?.fileId ?? null;
     if (!pdfFileId && pdfBytes) {
       pdfFileId = await uploadPdfToOpenAiFile({ reqId, openaiKey, pdfBytes, pdfFilename });
-      openAiFileCache.set(docId, { fileId: pdfFileId, updatedAtMs: Date.now() });
+      if (pdfHash) {
+        openAiFileCache.set(pdfHash, { fileId: pdfFileId, updatedAtMs: Date.now() });
+      }
     }
+    if (!pdfFileId) return jsonResponse(400, { error: 'openAiFileId konnte nicht bestimmt werden' });
 
     const attemptImageDataUrl =
       typeof body.attemptImageDataUrl === 'string' && body.attemptImageDataUrl
         ? body.attemptImageDataUrl
         : null;
+    const requireAttemptImage = body.requireAttemptImage === true;
+    if (requireAttemptImage && !attemptImageDataUrl) {
+      return jsonResponse(400, { error: 'attemptImageDataUrl fehlt für aktuellen Attempt' });
+    }
     if (attemptImageDataUrl)
       log(reqId, 'attempt_image_attached', { chars: attemptImageDataUrl.length });
 
@@ -203,12 +219,12 @@ serve(async (req) => {
         content: [
           {
             type: 'input_text',
-            text: 'Du bist ein Tutor für Mathe-Abi Aufgaben. Nutze nur Informationen aus der angehängten Aufgabe und markiere Annahmen klar. Antworte in knappen, nummerierten Schritten. Wenn die Angaben nicht reichen, stelle zuerst eine präzise Rückfrage statt zu raten. Nenne am Ende eine kurze Plausibilitätsprüfung des Ergebnisses.',
+            text: 'Du bist ein Tutor für Mathe-Abi Aufgaben. Nutze nur Informationen aus der angehängten Aufgabe und markiere Annahmen klar. Wenn ein Nutzerloesungs-Bild angehaengt ist, beziehe dich explizit auf diesen Rechenweg. Antworte in knappen, nummerierten Schritten. Wenn die Angaben nicht reichen, stelle zuerst eine praezise Rueckfrage statt zu raten. Nenne am Ende eine kurze Plausibilitaetspruefung des Ergebnisses.',
           },
         ],
       },
       ...body.messages.map((m, idx) => {
-        const base =
+        const base: Array<Record<string, unknown>> =
           m.role === 'assistant'
             ? [{ type: 'output_text', text: m.content }]
             : [{ type: 'input_text', text: m.content }];
@@ -267,11 +283,15 @@ serve(async (req) => {
     const assistantMessage = extractAssistantText(openaiJson);
 
     log(reqId, 'request_ok', {
-      docId,
+      openAiFileId: pdfFileId,
       assistantChars: assistantMessage.length,
       ms: Date.now() - startedAt,
     });
-    return jsonResponse(200, { docId, assistantMessage });
+    return jsonResponse(200, {
+      docId: pdfFileId,
+      openAiFileId: pdfFileId,
+      assistantMessage,
+    });
   } catch (e) {
     log(reqId, 'request_exception', {
       ms: Date.now() - startedAt,

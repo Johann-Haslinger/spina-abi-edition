@@ -1,6 +1,7 @@
 import type { Chapter, Requirement } from '../../../domain/models';
-import { pdfBytesToBase64 } from '../../../ink/attemptComposite';
+import { pdfBytesSha256Hex, pdfBytesToBase64 } from '../../../ink/attemptComposite';
 import { getSupabaseClient } from '../../../lib/supabaseClient';
+import { openAiPdfFileCacheRepo } from '../../../repositories';
 import type { StudyAiMessage } from '../stores/studyAiChatStore';
 
 const MAX_PDF_BYTES = 12 * 1024 * 1024;
@@ -12,66 +13,144 @@ export async function sendStudyAiMessage(input: {
   docId: string | null;
   pdfData: Uint8Array | null;
   attemptImageDataUrl: string | null;
+  requireAttemptImage?: boolean;
 }): Promise<{ docId: string; assistantMessage: string }> {
   const supabase = getSupabaseClient();
-
   const pdfBytes = input.pdfData;
-  if (!pdfBytes && !input.docId) throw new Error('PDF fehlt (pdfData ist leer).');
-  if (pdfBytes && pdfBytes.byteLength > MAX_PDF_BYTES) throw new Error('PDF ist zu groß.');
-
   if (input.attemptImageDataUrl && input.attemptImageDataUrl.length > MAX_ATTEMPT_IMAGE_CHARS) {
     throw new Error('Attempt-Bild ist zu groß.');
   }
 
+  const reusableOpenAiFileId = await resolveReusableOpenAiFileId({
+    docId: input.docId,
+    pdfData: pdfBytes,
+  });
+
+  if (!pdfBytes && !reusableOpenAiFileId) throw new Error('PDF fehlt (pdfData ist leer).');
+  if (!reusableOpenAiFileId && pdfBytes && pdfBytes.byteLength > MAX_PDF_BYTES) {
+    throw new Error('PDF ist zu groß.');
+  }
+
+  const pdfSha256 = pdfBytes ? await pdfBytesSha256Hex(pdfBytes) : null;
+
   const body: {
     conversationKey: string;
-    docId?: string;
+    openAiFileId?: string;
     pdfBase64?: string;
     pdfFilename?: string;
     messages: Array<{ role: 'user' | 'assistant'; content: string }>;
     attemptImageDataUrl?: string;
+    requireAttemptImage?: boolean;
   } = {
     conversationKey: input.conversationKey,
     messages: input.messages.map((m) => ({ role: m.role, content: m.content })),
   };
 
-  if (input.docId) body.docId = input.docId;
-  if (pdfBytes) {
+  if (reusableOpenAiFileId) body.openAiFileId = reusableOpenAiFileId;
+  if (!reusableOpenAiFileId && pdfBytes) {
     body.pdfBase64 = pdfBytesToBase64(pdfBytes);
     body.pdfFilename = 'exercise.pdf';
   }
   if (input.attemptImageDataUrl) body.attemptImageDataUrl = input.attemptImageDataUrl;
+  if (input.requireAttemptImage) body.requireAttemptImage = true;
 
+  let data: unknown;
+  try {
+    data = await invokeStudyAiFunction(supabase, body);
+  } catch (error) {
+    if (
+      reusableOpenAiFileId &&
+      pdfBytes &&
+      isMissingOpenAiFileError(error) &&
+      pdfSha256
+    ) {
+      await openAiPdfFileCacheRepo.delete(pdfSha256);
+      delete body.openAiFileId;
+      body.pdfBase64 = pdfBytesToBase64(pdfBytes);
+      body.pdfFilename = 'exercise.pdf';
+      data = await invokeStudyAiFunction(supabase, body);
+    } else {
+      throw error;
+    }
+  }
+  if (!data || typeof data !== 'object') throw new Error('Ungültige Antwort vom Server');
+
+  const d = data as {
+    docId?: unknown;
+    openAiFileId?: unknown;
+    assistantMessage?: unknown;
+    error?: unknown;
+  };
+  if (typeof d.error === 'string' && d.error) throw new Error(d.error);
+  const resolvedOpenAiFileId =
+    typeof d.openAiFileId === 'string' && d.openAiFileId
+      ? d.openAiFileId
+      : typeof d.docId === 'string' && d.docId
+      ? d.docId
+      : null;
+  if (!resolvedOpenAiFileId) throw new Error('openAiFileId fehlt in Antwort');
+  if (typeof d.assistantMessage !== 'string') throw new Error('assistantMessage fehlt in Antwort');
+
+  if (pdfSha256) {
+    await openAiPdfFileCacheRepo.upsert({
+      pdfSha256,
+      openAiFileId: resolvedOpenAiFileId,
+      updatedAtMs: Date.now(),
+    });
+  }
+
+  return { docId: resolvedOpenAiFileId, assistantMessage: d.assistantMessage };
+}
+
+async function resolveReusableOpenAiFileId(input: {
+  docId: string | null;
+  pdfData: Uint8Array | null;
+}) {
+  if (isOpenAiFileId(input.docId)) return input.docId;
+  if (!input.pdfData) return null;
+  const pdfSha256 = await pdfBytesSha256Hex(input.pdfData);
+  return (await openAiPdfFileCacheRepo.get(pdfSha256))?.openAiFileId ?? null;
+}
+
+function isOpenAiFileId(value: string | null): value is string {
+  if (!value) return false;
+  if (/^[a-f0-9]{64}$/i.test(value)) return false;
+  return /^file[-_]/.test(value);
+}
+
+function isMissingOpenAiFileError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /file/i.test(message) && /(not found|invalid|missing|unknown)/i.test(message);
+}
+
+async function invokeStudyAiFunction(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  body: Record<string, unknown>,
+) {
   const { data, error } = await supabase.functions.invoke('study-ai', { body });
-  if (error) {
-    const ctx = (error as unknown as { context?: unknown } | null)?.context as
-      | { response?: Response }
-      | undefined;
-    const resp = ctx?.response;
-    if (resp) {
-      try {
-        const t = await resp.text();
+  if (!error) return data;
+
+  const ctx = (error as unknown as { context?: unknown } | null)?.context as
+    | { response?: Response }
+    | undefined;
+  const resp = ctx?.response;
+  if (resp) {
+    try {
+      const t = await resp.text();
+      if (t) {
         try {
           const j = JSON.parse(t) as { error?: unknown };
           if (typeof j?.error === 'string' && j.error) throw new Error(j.error);
         } catch {
-          // ignore json parse errors
+          throw new Error(t);
         }
-        if (t && t.trim()) throw new Error(t);
-      } catch {
-        // ignore response read errors
       }
+    } catch (readError) {
+      if (readError instanceof Error) throw readError;
     }
-    throw new Error(error.message || 'Edge Function Fehler');
   }
-  if (!data || typeof data !== 'object') throw new Error('Ungültige Antwort vom Server');
 
-  const d = data as { docId?: unknown; assistantMessage?: unknown; error?: unknown };
-  if (typeof d.error === 'string' && d.error) throw new Error(d.error);
-  if (typeof d.docId !== 'string' || !d.docId) throw new Error('docId fehlt in Antwort');
-  if (typeof d.assistantMessage !== 'string') throw new Error('assistantMessage fehlt in Antwort');
-
-  return { docId: d.docId, assistantMessage: d.assistantMessage };
+  throw new Error((error as { message?: string } | null)?.message || 'Edge Function Fehler');
 }
 
 export type ImportedCurriculum = {
@@ -180,6 +259,7 @@ export async function requestAttemptReview(input: {
   attemptImageDataUrl: string;
   chapters: Chapter[];
   requirements: Requirement[];
+  usedAiHelp?: boolean;
 }): Promise<AttemptReviewResponse> {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.functions.invoke('attempt-review', {
@@ -193,6 +273,7 @@ export async function requestAttemptReview(input: {
       subsubproblemLabel: input.subsubproblemLabel,
       pdfBase64: pdfBytesToBase64(input.pdfData),
       attemptImageDataUrl: input.attemptImageDataUrl,
+      usedAiHelp: input.usedAiHelp === true,
       chapters: input.chapters.map((chapter) => ({
         id: chapter.id,
         name: chapter.name,

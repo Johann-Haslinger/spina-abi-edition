@@ -34,6 +34,28 @@ const RENDER_SCALE = 1.6;
 const PAD_X = 16 * 2;
 const PAD_TOP = 24;
 const PAGE_GAP = 24;
+const ATTEMPT_IMAGE_CACHE_MAX_ENTRIES = 8;
+
+const attemptImageDataUrlCache = new Map<
+  string,
+  { revisionKey: string; dataUrl: string; lastUsedAtMs: number }
+>();
+
+function getAttemptRevisionKey(strokes: Array<{ updatedAtMs: number }>) {
+  let maxUpdatedAtMs = 0;
+  for (const stroke of strokes) {
+    if (stroke.updatedAtMs > maxUpdatedAtMs) maxUpdatedAtMs = stroke.updatedAtMs;
+  }
+  return `${strokes.length}:${maxUpdatedAtMs}`;
+}
+
+function pruneAttemptImageCache() {
+  if (attemptImageDataUrlCache.size <= ATTEMPT_IMAGE_CACHE_MAX_ENTRIES) return;
+  const oldest = [...attemptImageDataUrlCache.entries()].sort(
+    (a, b) => a[1].lastUsedAtMs - b[1].lastUsedAtMs,
+  )[0];
+  if (oldest) attemptImageDataUrlCache.delete(oldest[0]);
+}
 
 export async function renderAttemptCompositePngDataUrl(input: {
   attemptId: string;
@@ -41,8 +63,25 @@ export async function renderAttemptCompositePngDataUrl(input: {
   maxPdfBytes: number;
   maxOutputPixels: number;
 }) {
-  const blob = await renderAttemptCompositePngBlob(input);
-  return await blobToDataUrl(blob);
+  const strokes = await inkRepo.listByAttempt(input.attemptId);
+  if (strokes.length === 0) throw new Error('Keine Ink-Daten für diesen Attempt');
+
+  const revisionKey = getAttemptRevisionKey(strokes);
+  const cached = attemptImageDataUrlCache.get(input.attemptId);
+  if (cached?.revisionKey === revisionKey) {
+    cached.lastUsedAtMs = Date.now();
+    return cached.dataUrl;
+  }
+
+  const blob = await renderAttemptCompositePngBlobFromStrokes(input, strokes);
+  const dataUrl = await blobToDataUrl(blob);
+  attemptImageDataUrlCache.set(input.attemptId, {
+    revisionKey,
+    dataUrl,
+    lastUsedAtMs: Date.now(),
+  });
+  pruneAttemptImageCache();
+  return dataUrl;
 }
 
 export async function renderAttemptCompositePngBlob(input: {
@@ -53,7 +92,18 @@ export async function renderAttemptCompositePngBlob(input: {
 }) {
   const strokes = await inkRepo.listByAttempt(input.attemptId);
   if (strokes.length === 0) throw new Error('Keine Ink-Daten für diesen Attempt');
+  return await renderAttemptCompositePngBlobFromStrokes(input, strokes);
+}
 
+async function renderAttemptCompositePngBlobFromStrokes(
+  input: {
+    attemptId: string;
+    pdfData: Uint8Array;
+    maxPdfBytes: number;
+    maxOutputPixels: number;
+  },
+  strokes: Awaited<ReturnType<typeof inkRepo.listByAttempt>>,
+) {
   const bbox = strokes.map((s) => s.bbox).reduce((acc, b) => bboxUnion(acc, b)) as InkBBox;
   const pad = 24;
   const target = bboxExpand(bbox, pad) as InkBBox;

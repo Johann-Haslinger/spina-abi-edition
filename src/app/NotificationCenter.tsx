@@ -7,41 +7,8 @@ export function NotificationCenter() {
   const navigate = useNavigate();
   const notifications = useNotificationsStore((state) => state.notifications);
   const dismiss = useNotificationsStore((state) => state.dismiss);
-  const push = useNotificationsStore((state) => state.push);
   const openAttemptReview = useNotificationsStore((state) => state.openAttemptReview);
   const [expandedNotificationId, setExpandedNotificationId] = useState<string | null>(null);
-
-  useEffect(() => {
-    push({
-      tone: 'success',
-      title: 'KI-Bewertung abgeschlossen',
-      message: 'Die Aufgabe wurde richtig gelost.',
-      details: {
-        kind: 'attemptReviewSuccess',
-        score: 0.94,
-        messageToUser: 'Sehr gut. Der Rechenweg ist stimmig und das Ergebnis korrekt.',
-        solutionExplanation:
-          'Du hast die richtigen Schritte in der passenden Reihenfolge verwendet und sauber zum Endergebnis gefuhrt.',
-        requirementUpdates: [
-          {
-            requirementId: 'preview-1',
-            requirementName: 'Quadratische Gleichungen losen',
-            masteryDelta: 0.12,
-          },
-          {
-            requirementId: 'preview-2',
-            requirementName: 'Terme umformen',
-            masteryDelta: 0.08,
-          },
-          {
-            requirementId: 'preview-3',
-            requirementName: 'Vorzeichenfehler vermeiden',
-            masteryDelta: 0.05,
-          },
-        ],
-      },
-    });
-  }, [push]);
 
   const activeExpandedNotificationId = notifications.some(
     (notification) => notification.id === expandedNotificationId,
