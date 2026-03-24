@@ -79,7 +79,7 @@ export function StudyAiMorphShell(props: {
       <motion.div
         layout
         transition={SPRING}
-        className={['pointer-events-auto touch-none', shellClass].join(' ')}
+        className={['pointer-events-auto', shellClass].join(' ')}
       >
         {props.mode === 'button' ? (
           <button

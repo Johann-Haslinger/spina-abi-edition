@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderAttemptCompositePngDataUrl } from '../../../../ink/attemptComposite';
 import { useInkStore } from '../../../../ink/inkStore';
 import { attemptRepo } from '../../../../repositories';
+import { useNotificationsStore } from '../../../../stores/notificationsStore';
 import { sendStudyAiMessage } from '../../ai/aiClient';
 import { appendAttemptAiHelpNote, hasAttemptUsedAiHelp } from '../../review/attemptAiHelp';
 import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
@@ -58,6 +59,7 @@ export function StudyAiWidget(props: {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const pushNotification = useNotificationsStore((s) => s.push);
 
   const isCompactDevice = useMemo(() => getIsCompactDevice(), []);
 
@@ -71,15 +73,24 @@ export function StudyAiWidget(props: {
   const getConversation = useStudyAiChatStore((s) => s.getConversation);
   const selectedInkAttemptId = useInkStore((s) => s.selectedAttemptId);
 
+  const handleSendError = (message: string) => {
+    setSendError(message);
+    pushNotification({
+      tone: 'error',
+      title: 'StudyAI-Nachricht fehlgeschlagen',
+      message,
+    });
+  };
+
   const send = async (text: string) => {
     if (!conversationKey) {
-      setSendError('Keine Session aktiv.');
+      handleSendError('Keine Session aktiv.');
       return;
     }
     const trimmed = text.trim();
     if (!trimmed) return;
     if (!props.pdfData) {
-      setSendError('PDF ist noch nicht geladen.');
+      handleSendError('PDF ist noch nicht geladen.');
       return;
     }
 
@@ -142,7 +153,7 @@ export function StudyAiWidget(props: {
       if (res.docId && res.docId !== currentConv.docId) setDocId(conversationKey, res.docId);
       append(conversationKey, { role: 'assistant', content: res.assistantMessage });
     } catch (e) {
-      setSendError(e instanceof Error ? e.message : 'Fehler beim Senden');
+      handleSendError(e instanceof Error ? e.message : 'Fehler beim Senden');
     } finally {
       setSending(false);
     }
@@ -174,7 +185,7 @@ export function StudyAiWidget(props: {
   if (!conversationKey) return null;
 
   return (
-    <div className="fixed inset-0 z-45 pointer-events-none">
+    <div className="fixed inset-0 z-60 pointer-events-none">
       <AnimatePresence initial={false}>
         {ui.mode === 'overlay' ? (
           <StudyAiFullscreenOverlay
