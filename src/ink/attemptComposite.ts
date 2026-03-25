@@ -248,8 +248,12 @@ async function renderPdfCropToCanvas(input: {
   return canvas;
 }
 
-export async function pdfBytesSha256Hex(pdfBytes: Uint8Array) {
-  const digest = await crypto.subtle.digest('SHA-256', pdfBytes.slice().buffer as ArrayBuffer);
+export async function pdfBytesSha256Hex(pdfBytes: Uint8Array): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    return null;
+  }
+  const digest = await subtle.digest('SHA-256', pdfBytes.slice().buffer as ArrayBuffer);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 

@@ -15,7 +15,7 @@ export function AssetGridItem(props: {
   const { asset } = props;
 
   return (
-    <li className="w-full group ">
+    <li className="w-full group pb-6">
       <button
         type="button"
         onClick={props.onOpen}
@@ -29,7 +29,7 @@ export function AssetGridItem(props: {
         />
 
         <div className="mt-3 w-full text-center">
-          <div className="line-clamp-3 text-sm font-medium leading-5 text-black dark:text-white">
+          <div className="line-clamp-2 text-sm font-medium leading-5 text-black dark:text-white">
             {asset.title}
           </div>
           <div className="text-xs mt-1 text-white/60">

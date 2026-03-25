@@ -16,6 +16,7 @@ export async function sendStudyAiMessage(input: {
   pdfData: Uint8Array | null;
   attemptImageDataUrl: string | null;
   requireAttemptImage?: boolean;
+  signal?: AbortSignal;
 }): Promise<{ docId: string; assistantMessage: string }> {
   const supabase = getSupabaseClient();
   const pdfBytes = input.pdfData;
@@ -58,7 +59,7 @@ export async function sendStudyAiMessage(input: {
 
   let data: unknown;
   try {
-    data = await invokeStudyAiFunction(supabase, body);
+    data = await invokeStudyAiFunction(supabase, body, input.signal);
   } catch (error) {
     if (
       reusableOpenAiFileId &&
@@ -70,7 +71,7 @@ export async function sendStudyAiMessage(input: {
       delete body.openAiFileId;
       body.pdfBase64 = pdfBytesToBase64(pdfBytes);
       body.pdfFilename = 'exercise.pdf';
-      data = await invokeStudyAiFunction(supabase, body);
+      data = await invokeStudyAiFunction(supabase, body, input.signal);
     } else {
       throw error;
     }
@@ -111,6 +112,7 @@ async function resolveReusableOpenAiFileId(input: {
   if (isOpenAiFileId(input.docId)) return input.docId;
   if (!input.pdfData) return null;
   const pdfSha256 = await pdfBytesSha256Hex(input.pdfData);
+  if (!pdfSha256) return null;
   return (await openAiPdfFileCacheRepo.get(pdfSha256))?.openAiFileId ?? null;
 }
 
@@ -128,8 +130,9 @@ function isMissingOpenAiFileError(error: unknown) {
 async function invokeStudyAiFunction(
   supabase: ReturnType<typeof getSupabaseClient>,
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ) {
-  const { data, error } = await supabase.functions.invoke('study-ai', { body });
+  const { data, error } = await supabase.functions.invoke('study-ai', { body, signal });
   if (!error) return data;
 
   const ctx = (error as unknown as { context?: unknown } | null)?.context as

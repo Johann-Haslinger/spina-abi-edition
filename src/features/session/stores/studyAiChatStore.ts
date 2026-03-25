@@ -34,6 +34,9 @@ type StudyAiChatState = {
 
   append: (conversationKey: string, msg: Omit<StudyAiMessage, 'id' | 'createdAtMs'>) => void;
   removeLastTurn: (conversationKey: string) => void;
+  updateMessageContent: (conversationKey: string, messageId: string, content: string) => void;
+  truncateAfterMessage: (conversationKey: string, messageId: string) => void;
+  getLastUserMessage: (conversationKey: string) => StudyAiMessage | null;
   setDocId: (conversationKey: string, docId: string | null) => void;
   clearConversation: (conversationKey: string) => void;
 };
@@ -105,6 +108,43 @@ export const useStudyAiChatStore = create<StudyAiChatState>()(
             },
           };
         }),
+
+      updateMessageContent: (conversationKey, messageId, content) =>
+        set((s) => {
+          const current = s.conversations[conversationKey] ?? defaultConversation;
+          const trimmed = content.trim();
+          if (!trimmed) return s;
+          const nextMessages = current.messages.map((message) =>
+            message.id === messageId ? { ...message, content: trimmed } : message,
+          );
+          return {
+            conversations: {
+              ...s.conversations,
+              [conversationKey]: { ...current, messages: nextMessages },
+            },
+          };
+        }),
+
+      truncateAfterMessage: (conversationKey, messageId) =>
+        set((s) => {
+          const current = s.conversations[conversationKey] ?? defaultConversation;
+          const idx = current.messages.findIndex((message) => message.id === messageId);
+          if (idx < 0) return s;
+          return {
+            conversations: {
+              ...s.conversations,
+              [conversationKey]: {
+                ...current,
+                messages: current.messages.slice(0, idx + 1),
+              },
+            },
+          };
+        }),
+
+      getLastUserMessage: (conversationKey) => {
+        const current = get().conversations[conversationKey] ?? defaultConversation;
+        return [...current.messages].reverse().find((message) => message.role === 'user') ?? null;
+      },
 
       setDocId: (conversationKey, docId) =>
         set((s) => ({

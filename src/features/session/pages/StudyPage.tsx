@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useNavigate, useParams } from 'react-router-dom';
+import { ActionDialog } from '../../../components/ActionDialog';
 import { FullscreenViewerFrame } from '../../../components/FullscreenViewerFrame';
 import { Modal } from '../../../components/Modal';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetFile } from '../../../domain/models';
 import { assetFileStore, assetRepo, studySessionRepo } from '../../../repositories';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useNotificationsStore } from '../../../stores/notificationsStore';
 import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
@@ -18,7 +20,6 @@ import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyHudStore } from '../stores/studyHudStore';
 import { useStudyStore } from '../stores/studyStore';
 import { AssetViewer } from '../viewer/AssetViewer';
-import { useNotificationsStore } from '../../../stores/notificationsStore';
 
 export function StudyPage() {
   const { assetId } = useParams();
@@ -30,6 +31,8 @@ export function StudyPage() {
   const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId);
   const [pageNumber, setPageNumber] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [backDialogOpen, setBackDialogOpen] = useState(false);
+  const [backDialogBusy, setBackDialogBusy] = useState(false);
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
 
   const {
@@ -38,8 +41,10 @@ export function StudyPage() {
     bindToSession,
     ensureStudySession,
     loadExerciseStatus,
+    setExerciseStatus,
     reset,
     currentAttempt,
+    cancelAttempt,
   } = useStudyStore();
 
   const setStudyAiConversationKey = useStudyHudStore((s) => s.setStudyAiConversationKey);
@@ -109,6 +114,53 @@ export function StudyPage() {
     navigate(`/subjects/${assetForNav.subjectId}/topics/${assetForNav.topicId}`);
   };
 
+  const endSessionAndGoToTopic = async () => {
+    const endedAtMs = Date.now();
+    const target = active ? `/subjects/${active.subjectId}/topics/${active.topicId}` : '/dashboard';
+    const summary: SessionSummaryState | null = active
+      ? {
+          studySessionId: studySessionId ?? undefined,
+          subjectId: active.subjectId,
+          topicId: active.topicId,
+          startedAtMs: active.startedAtMs,
+          endedAtMs,
+        }
+      : null;
+    if (studySessionId) await studySessionRepo.end(studySessionId, endedAtMs);
+    end();
+    reset();
+    if (summary) navigate(target, { state: { sessionSummary: summary } });
+    else navigate(target);
+  };
+
+  const onPauseAndLeave = () => {
+    if (currentAttempt) cancelAttempt();
+    setBackDialogOpen(false);
+    setReviewOpen(true);
+  };
+
+  const onFinishAndLeave = async () => {
+    setBackDialogBusy(true);
+    try {
+      if (currentAttempt) cancelAttempt();
+      if (guardState.kind === 'ok') {
+        await setExerciseStatus(guardState.asset.id, 'covered');
+      }
+      setBackDialogOpen(false);
+      setReviewOpen(true);
+    } finally {
+      setBackDialogBusy(false);
+    }
+  };
+
+  const onBackClick = () => {
+    if (guardState.kind === 'ok') {
+      setBackDialogOpen(true);
+      return;
+    }
+    goToAssetTopic();
+  };
+
   if (guardState.kind === 'notfound') return <NotFoundPage />;
   if (guardState.kind === 'loading')
     return (
@@ -128,11 +180,43 @@ export function StudyPage() {
   return (
     <FullscreenViewerFrame
       overlayLeft={
-        <ViewerIconButton ariaLabel="Zurück" onClick={goToAssetTopic}>
+        <ViewerIconButton ariaLabel="Zurück" onClick={onBackClick}>
           <IoChevronBack />
         </ViewerIconButton>
       }
     >
+      <ActionDialog
+        open={backDialogOpen}
+        onClose={() => setBackDialogOpen(false)}
+        busy={backDialogBusy}
+        title="Übung verlassen?"
+        message={
+          currentAttempt
+            ? 'Möchtest du die Übung abschließen oder pausieren? Der laufende Versuch wird dabei abgebrochen.'
+            : 'Möchtest du die Übung abschließen oder pausieren?'
+        }
+        actions={[
+          {
+            key: 'cancel',
+            label: 'Abbrechen',
+            tone: 'neutral',
+            onClick: () => setBackDialogOpen(false),
+          },
+          {
+            key: 'pause',
+            label: 'Übung pausieren',
+            tone: 'neutral',
+            onClick: onPauseAndLeave,
+          },
+          {
+            key: 'finish',
+            label: 'Übung abschließen',
+            tone: 'primary',
+            onClick: () => void onFinishAndLeave(),
+          },
+        ]}
+      />
+
       <Modal
         open={guardState.kind === 'needStart'}
         onClose={goToAssetTopic}
@@ -262,25 +346,7 @@ export function StudyPage() {
           }}
           onEndSession={async () => {
             setReviewOpen(false);
-            const endedAtMs = Date.now();
-            const target = active
-              ? `/subjects/${active.subjectId}/topics/${active.topicId}`
-              : '/dashboard';
-            const summary: SessionSummaryState | null = active
-              ? {
-                  studySessionId: studySessionId ?? undefined,
-                  subjectId: active.subjectId,
-                  topicId: active.topicId,
-                  startedAtMs: active.startedAtMs,
-                  endedAtMs,
-                }
-              : null;
-
-            if (studySessionId) await studySessionRepo.end(studySessionId, endedAtMs);
-            end();
-            reset();
-            if (summary) navigate(target, { state: { sessionSummary: summary } });
-            else navigate(target);
+            await endSessionAndGoToTopic();
           }}
         />
       ) : null}

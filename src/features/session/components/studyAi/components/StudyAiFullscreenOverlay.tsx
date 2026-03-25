@@ -15,6 +15,11 @@ export function StudyAiFullscreenOverlay(props: {
   onClose: () => void;
   onClear: () => void;
   onRegenerate?: () => void;
+  onRetryFailedRequest?: () => void;
+  editingMessageId?: string | null;
+  onStartEditMessage?: (messageId: string) => void;
+  onCancelEditMessage?: () => void;
+  onSubmitEditMessage?: (messageId: string, content: string) => void;
 }) {
   const scrollerRef = useAutoScrollToBottom(props.messages, props.sending);
 
@@ -29,19 +34,37 @@ export function StudyAiFullscreenOverlay(props: {
       <div className="absolute inset-0 bg-[#26313F]/90 backdrop-blur" />
 
       <div className="absolute h-full inset-x-0 top-0 flex justify-center">
-        <div ref={scrollerRef} className="h-full w-full py-40 overflow-y-scroll px-4">
+        <div ref={scrollerRef} className="h-full w-full py-40 overflow-y-scroll px-4 select-text">
           <div className="w-3/5 mx-auto">
             <StudyAiMessageList
               messages={props.messages}
               sending={props.sending}
               onRegenerate={props.onRegenerate}
+              editingMessageId={props.editingMessageId}
+              onStartEditMessage={props.onStartEditMessage}
+              onCancelEditMessage={props.onCancelEditMessage}
+              onSubmitEditMessage={props.onSubmitEditMessage}
             />
             {props.sending ? (
               <div className="mt-3">
                 <StudyAiGeneratingDots />
               </div>
             ) : null}
-            {props.error ? <div className="mt-3 text-xs text-rose-200">{props.error}</div> : null}
+            {props.error ? (
+              <div className="mt-3 flex items-center gap-2 text-xs text-rose-200">
+                <span>{props.error}</span>
+                {props.onRetryFailedRequest ? (
+                  <button
+                    type="button"
+                    onClick={props.onRetryFailedRequest}
+                    disabled={props.sending}
+                    className="rounded-md px-2 py-1 text-white/90 hover:bg-white/10 disabled:opacity-50"
+                  >
+                    Erneut versuchen
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <div className="h-60" />
           </div>
           <div className="absolute top-0 flex flex-col gap-2 pt-60 pl-4">

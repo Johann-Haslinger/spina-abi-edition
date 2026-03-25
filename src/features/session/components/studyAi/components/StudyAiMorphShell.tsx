@@ -20,11 +20,17 @@ export function StudyAiMorphShell(props: {
   draft: string;
   onDraftChange: (v: string) => void;
   onSubmit: () => void;
+  onStop: () => void;
   onOpenCenter: () => void;
   onMaximize: () => void;
   onClose: () => void;
   onClear: () => void;
   onRegenerate?: () => void;
+  onRetryFailedRequest?: () => void;
+  editingMessageId?: string | null;
+  onStartEditMessage?: (messageId: string) => void;
+  onCancelEditMessage?: () => void;
+  onSubmitEditMessage?: (messageId: string, content: string) => void;
 }) {
   const { stageClass, shellClass } = useStudyAiMorphLayout(props.mode);
   const floatingScrollRef = useRef<HTMLDivElement | null>(null);
@@ -101,6 +107,7 @@ export function StudyAiMorphShell(props: {
               sending={props.sending}
               placeholder="Frage zur Aufgabe…"
               autoFocus={props.isCompactDevice ? props.autoFocusCenter : true}
+              onStop={props.onStop}
             />
           </div>
         ) : null}
@@ -114,6 +121,7 @@ export function StudyAiMorphShell(props: {
               sending={props.sending}
               placeholder="Nachricht senden…"
               autoFocus={props.isCompactDevice ? false : true}
+              onStop={props.onStop}
             />
           </div>
         ) : null}
@@ -133,20 +141,38 @@ export function StudyAiMorphShell(props: {
 
             <div
               ref={floatingScrollRef}
-              className="max-h-[440px] overflow-y-auto w-full pt-16 px-3 pb-28"
+              className="max-h-[440px] overflow-y-auto w-full pt-16 px-3 pb-28 select-text"
             >
               <StudyAiMessageList
                 messages={props.messages}
                 compact
                 sending={props.sending}
                 onRegenerate={props.onRegenerate}
+                editingMessageId={props.editingMessageId}
+                onStartEditMessage={props.onStartEditMessage}
+                onCancelEditMessage={props.onCancelEditMessage}
+                onSubmitEditMessage={props.onSubmitEditMessage}
               />
               {props.sending ? (
                 <div className="mt-2">
                   <StudyAiGeneratingDots />
                 </div>
               ) : null}
-              {props.error ? <div className="mt-2 text-xs text-rose-200">{props.error}</div> : null}
+              {props.error ? (
+                <div className="mt-2 flex items-center gap-2 text-xs text-rose-200">
+                  <span>{props.error}</span>
+                  {props.onRetryFailedRequest ? (
+                    <button
+                      type="button"
+                      onClick={props.onRetryFailedRequest}
+                      disabled={props.sending}
+                      className="rounded-md px-2 py-1 text-white/90 hover:bg-white/10 disabled:opacity-50"
+                    >
+                      Erneut versuchen
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="p-2 pt-4 bg-linear-to-b from-transparent to-[#243957] absolute bottom-0 left-0 right-0">
@@ -158,6 +184,7 @@ export function StudyAiMorphShell(props: {
                 placeholder="Nachricht…"
                 dense
                 autoFocus={props.isCompactDevice ? false : true}
+                onStop={props.onStop}
               />
             </div>
           </>

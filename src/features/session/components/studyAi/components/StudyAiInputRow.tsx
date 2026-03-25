@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { IoArrowUp } from 'react-icons/io5';
+import { IoArrowUp, IoSquare } from 'react-icons/io5';
 import { PrimaryButton } from '../../../../../components/Button';
 
 const SPRING = { type: 'spring', stiffness: 520, damping: 44 } as const;
@@ -16,6 +16,7 @@ export function StudyAiInputRow(props: {
   dense?: boolean;
   autoFocus?: boolean;
   rightAccessory?: ReactNode;
+  onStop?: () => void;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const rowProbeRef = useRef<HTMLDivElement | null>(null);
@@ -214,9 +215,9 @@ export function StudyAiInputRow(props: {
       >
         {props.rightAccessory}
         <PrimaryButton
-          disabled={props.sending || !props.value.trim()}
-          onClick={props.onSubmit}
-          icon={<IoArrowUp />}
+          disabled={props.sending ? false : !props.value.trim()}
+          onClick={props.sending ? (props.onStop ?? (() => {})) : props.onSubmit}
+          icon={props.sending ? <IoSquare className="opacity-60" /> : <IoArrowUp />}
           className="shrink-0"
         />
       </motion.div>

@@ -2,7 +2,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { renderAttemptCompositePngDataUrl } from '../../../../ink/attemptComposite';
 import { useInkStore } from '../../../../ink/inkStore';
-import { attemptRepo } from '../../../../repositories';
+import { attemptRepo, inkRepo } from '../../../../repositories';
 import { useNotificationsStore } from '../../../../stores/notificationsStore';
 import { sendStudyAiMessage } from '../../ai/aiClient';
 import { appendAttemptAiHelpNote, hasAttemptUsedAiHelp } from '../../review/attemptAiHelp';
@@ -49,6 +49,8 @@ export function StudyAiWidget(props: {
   const setUiMode = useStudyAiChatStore((s) => s.setUiMode);
   const append = useStudyAiChatStore((s) => s.append);
   const removeLastTurn = useStudyAiChatStore((s) => s.removeLastTurn);
+  const updateMessageContent = useStudyAiChatStore((s) => s.updateMessageContent);
+  const truncateAfterMessage = useStudyAiChatStore((s) => s.truncateAfterMessage);
   const clearConversation = useStudyAiChatStore((s) => s.clearConversation);
   const setDocId = useStudyAiChatStore((s) => s.setDocId);
 
@@ -60,6 +62,14 @@ export function StudyAiWidget(props: {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const failedRequestRef = useRef<{
+    messages: StudyAiMessage[];
+    docId: string | null;
+    attemptImageDataUrl: string | null;
+    requireAttemptImage: boolean;
+  } | null>(null);
   const pushNotification = useNotificationsStore((s) => s.push);
   const markCurrentAttemptUsedAiHelp = useStudyStore((s) => s.markCurrentAttemptUsedAiHelp);
 
@@ -84,6 +94,54 @@ export function StudyAiWidget(props: {
     });
   };
 
+  const isAbortError = (error: unknown) => {
+    if (error instanceof DOMException && error.name === 'AbortError') return true;
+    if (error instanceof Error && /aborted|abort/i.test(error.message)) return true;
+    return false;
+  };
+
+  const executeStudyAiRequest = async (input: {
+    messages: StudyAiMessage[];
+    docId: string | null;
+    attemptImageDataUrl: string | null;
+    requireAttemptImage: boolean;
+  }) => {
+    if (!conversationKey) return;
+    if (!props.pdfData) {
+      handleSendError('PDF ist noch nicht geladen.');
+      return;
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setSending(true);
+    setSendError(null);
+    failedRequestRef.current = null;
+
+    try {
+      const res = await sendStudyAiMessage({
+        conversationKey,
+        messages: input.messages,
+        docId: input.docId,
+        pdfData: props.pdfData,
+        attemptImageDataUrl: input.attemptImageDataUrl,
+        requireAttemptImage: input.requireAttemptImage,
+        signal: controller.signal,
+      });
+      if (res.docId && res.docId !== input.docId) setDocId(conversationKey, res.docId);
+      append(conversationKey, { role: 'assistant', content: res.assistantMessage });
+      failedRequestRef.current = null;
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      if (isAbortError(e)) return;
+      failedRequestRef.current = input;
+      handleSendError(e instanceof Error ? e.message : 'Fehler beim Senden');
+    } finally {
+      abortControllerRef.current = null;
+      setSending(false);
+    }
+  };
+
   const send = async (text: string) => {
     if (!conversationKey) {
       handleSendError('Keine Session aktiv.');
@@ -96,7 +154,7 @@ export function StudyAiWidget(props: {
       return;
     }
 
-    setSending(true);
+    setEditingMessageId(null);
     setSendError(null);
 
     try {
@@ -122,7 +180,15 @@ export function StudyAiWidget(props: {
       const currentConv = getConversation(conversationKey);
       const messagesForRequest = currentConv.messages;
 
-      const attemptIdForAiImage = props.currentAttemptId ?? selectedInkAttemptId;
+      const currentAttemptHasInk = props.currentAttemptId
+        ? (await inkRepo.listByAttempt(props.currentAttemptId)).length > 0
+        : false;
+      const shouldRequireAttemptImage = Boolean(props.currentAttemptId && currentAttemptHasInk);
+      const attemptIdForAiImage = shouldRequireAttemptImage
+        ? props.currentAttemptId
+        : selectedInkAttemptId && selectedInkAttemptId !== props.currentAttemptId
+        ? selectedInkAttemptId
+        : null;
       let attemptImageDataUrl: string | null = null;
       if (attemptIdForAiImage && props.pdfData) {
         try {
@@ -133,7 +199,7 @@ export function StudyAiWidget(props: {
             maxOutputPixels: 12_000_000,
           });
         } catch {
-          if (props.currentAttemptId) {
+          if (shouldRequireAttemptImage) {
             throw new Error(
               'Aktuelles Attempt-Bild konnte nicht erzeugt werden. Bitte kurz erneut versuchen.',
             );
@@ -141,25 +207,49 @@ export function StudyAiWidget(props: {
         }
       }
 
-      const doSend = (docId: string | null, pdfData: Uint8Array | null) =>
-        sendStudyAiMessage({
-          conversationKey,
-          messages: messagesForRequest,
-          docId,
-          pdfData,
-          attemptImageDataUrl,
-          requireAttemptImage: Boolean(props.currentAttemptId),
-        });
-
-      const res = await doSend(currentConv.docId, props.pdfData);
-
-      if (res.docId && res.docId !== currentConv.docId) setDocId(conversationKey, res.docId);
-      append(conversationKey, { role: 'assistant', content: res.assistantMessage });
+      await executeStudyAiRequest({
+        messages: messagesForRequest,
+        docId: currentConv.docId,
+        attemptImageDataUrl,
+        requireAttemptImage: shouldRequireAttemptImage,
+      });
     } catch (e) {
       handleSendError(e instanceof Error ? e.message : 'Fehler beim Senden');
-    } finally {
-      setSending(false);
     }
+  };
+
+  const handleRetryFailedRequest = () => {
+    if (!failedRequestRef.current || sending) return;
+    setEditingMessageId(null);
+    void executeStudyAiRequest(failedRequestRef.current);
+  };
+
+  const handleStopGeneration = () => {
+    if (!sending || !conversationKey) return;
+    abortControllerRef.current?.abort();
+    setSendError(null);
+    failedRequestRef.current = null;
+    const latestConversation = getConversation(conversationKey);
+    const lastUser = [...latestConversation.messages].reverse().find((message) => message.role === 'user');
+    if (lastUser) setEditingMessageId(lastUser.id);
+  };
+
+  const handleSubmitEditedMessage = (messageId: string, content: string) => {
+    if (!conversationKey || sending) return;
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    truncateAfterMessage(conversationKey, messageId);
+    updateMessageContent(conversationKey, messageId, trimmed);
+    setEditingMessageId(null);
+    setSendError(null);
+    const latestConversation = getConversation(conversationKey);
+    const messagesForRequest = latestConversation.messages;
+    void executeStudyAiRequest({
+      messages: messagesForRequest,
+      docId: latestConversation.docId,
+      attemptImageDataUrl: null,
+      requireAttemptImage: false,
+    });
   };
 
   const handleRegenerate = () => {
@@ -200,6 +290,11 @@ export function StudyAiWidget(props: {
             onClose={() => setUiMode(conversationKey, 'button')}
             onClear={() => clearConversation(conversationKey)}
             onRegenerate={handleRegenerate}
+            onRetryFailedRequest={handleRetryFailedRequest}
+            editingMessageId={editingMessageId}
+            onStartEditMessage={setEditingMessageId}
+            onCancelEditMessage={() => setEditingMessageId(null)}
+            onSubmitEditMessage={handleSubmitEditedMessage}
           />
         ) : null}
       </AnimatePresence>
@@ -214,6 +309,7 @@ export function StudyAiWidget(props: {
         draft={draft}
         onDraftChange={setDraft}
         onSubmit={() => void send(draft)}
+        onStop={handleStopGeneration}
         onOpenCenter={() => {
           const panelView = useFloatingQuickLogPanelStore.getState().view;
           if (panelView === 'progressDetails' || panelView === 'review') {
@@ -231,6 +327,11 @@ export function StudyAiWidget(props: {
         onClose={() => setUiMode(conversationKey, 'button')}
         onClear={() => clearConversation(conversationKey)}
         onRegenerate={handleRegenerate}
+        onRetryFailedRequest={handleRetryFailedRequest}
+        editingMessageId={editingMessageId}
+        onStartEditMessage={setEditingMessageId}
+        onCancelEditMessage={() => setEditingMessageId(null)}
+        onSubmitEditMessage={handleSubmitEditedMessage}
       />
     </div>
   );
