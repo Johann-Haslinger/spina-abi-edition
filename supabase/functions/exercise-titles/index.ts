@@ -16,7 +16,7 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const MAX_NAMES = 30;
+const MAX_NAMES = 150;
 
 type ReqBody = {
   fileNames?: unknown;
@@ -50,22 +50,27 @@ serve(async (req) => {
     const apiKey = assertEnv('OPENAI_API_KEY');
     const model = Deno.env.get('OPENAI_MODEL') || 'gpt-4.1-mini';
 
-    const listJson = JSON.stringify(fileNames);
+    const numberedList = fileNames
+      .map((fileName, index) => `${index + 1}. ${normalizeFileNameForPrompt(fileName)}`)
+      .join('\n');
     const prompt = [
       'Du erzeugst kurze, lesbare deutsche Titel für Schul-/Abi-Übungen.',
-      'Es werden NUR die Original-Dateinamen geliefert (können Kürzel, Tippfehler, Nummern enthalten).',
-      'Erforsche sinnvolle Themen (z. B. Analysis, CAS, Wahrscheinlichkeit) aus dem Namen und formuliere einen klaren Titel.',
+      'Du erhältst NUR die Original-Dateinamen in einer nummerierten Liste.',
+      'Die Namen können Kürzel, Tippfehler, Nummern oder uneinheitliche Schreibweisen enthalten.',
+      'Leite daraus sinnvolle Themen (z. B. Analysis, CAS, Wahrscheinlichkeit) ab und formuliere klare, einheitlich wirkende Titel.',
       namingInstruction
         ? `Zusätzlicher Benennungswunsch der Nutzer: ${JSON.stringify(namingInstruction)}`
         : 'Es wurde kein zusätzlicher Benennungswunsch angegeben.',
       'Regeln:',
-      '- Antworte NUR als JSON mit genau diesem Schema: { "titles": string[] }',
-      `- "titles" muss genau ${fileNames.length} Einträge haben, gleiche Reihenfolge wie die Eingabe.`,
+      '- Antworte NUR mit genau einer Zeile pro Eingabe.',
+      '- Format jeder Zeile: <nummer><TAB><titel>',
+      `- Es müssen genau die Nummern 1 bis ${fileNames.length} vorkommen, jeweils genau einmal.`,
       '- Jeder Titel: ohne Dateiendung, ohne ".pdf", max. ca. 80 Zeichen, konkret und verständlich.',
-      '- Keine Anführungszeichen im Titelstring selbst; vermeide ALL CAPS.',
+      '- Die gesamte Liste soll stilistisch zusammenpassen und konsistent benannt sein.',
+      '- Keine Anführungszeichen im Titel selbst; vermeide ALL CAPS.',
       '- Wenn der Name nichtssagend ist (z. B. nur "scan1"), nutze einen neutralen Titel wie "Übungscan" plus ggf. Nummer aus dem Namen.',
-      'Eingabe-Dateinamen (JSON-Array):',
-      listJson,
+      'Eingabe-Dateinamen:',
+      numberedList,
     ].join('\n');
 
     const openaiRes = await fetch('https://api.openai.com/v1/responses', {
@@ -77,31 +82,18 @@ serve(async (req) => {
       body: JSON.stringify({
         model,
         temperature: 0.35,
-        max_output_tokens: Math.min(800, 80 * fileNames.length + 100),
+        max_output_tokens: Math.min(6000, Math.max(1200, 40 * fileNames.length + 400)),
         input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
       }),
     });
 
     if (!openaiRes.ok) return json(500, { error: await openaiRes.text() });
     const openaiJson = await openaiRes.json();
-    const parsed = safeJsonParse(extractAssistantText(openaiJson));
-    if (!parsed || typeof parsed !== 'object') {
-      return json(500, { error: 'Titel-Antwort konnte nicht gelesen werden' });
-    }
-    const titlesRaw = (parsed as Record<string, unknown>).titles;
-    if (!Array.isArray(titlesRaw)) {
-      return json(500, { error: 'titles fehlt oder ist kein Array' });
-    }
-    const titles: string[] = [];
-    for (const t of titlesRaw) {
-      if (typeof t !== 'string' || !t.trim()) {
-        return json(500, { error: 'Ungültiger Titel in der Antwort' });
-      }
-      titles.push(sanitizeTitle(t.trim()));
-    }
-    if (titles.length !== fileNames.length) {
-      return json(500, { error: `Erwarte ${fileNames.length} Titel, erhalten: ${titles.length}` });
-    }
+    const assistantText = extractAssistantText(openaiJson);
+    const titles =
+      parseIndexedTitleLines(assistantText, fileNames.length) ??
+      parseTitlesFromJson(assistantText, fileNames.length);
+    if (!titles) return json(500, { error: 'Titel-Antwort konnte nicht eindeutig gelesen werden' });
 
     return json(200, { titles });
   } catch (error) {
@@ -110,7 +102,54 @@ serve(async (req) => {
 });
 
 function sanitizeTitle(s: string): string {
-  return s.replace(/\.pdf$/i, '').replace(/\s+/g, ' ').slice(0, 120);
+  return s
+    .replace(/\.pdf$/i, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120);
+}
+
+function normalizeFileNameForPrompt(name: string): string {
+  return name.replace(/\s+/g, ' ').trim();
+}
+
+function parseIndexedTitleLines(text: string, expectedCount: number): string[] | null {
+  const cleaned = text
+    .replace(/^```[\w-]*\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  if (!cleaned) return null;
+
+  const byIndex = new Map<number, string>();
+  for (const rawLine of cleaned.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const match = line.match(/^(\d+)(?:\s*[.):|-]\s*|\t+)(.+)$/);
+    if (!match) continue;
+    const index = Number(match[1]);
+    const title = sanitizeTitle(match[2].trim());
+    if (!Number.isInteger(index) || index < 1 || index > expectedCount || !title) return null;
+    if (byIndex.has(index)) return null;
+    byIndex.set(index, title);
+  }
+
+  if (byIndex.size !== expectedCount) return null;
+  return Array.from({ length: expectedCount }, (_, idx) => byIndex.get(idx + 1) ?? '').filter(
+    Boolean,
+  );
+}
+
+function parseTitlesFromJson(text: string, expectedCount: number): string[] | null {
+  const parsed = safeJsonParse(text);
+  if (!parsed || typeof parsed !== 'object') return null;
+  const titlesRaw = (parsed as Record<string, unknown>).titles;
+  if (!Array.isArray(titlesRaw) || titlesRaw.length !== expectedCount) return null;
+
+  const titles: string[] = [];
+  for (const entry of titlesRaw) {
+    if (typeof entry !== 'string' || !entry.trim()) return null;
+    titles.push(sanitizeTitle(entry.trim()));
+  }
+  return titles;
 }
 
 function extractAssistantText(r: unknown): string {
