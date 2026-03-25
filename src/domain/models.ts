@@ -119,16 +119,10 @@ export type PlannedItem = {
   type: PlannedItemType;
   subjectId?: Id;
   topicId?: Id;
-
-  // For generic events (type === 'event')
   title?: string;
-
   startAtMs: number;
   durationMs: number;
-
-  // When unset/undefined => no recurrence.
   recurrence?: WeeklyRecurrence;
-
   createdAtMs: number;
   updatedAtMs: number;
 };
@@ -138,7 +132,10 @@ export type Exercise = {
   assetId: Id;
   status: ExercisePageStatus;
   taskDepth: ExerciseTaskDepth;
+  difficulty: ExerciseDifficulty;
 };
+
+export type ExerciseDifficulty = 1 | 2 | 3;
 
 export type ExerciseTaskDepth = 1 | 2 | 3;
 

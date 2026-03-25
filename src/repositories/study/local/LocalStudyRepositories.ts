@@ -5,6 +5,7 @@ import type {
   AttemptRequirementLink,
   AttemptReviewJob,
   Exercise,
+  ExerciseDifficulty,
   Problem,
   StudySession,
   Subproblem,
@@ -48,17 +49,36 @@ export class LocalStudySessionRepository implements StudySessionRepository {
   async get(id: string): Promise<StudySession | undefined> {
     return db.studySessions.get(id);
   }
+
+  async listByTopic(topicId: string): Promise<StudySession[]> {
+    return db.studySessions.where('topicId').equals(topicId).toArray();
+  }
+}
+
+function normalizeExerciseDifficulty(value: unknown): ExerciseDifficulty {
+  return value === 1 || value === 2 || value === 3 ? value : 2;
 }
 
 export class LocalExerciseRepository implements ExerciseRepository {
   async getByAsset(assetId: string): Promise<Exercise | undefined> {
-    return db.exercises.where('assetId').equals(assetId).first();
+    const row = await db.exercises.where('assetId').equals(assetId).first();
+    if (!row) return undefined;
+    return {
+      ...row,
+      difficulty: normalizeExerciseDifficulty(row.difficulty),
+      taskDepth:
+        row.taskDepth === 1 || row.taskDepth === 2 || row.taskDepth === 3 ? row.taskDepth : 2,
+    };
   }
 
   async upsert(input: { assetId: string; status: Exercise['status'] }): Promise<Exercise> {
     const existing = await this.getByAsset(input.assetId);
     if (existing) {
-      const next: Exercise = { ...existing, status: input.status };
+      const next: Exercise = {
+        ...existing,
+        status: input.status,
+        difficulty: normalizeExerciseDifficulty(existing.difficulty),
+      };
       await db.exercises.put(next);
       return next;
     }
@@ -67,6 +87,7 @@ export class LocalExerciseRepository implements ExerciseRepository {
       assetId: input.assetId,
       status: input.status,
       taskDepth: 2,
+      difficulty: 2,
     };
     await db.exercises.add(row);
     return row;
@@ -82,11 +103,39 @@ export class LocalExerciseRepository implements ExerciseRepository {
   ): Promise<Exercise> {
     const existing = await this.getByAsset(assetId);
     if (existing) {
-      const next: Exercise = { ...existing, taskDepth };
+      const next: Exercise = {
+        ...existing,
+        taskDepth,
+        difficulty: normalizeExerciseDifficulty(existing.difficulty),
+      };
       await db.exercises.put(next);
       return next;
     }
-    const row: Exercise = { id: newId(), assetId, status: 'unknown', taskDepth };
+    const row: Exercise = {
+      id: newId(),
+      assetId,
+      status: 'unknown',
+      taskDepth,
+      difficulty: 2,
+    };
+    await db.exercises.add(row);
+    return row;
+  }
+
+  async setDifficultyByAsset(assetId: string, difficulty: ExerciseDifficulty): Promise<Exercise> {
+    const existing = await this.getByAsset(assetId);
+    if (existing) {
+      const next: Exercise = { ...existing, difficulty };
+      await db.exercises.put(next);
+      return next;
+    }
+    const row: Exercise = {
+      id: newId(),
+      assetId,
+      status: 'unknown',
+      taskDepth: 2,
+      difficulty,
+    };
     await db.exercises.add(row);
     return row;
   }
@@ -222,6 +271,11 @@ export class LocalAttemptRepository implements AttemptRepository {
 
   async listByStudySession(studySessionId: string): Promise<Attempt[]> {
     return db.attempts.where('studySessionId').equals(studySessionId).toArray();
+  }
+
+  async listByStudySessionIds(studySessionIds: string[]): Promise<Attempt[]> {
+    if (studySessionIds.length === 0) return [];
+    return db.attempts.where('studySessionId').anyOf(studySessionIds).toArray();
   }
 
   async listDetailsByStudySession(studySessionId: string): Promise<

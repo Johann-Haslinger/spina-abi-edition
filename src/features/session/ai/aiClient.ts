@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../../../lib/supabaseClient';
 import { openAiPdfFileCacheRepo } from '../../../repositories';
 import type { StudyAiMessage } from '../stores/studyAiChatStore';
 import type { ReviewSummaryRequest, ReviewSummaryResponse } from './reviewSummaryTypes';
+import type { TopicSummaryRequest, TopicSummaryResponse } from './topicSummaryTypes';
 
 const MAX_PDF_BYTES = 12 * 1024 * 1024;
 const MAX_ATTEMPT_IMAGE_CHARS = 6_000_000;
@@ -271,6 +272,43 @@ export async function requestReviewSummary(input: ReviewSummaryRequest): Promise
     tip,
     focusAreas,
   };
+}
+
+export async function requestTopicSummary(
+  input: TopicSummaryRequest,
+): Promise<TopicSummaryResponse> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.functions.invoke('topic-summary', {
+    body: { topic: input.topic },
+  });
+  const payload = await unwrapFunctionResponse(data, error);
+  if (!payload || typeof payload !== 'object') throw new Error('Ungültige Themen-Summary-Antwort');
+  const p = payload as Record<string, unknown>;
+  const summary = typeof p.summary === 'string' ? p.summary.trim() : '';
+  if (!summary) throw new Error('Themen-Summary fehlt');
+  return { summary };
+}
+
+export async function invokeExerciseTitles(input: {
+  fileNames: string[];
+  namingInstruction?: string;
+}): Promise<{ titles: string[] }> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.functions.invoke('exercise-titles', {
+    body: {
+      fileNames: input.fileNames,
+      namingInstruction: input.namingInstruction?.trim() || undefined,
+    },
+  });
+  const payload = await unwrapFunctionResponse(data, error);
+  if (!payload || typeof payload !== 'object') throw new Error('Ungültige Antwort (Übungstitel)');
+  const p = payload as Record<string, unknown>;
+  if (!Array.isArray(p.titles)) throw new Error('titles fehlt in der Antwort');
+  const titles = p.titles.filter((x): x is string => typeof x === 'string' && Boolean(x.trim()));
+  if (titles.length !== input.fileNames.length) {
+    throw new Error('Anzahl der Titel stimmt nicht mit den Dateinamen überein');
+  }
+  return { titles };
 }
 
 export async function requestAttemptReview(input: {

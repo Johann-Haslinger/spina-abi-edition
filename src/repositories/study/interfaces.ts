@@ -6,6 +6,7 @@ import type {
   AttemptReviewJob,
   AttemptReviewStatus,
   Exercise,
+  ExerciseDifficulty,
   ExercisePageStatus,
   ExerciseTaskDepth,
   Problem,
@@ -23,6 +24,7 @@ export interface StudySessionRepository {
   }): Promise<StudySession>;
   end(id: string, endedAtMs: number): Promise<void>;
   get(id: string): Promise<StudySession | undefined>;
+  listByTopic(topicId: string): Promise<StudySession[]>;
 }
 
 export interface ExerciseRepository {
@@ -30,6 +32,7 @@ export interface ExerciseRepository {
   upsert(input: { assetId: string; status: ExercisePageStatus }): Promise<Exercise>;
   setStatus(id: string, status: ExercisePageStatus): Promise<void>;
   setTaskDepthByAsset(assetId: string, taskDepth: ExerciseTaskDepth): Promise<Exercise>;
+  setDifficultyByAsset(assetId: string, difficulty: ExerciseDifficulty): Promise<Exercise>;
 }
 
 export interface ProblemRepository {
@@ -66,6 +69,7 @@ export interface AttemptRepository {
   listBySubproblem(subproblemId: string): Promise<Attempt[]>;
   listBySubproblemIds(subproblemIds: string[]): Promise<Attempt[]>;
   listByStudySession(studySessionId: string): Promise<Attempt[]>;
+  listByStudySessionIds(studySessionIds: string[]): Promise<Attempt[]>;
   listDetailsByStudySession(studySessionId: string): Promise<
     Array<{
       attempt: Attempt;

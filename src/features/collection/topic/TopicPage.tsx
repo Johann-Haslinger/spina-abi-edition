@@ -9,6 +9,7 @@ import { exerciseRepo } from '../../../repositories';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { useAssetsStore } from '../../../stores/assetsStore';
 import { useFoldersStore } from '../../../stores/foldersStore';
+import { useNotificationsStore } from '../../../stores/notificationsStore';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { NotFoundPage } from '../../common/NotFoundPage';
@@ -18,7 +19,9 @@ import {
 } from '../../session/modals/SessionReviewModal';
 import { TopicAssetsView } from './components/TopicAssetsView';
 import { TopicCurriculumView } from './components/TopicCurriculumView';
-import { UploadAssetModal } from './modals/UploadAssetModal';
+import { TopicSummaryPanel } from './components/TopicSummaryPanel';
+import { BulkExerciseUploadModal } from './modals/BulkExerciseUploadModal';
+import { clearTopicSummaryCache } from './utils/topicSummaryCache';
 
 export function TopicPage() {
   const { subjectId, topicId } = useParams();
@@ -30,6 +33,7 @@ export function TopicPage() {
   const { subjects, refresh: refreshSubjects } = useSubjectsStore();
   const { topicsBySubject, refreshBySubject } = useTopicsStore();
   const { foldersByTopic } = useFoldersStore();
+  const pushNotification = useNotificationsStore((s) => s.push);
 
   const {
     assetsByTopic,
@@ -61,15 +65,15 @@ export function TopicPage() {
   }, [topicsBySubject, subjectId, topicId]);
 
   const folders = useMemo(
-    () => (topicId ? foldersByTopic[topicId] ?? [] : []),
+    () => (topicId ? (foldersByTopic[topicId] ?? []) : []),
     [foldersByTopic, topicId],
   );
 
   const assets = useMemo(
-    () => (topicId ? assetsByTopic[topicId] ?? [] : []),
+    () => (topicId ? (assetsByTopic[topicId] ?? []) : []),
     [assetsByTopic, topicId],
   );
-  const assetsLoading = topicId ? assetsLoadingByTopic[topicId] ?? false : false;
+  const assetsLoading = topicId ? (assetsLoadingByTopic[topicId] ?? false) : false;
   const assetsError = topicId ? assetsErrorByTopic[topicId] : undefined;
 
   const folderNameById = useMemo(() => {
@@ -82,18 +86,25 @@ export function TopicPage() {
   const [viewMode, setViewMode] = useState<'assets' | 'curriculum'>('assets');
 
   const [sessionSummary, setSessionSummary] = useState<SessionSummaryState | null>(null);
+  const [topicSummaryRegenKey, setTopicSummaryRegenKey] = useState(0);
   useEffect(() => {
     const state = location.state as { sessionSummary?: SessionSummaryState; from?: string } | null;
     const s = state?.sessionSummary;
     if (!s) return;
-    setSessionSummary(s);
+    queueMicrotask(() => {
+      setSessionSummary(s);
+      if (topicId && s.topicId === topicId) {
+        clearTopicSummaryCache(topicId);
+        setTopicSummaryRegenKey((k) => k + 1);
+      }
+    });
     const nextState = state ? { ...state } : null;
     if (nextState) delete nextState.sessionSummary;
     navigate(location.pathname, {
       replace: true,
       state: nextState && Object.keys(nextState).length > 0 ? nextState : null,
     });
-  }, [location.state, location.pathname, navigate]);
+  }, [location.state, location.pathname, navigate, topicId]);
 
   const filteredAssets = useMemo(() => {
     if (assetFilter === 'all') return assets;
@@ -126,10 +137,9 @@ export function TopicPage() {
     };
   }, [assets]);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadType, setUploadType] = useState<AssetType>('exercise');
+  const bulkFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [bulkUploadFiles, setBulkUploadFiles] = useState<File[]>([]);
 
   const goBack = () => {
     if (subjectId) {
@@ -148,9 +158,9 @@ export function TopicPage() {
     }
   };
 
-  function startUpload(type: AssetType) {
-    setUploadType(type);
-    fileInputRef.current?.click();
+  function startBulkExerciseUpload() {
+    setBulkUploadFiles([]);
+    setBulkUploadOpen(true);
   }
 
   async function openAsset(asset: Asset) {
@@ -180,7 +190,7 @@ export function TopicPage() {
   if (!topic && (topicsBySubject[subjectId]?.length ?? 0) > 0) return <NotFoundPage />;
 
   return (
-    <div className="h-full">
+    <div className="h-full pb-16">
       <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-8 top-18">
         <IoChevronBack />
       </ViewerIconButton>
@@ -190,7 +200,9 @@ export function TopicPage() {
         actions={
           <button
             type="button"
-            onClick={() => setViewMode((current) => (current === 'assets' ? 'curriculum' : 'assets'))}
+            onClick={() =>
+              setViewMode((current) => (current === 'assets' ? 'curriculum' : 'assets'))
+            }
             className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
           >
             {viewMode === 'assets' ? 'Kapitel & Skills' : 'Übungen'}
@@ -199,34 +211,42 @@ export function TopicPage() {
       />
 
       <div>
-        <section className="lg:col-span-2">
-          {viewMode === 'assets' ? (
-            <TopicAssetsView
-              assetsError={assetsError}
-              assetFilter={assetFilter}
-              onFilterChange={setAssetFilter}
-              onUpload={() => startUpload('exercise')}
-              assetsLoading={assetsLoading}
-              assets={filteredAssets}
-              folderNameById={folderNameById}
-              exerciseStatusByAssetId={exerciseStatusByAssetId}
-              loadFile={getFile}
-              onOpen={openAsset}
-              onDownload={downloadAsset}
-              onDelete={(asset) => {
-                if (window.confirm(`Asset „${asset.title}“ löschen?`)) {
-                  void deleteAsset(asset.id, topicId);
-                }
-              }}
-            />
-          ) : (
-            <TopicCurriculumView
-              subjectId={subjectId}
-              topicId={topicId}
-              assets={assets}
-            />
-          )}
-        </section>
+        <div className="space-y-6">
+          <TopicSummaryPanel
+            topicId={topicId}
+            topicName={topic?.name}
+            subjectName={subject?.name}
+            assets={assets}
+            exerciseStatusByAssetId={exerciseStatusByAssetId}
+            onOpenCurriculum={() => setViewMode('curriculum')}
+            sessionRegenKey={topicSummaryRegenKey}
+          />
+
+          <section className="lg:col-span-2">
+            {viewMode === 'assets' ? (
+              <TopicAssetsView
+                assetsError={assetsError}
+                assetFilter={assetFilter}
+                onFilterChange={setAssetFilter}
+                onUpload={startBulkExerciseUpload}
+                assetsLoading={assetsLoading}
+                assets={filteredAssets}
+                folderNameById={folderNameById}
+                exerciseStatusByAssetId={exerciseStatusByAssetId}
+                loadFile={getFile}
+                onOpen={openAsset}
+                onDownload={downloadAsset}
+                onDelete={(asset) => {
+                  if (window.confirm(`Asset „${asset.title}“ löschen?`)) {
+                    void deleteAsset(asset.id, topicId);
+                  }
+                }}
+              />
+            ) : (
+              <TopicCurriculumView subjectId={subjectId} topicId={topicId} assets={assets} />
+            )}
+          </section>
+        </div>
       </div>
       {/* <div className="w-1/3 pt-20 h-full">
         <div className="w-full h-full bg-white/5 rounded-3xl shadow-lg border border-white/5 p-4">
@@ -234,27 +254,22 @@ export function TopicPage() {
         </div>
       </div> */}
 
-      <UploadAssetModal
-        open={uploadOpen}
-        file={uploadFile}
-        initialType={uploadType}
+      <BulkExerciseUploadModal
+        open={bulkUploadOpen}
+        files={bulkUploadFiles}
         folders={folders}
-        onClose={() => setUploadOpen(false)}
-        onSubmit={async (input) => {
-          if (!input.file) return;
-          try {
-            await createWithFile({
-              subjectId,
-              topicId,
-              folderId: input.folderId,
-              type: input.type,
-              title: input.title,
-              file: input.file,
-            });
-          } finally {
-            setUploadFile(null);
-          }
+        subjectId={subjectId}
+        topicId={topicId}
+        onClose={() => {
+          setBulkUploadOpen(false);
+          setBulkUploadFiles([]);
         }}
+        onRequestPick={() => bulkFileInputRef.current?.click()}
+        createWithFile={createWithFile}
+        onSuccess={(message) => pushNotification({ tone: 'success', title: 'Upload', message })}
+        onError={(message) =>
+          pushNotification({ tone: 'error', title: 'Upload fehlgeschlagen', message })
+        }
       />
 
       <SessionReviewModal
@@ -267,15 +282,16 @@ export function TopicPage() {
       />
 
       <input
-        ref={fileInputRef}
+        ref={bulkFileInputRef}
         type="file"
+        accept=".pdf,application/pdf"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const f = e.target.files?.[0] ?? null;
+          const files = Array.from(e.currentTarget.files ?? []);
           e.currentTarget.value = '';
-          if (!f) return;
-          setUploadFile(f);
-          setUploadOpen(true);
+          if (!files.length) return;
+          setBulkUploadFiles(files);
         }}
       />
     </div>
