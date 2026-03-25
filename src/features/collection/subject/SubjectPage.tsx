@@ -64,6 +64,7 @@ export function SubjectPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [curriculumFile, setCurriculumFile] = useState<File | null>(null);
+  const [desiredTopicNamesText, setDesiredTopicNamesText] = useState('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const goBack = () => {
@@ -220,6 +221,7 @@ export function SubjectPage() {
           if (importing) return;
           setImportOpen(false);
           setCurriculumFile(null);
+          setDesiredTopicNamesText('');
         }}
         footer={
           <>
@@ -228,6 +230,7 @@ export function SubjectPage() {
                 if (importing) return;
                 setImportOpen(false);
                 setCurriculumFile(null);
+                setDesiredTopicNamesText('');
               }}
               disabled={importing}
             >
@@ -240,7 +243,15 @@ export function SubjectPage() {
                 if (!curriculumFile) return;
                 setImporting(true);
                 try {
-                  await importCurriculum({ subjectId, file: curriculumFile });
+                  const desiredTopicNames = desiredTopicNamesText
+                    .split(/[,\n;\r]+/g)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  await importCurriculum({
+                    subjectId,
+                    file: curriculumFile,
+                    desiredTopicNames: desiredTopicNames.length ? desiredTopicNames : undefined,
+                  });
                   await refreshBySubject(subjectId);
                   pushNotification({
                     tone: 'success',
@@ -249,6 +260,7 @@ export function SubjectPage() {
                   });
                   setImportOpen(false);
                   setCurriculumFile(null);
+                  setDesiredTopicNamesText('');
                 } catch (error) {
                   pushNotification({
                     tone: 'error',
@@ -275,6 +287,19 @@ export function SubjectPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white/80">
             Datei: {curriculumFile?.name ?? 'Keine Datei gewählt'}
           </div>
+
+          <div className="space-y-1">
+            <div className="text-white/80">
+              Gewuenschte Themen (optional, Komma-/Zeilen-getrennt)
+            </div>
+            <textarea
+              value={desiredTopicNamesText}
+              onChange={(e) => setDesiredTopicNamesText(e.target.value)}
+              rows={3}
+              placeholder="z.B. Analysis, Stochastik, Vektoren"
+              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-white/90 outline-none placeholder:text-white/50"
+            />
+          </div>
         </div>
       </Modal>
 
@@ -288,6 +313,7 @@ export function SubjectPage() {
           event.currentTarget.value = '';
           if (!file) return;
           setCurriculumFile(file);
+          setDesiredTopicNamesText('');
           setImportOpen(true);
         }}
       />

@@ -24,7 +24,7 @@ type CurriculumState = {
   errorByTopic: Record<string, string | undefined>;
   refreshSubjectDocuments: (subjectId: string) => Promise<void>;
   refreshTopicCurriculum: (topicId: string) => Promise<void>;
-  importCurriculum: (input: { subjectId: string; file: File }) => Promise<void>;
+  importCurriculum: (input: { subjectId: string; file: File; desiredTopicNames?: string[] }) => Promise<void>;
   generateChapterExplanation: (input: {
     subjectId: string;
     topicId: string;
@@ -87,7 +87,7 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
     }
   },
 
-  importCurriculum: async ({ subjectId, file }) => {
+  importCurriculum: async ({ subjectId, file, desiredTopicNames }) => {
     const subject = await subjectRepo.get(subjectId);
     if (!subject) throw new Error('Fach nicht gefunden');
     const processingDoc = await curriculumDocumentRepo.create({
@@ -98,7 +98,11 @@ export const useCurriculumStore = create<CurriculumState>((set, get) => ({
     await get().refreshSubjectDocuments(subjectId);
 
     try {
-      const imported = await importCurriculumWithAi({ subjectName: subject.name, file });
+      const imported = await importCurriculumWithAi({
+        subjectName: subject.name,
+        file,
+        desiredTopicNames,
+      });
       const existingTopics = await topicRepo.listBySubject(subjectId);
       for (const topic of existingTopics) {
         await topicRepo.delete(topic.id);

@@ -174,13 +174,21 @@ export type ImportedCurriculum = {
 export async function importCurriculumWithAi(input: {
   subjectName: string;
   file: File;
+  desiredTopicNames?: string[];
 }): Promise<ImportedCurriculum> {
   const supabase = getSupabaseClient();
-  const body = {
+  const body: {
+    subjectName: string;
+    filename: string;
+    mimeType: string;
+    fileBase64: string;
+    desiredTopicNames?: string[];
+  } = {
     subjectName: input.subjectName,
     filename: input.file.name,
     mimeType: input.file.type || 'application/pdf',
     fileBase64: uint8ArrayToBase64(new Uint8Array(await input.file.arrayBuffer())),
+    desiredTopicNames: input.desiredTopicNames,
   };
 
   const { data, error } = await supabase.functions.invoke('curriculum-import', { body });

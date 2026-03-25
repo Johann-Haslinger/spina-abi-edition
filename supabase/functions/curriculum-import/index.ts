@@ -207,10 +207,18 @@ serve(async (req) => {
       filename?: string;
       mimeType?: string;
       fileBase64?: string;
+      desiredTopicNames?: unknown;
     };
     if (!body.subjectName || !body.fileBase64) {
       return json(400, { error: 'subjectName oder fileBase64 fehlt' });
     }
+
+    const desiredTopicNames = Array.isArray(body.desiredTopicNames)
+      ? body.desiredTopicNames
+          .filter((x) => typeof x === 'string')
+          .map((x) => x.trim())
+          .filter(Boolean)
+      : undefined;
 
     const openaiKey = assertEnv('OPENAI_API_KEY');
     const model =
@@ -224,6 +232,7 @@ serve(async (req) => {
       filename: pdfFilename,
       mimeType: body.mimeType || 'application/pdf',
       fileBytes: pdfBytes.byteLength,
+      desiredTopicNamesCount: desiredTopicNames?.length ?? 0,
     });
 
     const pdfFileId = await uploadPdfToOpenAiFile({
@@ -246,6 +255,19 @@ serve(async (req) => {
       '- Keine Dopplungen, kein Fliesstext, keine Erklaerung ausserhalb des JSON.',
       '- Wenn Informationen fehlen, liefere trotzdem die beste strukturierte Schätzung aus dem Dokument.',
     ].join('\n');
+
+    const desiredTopicsPrompt = desiredTopicNames?.length
+      ? [
+          'Zusatzregeln (Wunschliste):',
+          '- Wenn Gewuenschte Topics angegeben sind, erzeuge genau diese Topics in der gleichen Reihenfolge.',
+          '- Erzeuge keine zusaetzlichen Topics.',
+          '- Jeder Gewuenschte Topic-Name darf leicht angepasst werden, muss aber dem Gewuenschten eindeutig entsprechen.',
+          '- Fuer jeden Gewuenschten Topic: verwende nur Kapitel/Requirements aus dem Dokument, die dazu passen.',
+          `- Gewuenschte Topics: ${desiredTopicNames.join(' | ')}`,
+        ].join('\n')
+      : '';
+
+    const finalPrompt = desiredTopicsPrompt ? `${prompt}\n${desiredTopicsPrompt}` : prompt;
 
     log(reqId, 'openai_request_start', {
       model,
@@ -275,7 +297,7 @@ serve(async (req) => {
           {
             role: 'user',
             content: [
-              { type: 'input_text', text: prompt },
+              { type: 'input_text', text: finalPrompt },
               { type: 'input_file', file_id: pdfFileId },
             ],
           },
@@ -309,6 +331,81 @@ serve(async (req) => {
       topicsCount: normalized.topics.length,
       ms: Date.now() - startedAt,
     });
+    const filterTopicsByDesiredNames = (input: {
+      topics: typeof normalized.topics;
+      desiredNames: string[];
+    }) => {
+      const stripDiacritics = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+      const normalizeForMatch = (s: string) =>
+        stripDiacritics(s.toLowerCase().trim())
+          .replace(/ß/g, 'ss')
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+
+      const tokenOverlapScore = (desiredNorm: string, topicNorm: string) => {
+        if (!desiredNorm || !topicNorm) return 0;
+        if (desiredNorm === topicNorm) return 1;
+        if (topicNorm.includes(desiredNorm) || desiredNorm.includes(topicNorm)) return 0.85;
+        const dTokens = desiredNorm.split(' ').filter(Boolean);
+        const tTokens = topicNorm.split(' ').filter(Boolean);
+        const tSet = new Set(tTokens);
+        let inter = 0;
+        for (const tok of dTokens) if (tSet.has(tok)) inter += 1;
+        const denom = Math.max(1, Math.max(dTokens.length, tTokens.length));
+        return inter / denom;
+      };
+
+      const desiredNormalizedTokens = input.desiredNames.map((n) => normalizeForMatch(n));
+      const usedTopicIdx = new Set<number>();
+      const selected: typeof input.topics = [];
+
+      for (let i = 0; i < input.desiredNames.length; i++) {
+        const desiredRaw = input.desiredNames[i];
+        const desiredNorm = desiredNormalizedTokens[i];
+        const desiredTokenCount = desiredNorm ? desiredNorm.split(' ').filter(Boolean).length : 0;
+
+        // Je weniger Tokens, desto empfindlicher auf exakte/substring Aehnlichkeit.
+        const threshold = desiredTokenCount <= 2 ? 0.22 : 0.3;
+
+        let bestIdx = -1;
+        let bestScore = -1;
+        for (let j = 0; j < input.topics.length; j++) {
+          if (usedTopicIdx.has(j)) continue;
+          const topicNorm = normalizeForMatch(input.topics[j]?.name ?? '');
+          const score = tokenOverlapScore(desiredNorm, topicNorm);
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = j;
+          }
+        }
+
+        if (bestIdx >= 0 && bestScore >= threshold) {
+          usedTopicIdx.add(bestIdx);
+          selected.push(input.topics[bestIdx]);
+        } else {
+          log(reqId, 'desired_topic_no_match', {
+            desired: desiredRaw,
+            desiredNorm,
+            bestIdx,
+            bestScore,
+          });
+        }
+      }
+
+      return selected;
+    };
+
+    if (desiredTopicNames?.length) {
+      const selected = filterTopicsByDesiredNames({ topics: normalized.topics, desiredNames: desiredTopicNames });
+      if (selected.length > 0) {
+        log(reqId, 'topics_filtered_by_desired_list', {
+          desiredCount: desiredTopicNames.length,
+          selectedCount: selected.length,
+        });
+        return json(200, { topics: selected });
+      }
+    }
+
     return json(200, { topics: normalized.topics });
   } catch (error) {
     log(reqId, 'request_exception', {
