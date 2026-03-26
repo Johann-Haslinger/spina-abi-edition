@@ -259,7 +259,7 @@ export class AbiDb extends Dexie {
         attempts:
           'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
         attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
-        attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+        attemptAiReviews: 'id, attemptId, result, createdAtMs',
         attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
 
         inkStrokes:
@@ -296,7 +296,7 @@ export class AbiDb extends Dexie {
       attempts:
         'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
       attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
-      attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+      attemptAiReviews: 'id, attemptId, result, createdAtMs',
       attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
 
       inkStrokes:
@@ -326,7 +326,7 @@ export class AbiDb extends Dexie {
         attempts:
           'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
         attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
-        attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+        attemptAiReviews: 'id, attemptId, result, createdAtMs',
         attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
 
         inkStrokes:
@@ -381,7 +381,7 @@ export class AbiDb extends Dexie {
       attempts:
         'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
       attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
-      attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+      attemptAiReviews: 'id, attemptId, result, createdAtMs',
       attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
 
       inkStrokes:
@@ -413,7 +413,7 @@ export class AbiDb extends Dexie {
         attempts:
           'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
         attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
-        attemptAiReviews: 'id, attemptId, score, result, createdAtMs',
+        attemptAiReviews: 'id, attemptId, result, createdAtMs',
         attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
 
         inkStrokes:
@@ -430,6 +430,104 @@ export class AbiDb extends Dexie {
           .modify((ex: { difficulty?: unknown }) => {
             const d = ex.difficulty;
             if (d !== 1 && d !== 2 && d !== 3) ex.difficulty = 2;
+          });
+      });
+
+    this.version(16)
+      .stores({
+        subjects: 'id, name',
+        topics: 'id, subjectId, orderIndex',
+        folders: 'id, topicId, parentFolderId, orderIndex',
+        assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+        assetFiles: 'assetId',
+
+        curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+        chapters: 'id, topicId, orderIndex',
+        requirements: 'id, chapterId, difficulty, mastery',
+
+        studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+        exercises: 'id, assetId, status',
+        problems: 'id, [exerciseId+idx], exerciseId, idx',
+        subproblems: 'id, [problemId+label], problemId, label',
+        subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+        attempts:
+          'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+        attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+        attemptAiReviews: 'id, attemptId, result, createdAtMs',
+        attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+        inkStrokes:
+          'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+        openAiPdfFileCache: 'pdfSha256, updatedAtMs',
+
+        plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+        scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('attemptAiReviews')
+          .toCollection()
+          .modify((row: {
+            overallPercent?: unknown;
+            score?: unknown;
+            requirementPercents?: unknown;
+            requirementUpdates?: unknown;
+          }) => {
+            if (!Array.isArray(row.requirementUpdates) && Array.isArray(row.requirementPercents)) {
+              row.requirementUpdates = row.requirementPercents;
+            }
+            if ('requirementPercents' in row) delete row.requirementPercents;
+            if ('overallPercent' in row) delete row.overallPercent;
+            if ('score' in row) delete row.score;
+          });
+      });
+
+    this.version(17)
+      .stores({
+        subjects: 'id, name',
+        topics: 'id, subjectId, orderIndex',
+        folders: 'id, topicId, parentFolderId, orderIndex',
+        assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+        assetFiles: 'assetId',
+
+        curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+        chapters: 'id, topicId, orderIndex',
+        requirements: 'id, chapterId, difficulty, mastery',
+
+        studySessions: 'id, subjectId, topicId, startedAtMs, endedAtMs',
+        exercises: 'id, assetId, status',
+        problems: 'id, [exerciseId+idx], exerciseId, idx',
+        subproblems: 'id, [problemId+label], problemId, label',
+        subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+        attempts:
+          'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+        attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+        attemptAiReviews: 'id, attemptId, result, createdAtMs',
+        attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+        inkStrokes:
+          'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+        openAiPdfFileCache: 'pdfSha256, updatedAtMs',
+
+        plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+        scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+      })
+      .upgrade(async (tx) => {
+        const reviews = await tx.table('attemptAiReviews').toArray();
+        const reviewByAttemptId = new Map(
+          reviews.map((row: { attemptId?: unknown; requirementUpdates?: unknown }) => [
+            typeof row.attemptId === 'string' ? row.attemptId : '',
+            Array.isArray(row.requirementUpdates) ? row.requirementUpdates : undefined,
+          ]),
+        );
+        await tx
+          .table('attempts')
+          .toCollection()
+          .modify((row: { id?: unknown; requirementUpdates?: unknown }) => {
+            if (typeof row.id !== 'string') return;
+            if (Array.isArray(row.requirementUpdates)) return;
+            const requirementUpdates = reviewByAttemptId.get(row.id);
+            if (Array.isArray(requirementUpdates)) row.requirementUpdates = requirementUpdates;
           });
       });
   }

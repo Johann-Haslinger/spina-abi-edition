@@ -23,7 +23,6 @@ type ExerciseItem = {
   path: string;
   result: AttemptResult;
   duration: string;
-  aiScore?: number;
 };
 
 type ExercisePayload = {
@@ -110,7 +109,7 @@ serve(async (req) => {
             '- Antworte NUR als JSON mit genau diesem Schema:',
             '{ "headline": string, "summary": string, "tip": string, "focusAreas": string[] }',
             '- Alles auf Deutsch, sachlich und ermutigend.',
-            '- summary: 2–4 Sätze zur bearbeiteten Übung in dieser Session (Versuche, Zeiten, Trefferquote, ggf. KI-Scores).',
+            '- summary: 2–4 Sätze zur bearbeiteten Übung in dieser Session (Versuche, Zeiten, Trefferquote, ggf. KI-Prozente).',
             '- tip: EIN konkreter nächster Übungsschritt.',
             '- focusAreas: 2–4 kurze Stichpunkte (Strings), worauf beim nächsten Mal geachtet werden soll.',
             '- KEIN Bezug zum gesamten Themen-Curriculum oder langfristigen Themensstand — nur diese Übung und diese Versuche.',

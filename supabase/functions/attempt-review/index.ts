@@ -119,7 +119,6 @@ serve(async (req) => {
       'Du bewertest eine Abi-Lernaufgabe.',
       'Antworte nur als JSON mit diesem Schema:',
       '{',
-      '  "score": number,',
       '  "result": "correct" | "partial" | "wrong",',
       '  "messageToUser"?: string,',
       '  "notes"?: string,',
@@ -128,17 +127,24 @@ serve(async (req) => {
       '  "manualFallbackReason"?: string,',
       '  "scheduleReview"?: { "dueAtMs": number },',
       '  "chapterIds": string[],',
-      '  "requirements": [{ "requirementId"?: string, "requirementName": string, "confidence": number, "masteryDelta": number }]',
+      '  "requirements": [{ "requirementId"?: string, "requirementName": string, "confidence": number, "masteryDelta": number, "percent": number }]',
       '}',
-      'Bewerte nach Ergebnis (40%), Rechenweg (40%), Verständnis (20%).',
-      'Kleine Rundungsabweichungen oder leicht andere aber aequivalente Schreibweise (z.B. 0,33 vs 1/3, nur anderer Zwischenschritt) gelten als korrekt. Nur bei inhaltlich falschem Ergebnis oder wesentlichem Logikfehler setze partial oder wrong.',
-      'Abi-Lernen bedeutet viele Attempts pro Thema. Ein einzelner Attempt darf nur ein sehr kleines Fortschrittssignal sein.',
-      'Vergib masteryDelta deshalb sehr sparsam. Typisch pro Requirement etwa -0.01 bis 0.015 je nach Evidenz; niemals grosse Spruenge.',
-      'Auch bei result = partial duerfen passende Requirements einen kleinen positiven masteryDelta bekommen, der aber geringer ausfaellt als bei clearly correct.',
+      'Bewerte pro Requirement mit einer Punkteskala von 0 bis 4 (max 4) und wandle das dann in requirements[*].percent = (punkteProRequirement / 4) um.',
+      'Kleine Rundungsabweichungen oder leicht andere aber aequivalente Schreibweise (z.B. 0,33 vs 1/3, nur anderer Zwischenschritt) gelten als korrekt.',
+      'Setze result auf Basis der Gesamt-Evidenz: correct nur wenn die Aufgabe fachlich im Kern richtig ist; partial wenn es teilweise richtig ist, aber relevante Teile fehlen oder unsauber sind; wrong wenn wesentliche Logik oder das Ergebnis klar falsch ist.',
+      'Vergib keine automatisch zu niedrigen Werte: Wenn die Evidenz klar ist, nutze den gesamten 0..4-Bereich. Reduziere nur bei echten Lücken.',
+      'Abi-Lernen bedeutet viele Attempts pro Thema. Ein einzelner Attempt darf nur ein begrenztes Fortschrittssignal sein.',
+      'Vergib masteryDelta deshalb sehr sparsam. Typisch pro Requirement etwa -0.02 bis 0.04 je nach Evidenz; niemals grosse Spruenge.',
+      'Abzuege (masteryDelta negativ oder requirements percent niedriger) nur dann, wenn es wirklich notwendig ist, um Frustration zu vermeiden. Wenn Teilerfolg sichtbar ist, gib lieber einen kleinen positiven Prozentsatz statt starke Abzuege.',
       usedAiHelp
-        ? 'StudyAI-Hilfe wurde bei diesem Attempt genutzt: Vergib trotzdem kleine masteryDelta-Werte wo angebracht, aber staerker konservativ als ohne Hilfe. Erwaehne in messageToUser knapp, dass der Fortschritt wegen KI-Hilfe begrenzt ist, ohne zu behaupten es gaebe gar keinen Fortschritt.'
-        : 'Ohne KI-Hilfe: vergib realistische, kleine masteryDelta-Werte.',
-      'Feld notes: Kurze, kontextfreie Lernerinnerung fuer den Nutzer (max 1-2 Saetze). Keine Aufgabenstellung zitieren, keine konkreten Zahlen aus dieser Aufgabe. Nur uebertragbare Fehlermuster oder Staerken (z.B. Rechenweg sauber, Einheiten pruefen, etc.).',
+        ? 'StudyAI-Hilfe wurde genutzt: Verteile die Punkte weiterhin, nur leicht konservativer. messageToUser darf kurz erklaeren, dass der Fortschritt wegen KI-Hilfe begrenzt ist, ohne zu behaupten, es gaebe gar keinen Fortschritt.'
+        : 'Ohne KI-Hilfe: Verteile die Punkte realistisch und fair nach Evidenz.',
+      'Feld notes: Kurze, app-relevante Lernerinnerung fuer den Nutzer (max 1-2 Saetze). Keine Aufgabenstellung zitieren, keine konkreten Zahlen aus dieser Aufgabe. Nur uebertragbare Lernmuster/Fehlertypen oder Staerken, die fuer kuenftige Abi-Aufgaben wichtig sind.',
+      'Beispiele fuer notes:',
+      '- Der Nutzer hat Schwierigkeiten mit Vierfeldertafeln oder Tabellen und verliert dabei Schritte.',
+      '- Kein ausfuehrlicher Rechenweg: wichtige Zwischenschritte fehlen.',
+      '- Unnoetig langer Rechenweg: zu viele Umwege, effizientere Methode wird nicht genutzt.',
+      '- Einheiten/Dimensionen werden nicht sauber geprueft oder uebertragen.',
       `Teilaufgabe: ${formatTaskPath(body.problemIdx, body.subproblemLabel, body.subsubproblemLabel)}`,
       'Die eigentliche Nutzerlösung steckt im angehängten Bild.',
       `Kapitel: ${JSON.stringify(chapters)}`,
@@ -185,7 +191,6 @@ serve(async (req) => {
     const rawMessageToUser = asOptionalString(parsed.messageToUser);
 
     return json(200, {
-      score: clampNumber(parsed.score, 0, 1, 0.5),
       result: normalizeResult(parsed.result),
       messageToUser: rawMessageToUser,
       notes: asOptionalString(parsed.notes),
@@ -221,6 +226,7 @@ serve(async (req) => {
                   usedAiHelp ? 0.01 : 0.02,
                   0,
                 ),
+                percent: normalizePercent(row.percent, 0.5),
               };
             })
             .filter(Boolean)
@@ -280,6 +286,13 @@ function normalizeResult(value: unknown): 'correct' | 'partial' | 'wrong' {
 
 function asOptionalString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function normalizePercent(value: unknown, fallback: number) {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  if (num > 1) return clampNumber(num / 4, 0, 1, fallback);
+  return clampNumber(num, 0, 1, fallback);
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {

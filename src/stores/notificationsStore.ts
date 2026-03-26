@@ -2,7 +2,6 @@ import { create } from 'zustand';
 
 type AttemptReviewSuccessDetails = {
   kind: 'attemptReviewSuccess';
-  score: number;
   messageToUser?: string;
   notes?: string;
   solutionExplanation?: string;
@@ -10,6 +9,7 @@ type AttemptReviewSuccessDetails = {
     requirementId: string;
     requirementName: string;
     masteryDelta: number;
+    percent: number;
   }>;
 };
 

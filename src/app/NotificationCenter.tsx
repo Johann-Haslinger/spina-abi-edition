@@ -9,6 +9,7 @@ export function NotificationCenter() {
   const dismiss = useNotificationsStore((state) => state.dismiss);
   const openAttemptReview = useNotificationsStore((state) => state.openAttemptReview);
   const [expandedNotificationId, setExpandedNotificationId] = useState<string | null>(null);
+  const [collapsedAtMsById, setCollapsedAtMsById] = useState<Record<string, number>>({});
 
   const activeExpandedNotificationId = notifications.some(
     (notification) => notification.id === expandedNotificationId,
@@ -22,13 +23,22 @@ export function NotificationCenter() {
       .map((notification) =>
         window.setTimeout(
           () => dismiss(notification.id),
-          notification.details?.kind === 'attemptReviewSuccess' ? 12000 : 7000,
+          (() => {
+            const defaultDelayMs =
+              notification.details?.kind === 'attemptReviewSuccess' ? 12000 : 7000;
+            const collapsedAtMs = collapsedAtMsById[notification.id];
+            if (typeof collapsedAtMs === 'number') {
+              const elapsedMs = Date.now() - collapsedAtMs;
+              return Math.max(0, 3000 - elapsedMs);
+            }
+            return defaultDelayMs;
+          })(),
         ),
       );
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [activeExpandedNotificationId, dismiss, notifications]);
+  }, [activeExpandedNotificationId, dismiss, notifications, collapsedAtMsById]);
 
   return (
     <div className="pointer-events-none fixed top-4 left-1/2 z-10000 flex w-full max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col items-center gap-3">
@@ -67,6 +77,12 @@ export function NotificationCenter() {
                 transition={{ type: 'spring', stiffness: 500, damping: 42 }}
                 onClick={() => {
                   if (canExpand) {
+                    if (isExpanded) {
+                      setCollapsedAtMsById((prev) => ({
+                        ...prev,
+                        [notification.id]: Date.now(),
+                      }));
+                    }
                     setExpandedNotificationId((current) =>
                       current === notification.id ? null : notification.id,
                     );
@@ -108,7 +124,7 @@ export function NotificationCenter() {
 
                     {successDetails ? (
                       <div className="shrink-0 rounded-full border border-[#00AE27]/10 bg-[#00AE27]/10 px-2.5 py-1 text-xs text-white">
-                        {formatPercent(successDetails.score)}
+                        Gesamt {formatMasteryDeltaSum(successDetails.requirementUpdates)}
                       </div>
                     ) : null}
                   </div>
@@ -143,7 +159,7 @@ export function NotificationCenter() {
                                   <div className="min-w-0 text-white/85">
                                     {update.requirementName}
                                   </div>
-                                  <div className="shrink-0 text-[#00AE27]/80">
+                                  <div className="shrink-0 text-[#00AE27]/80 tabular-nums">
                                     {formatDelta(update.masteryDelta)}
                                   </div>
                                 </div>
@@ -174,12 +190,16 @@ export function NotificationCenter() {
   );
 }
 
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
-}
-
 function formatDelta(value: number) {
   const percentage = Math.abs(value) * 100;
   const rounded = Number.isInteger(percentage) ? percentage.toFixed(0) : percentage.toFixed(1);
   return `${value >= 0 ? '+' : '-'}${rounded}%`;
+}
+
+function formatMasteryDeltaSum(
+  updates: Array<{
+    masteryDelta: number;
+  }>,
+) {
+  return formatDelta(updates.reduce((sum, update) => sum + update.masteryDelta, 0));
 }

@@ -6,7 +6,7 @@ import { FullscreenViewerFrame } from '../../../components/FullscreenViewerFrame
 import { Modal } from '../../../components/Modal';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetFile } from '../../../domain/models';
-import { assetFileStore, assetRepo, studySessionRepo } from '../../../repositories';
+import { attemptRepo, assetFileStore, assetRepo, studySessionRepo } from '../../../repositories';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { useNotificationsStore } from '../../../stores/notificationsStore';
 import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
@@ -133,24 +133,49 @@ export function StudyPage() {
     else navigate(target);
   };
 
-  const onPauseAndLeave = () => {
+  const hasAnyEndedAttemptsForExercise = async () => {
+    if (!studySessionId) return false;
+    if (guardState.kind !== 'ok') return false;
+    const attempts = await attemptRepo.listForSessionAsset({
+      studySessionId,
+      assetId: guardState.asset.id,
+    });
+    return attempts.length > 0;
+  };
+
+  const onPauseAndLeave = async () => {
     if (currentAttempt) cancelAttempt();
     setBackDialogOpen(false);
+    setReviewOpen(false);
+
+    const hasAttempts = await hasAnyEndedAttemptsForExercise();
+    if (!hasAttempts) {
+      goToAssetTopic();
+      return;
+    }
+
     setReviewOpen(true);
   };
 
   const onFinishAndLeave = async () => {
     setBackDialogBusy(true);
+    let navigateNow = false;
     try {
       if (currentAttempt) cancelAttempt();
       if (guardState.kind === 'ok') {
         await setExerciseStatus(guardState.asset.id, 'covered');
       }
       setBackDialogOpen(false);
-      setReviewOpen(true);
+      setReviewOpen(false);
+
+      const hasAttempts = await hasAnyEndedAttemptsForExercise();
+      navigateNow = !hasAttempts;
+      if (hasAttempts) setReviewOpen(true);
     } finally {
       setBackDialogBusy(false);
     }
+
+    if (navigateNow) goToAssetTopic();
   };
 
   const onBackClick = () => {
@@ -342,7 +367,7 @@ export function StudyPage() {
           assetId={guardState.asset.id}
           onGoToTopic={() => {
             setReviewOpen(false);
-            if (active) navigate(`/subjects/${active.subjectId}/topics/${active.topicId}`);
+            goToAssetTopic();
           }}
           onEndSession={async () => {
             setReviewOpen(false);

@@ -8,11 +8,7 @@ import {
   attemptRepo,
   studySessionRepo,
 } from '../../../repositories';
-import {
-  formatClockTime,
-  formatDuration,
-  formatDurationForAiReview,
-} from '../../../utils/time';
+import { formatClockTime, formatDuration, formatDurationForAiReview } from '../../../utils/time';
 import { requestReviewSummary } from '../ai/aiClient';
 import type { ReviewSummaryResponse } from '../ai/reviewSummaryTypes';
 import { AiReviewSummaryCard } from '../components/AiReviewSummaryCard';
@@ -119,7 +115,6 @@ export function ExerciseReviewModal(props: {
           }),
           result: r.attempt.result,
           duration: formatDurationForAiReview(r.attempt.seconds),
-          ...(r.aiReview?.score !== undefined ? { aiScore: r.aiReview.score } : {}),
         }));
         const data = await requestReviewSummary({
           scope: 'exercise',
@@ -202,7 +197,7 @@ export function ExerciseReviewModal(props: {
         <>
           <SecondaryButton onClick={props.onEndSession}>Session beenden</SecondaryButton>
 
-          <PrimaryButton onClick={props.onClose}>Weiter</PrimaryButton>
+          <PrimaryButton onClick={props.onGoToTopic}>Weiter</PrimaryButton>
         </>
       }
     >

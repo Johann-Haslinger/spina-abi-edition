@@ -194,22 +194,22 @@ export function TopicPage() {
       <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-8 top-18">
         <IoChevronBack />
       </ViewerIconButton>
-
-      <PageHeader
-        title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
-        actions={
-          <button
-            type="button"
-            onClick={() =>
-              setViewMode((current) => (current === 'assets' ? 'curriculum' : 'assets'))
-            }
-            className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-          >
-            {viewMode === 'assets' ? 'Kapitel & Skills' : 'Übungen'}
-          </button>
-        }
-      />
-
+      <div className="px-16">
+        <PageHeader
+          title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
+          actions={
+            <button
+              type="button"
+              onClick={() =>
+                setViewMode((current) => (current === 'assets' ? 'curriculum' : 'assets'))
+              }
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
+            >
+              {viewMode === 'assets' ? 'Kapitel & Skills' : 'Übungen'}
+            </button>
+          }
+        />
+      </div>
       <div>
         <div className="space-y-6">
           <TopicSummaryPanel
@@ -222,7 +222,7 @@ export function TopicPage() {
             sessionRegenKey={topicSummaryRegenKey}
           />
 
-          <section className="lg:col-span-2">
+          <section className="lg:col-span-2 px-16">
             {viewMode === 'assets' ? (
               <TopicAssetsView
                 assetsError={assetsError}

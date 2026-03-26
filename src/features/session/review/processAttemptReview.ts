@@ -79,6 +79,13 @@ async function runAttemptAutoReview(input: {
     });
 
     const matchedRequirements = resolveRequirements(review.requirements, requirements);
+    const requirementUpdates = matchedRequirements.map((entry) => ({
+      requirementId: entry.requirement.id,
+      requirementName: entry.requirement.name,
+      confidence: entry.confidence,
+      masteryDelta: entry.masteryDelta,
+      percent: entry.percent,
+    }));
     await attemptRequirementLinkRepo.replaceForAttempt(
       input.attemptId,
       matchedRequirements.map((entry) => ({
@@ -100,7 +107,6 @@ async function runAttemptAutoReview(input: {
 
     await attemptAiReviewRepo.upsert({
       attemptId: input.attemptId,
-      score: review.score,
       result: review.result,
       messageToUser: review.messageToUser,
       notes: review.notes,
@@ -108,6 +114,7 @@ async function runAttemptAutoReview(input: {
       solutionExplanation: review.solutionExplanation,
       createdAtMs: Date.now(),
       chapterIds: review.chapterIds,
+      requirementUpdates,
     });
 
     const reviewStatus = review.manualFallbackReason ? 'manual_required' : 'done';
@@ -116,6 +123,7 @@ async function runAttemptAutoReview(input: {
       note: mergeAttemptNotes(attemptBeforeReview?.note, review.notes),
       errorType: review.result === 'wrong' ? 'KI-Analyse: Fehler erkannt' : undefined,
       reviewStatus,
+      requirementUpdates,
     });
     await attemptReviewJobRepo.update(job.id, {
       status: review.manualFallbackReason ? 'manual_required' : 'completed',
@@ -157,17 +165,10 @@ async function runAttemptAutoReview(input: {
         message: review.messageToUser || review.notes || 'Die Analyse ist jetzt verfügbar.',
         details: {
           kind: 'attemptReviewSuccess',
-          score: review.score,
           messageToUser: review.messageToUser,
           notes: review.notes,
           solutionExplanation: review.solutionExplanation,
-          requirementUpdates: matchedRequirements
-            .filter((entry) => entry.masteryDelta !== 0)
-            .map((entry) => ({
-              requirementId: entry.requirement.id,
-              requirementName: entry.requirement.name,
-              masteryDelta: entry.masteryDelta,
-            })),
+          requirementUpdates: requirementUpdates.filter((entry) => entry.percent > 0.001),
         },
       });
     }
@@ -208,6 +209,7 @@ function resolveRequirements(
     requirementName: string;
     confidence: number;
     masteryDelta: number;
+    percent: number;
   }>,
   requirements: Requirement[],
 ) {
@@ -222,11 +224,21 @@ function resolveRequirements(
             candidate.name.trim().toLowerCase() === entry.requirementName.trim().toLowerCase(),
         );
       return requirement
-        ? { requirement, confidence: entry.confidence, masteryDelta: entry.masteryDelta }
+        ? {
+            requirement,
+            confidence: entry.confidence,
+            masteryDelta: entry.masteryDelta,
+            percent: entry.percent,
+          }
         : null;
     })
     .filter(
-      (entry): entry is { requirement: Requirement; confidence: number; masteryDelta: number } =>
+      (entry): entry is {
+        requirement: Requirement;
+        confidence: number;
+        masteryDelta: number;
+        percent: number;
+      } =>
         Boolean(entry),
     );
 }

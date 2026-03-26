@@ -207,7 +207,7 @@ export function TopicSummaryPanel(props: Props) {
       : '0 Sekunden';
 
   return (
-    <section className="mb-8 rounded-3xl border border-white/8 bg-white/4 p-8">
+    <section className="mb-8 px-16 border-y border-white/8 bg-white/4 p-8">
       <div className="grid gap-12 xl:gap-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)] lg:items-start">
         <div className="flex h-full flex-col gap-4">
           <div>

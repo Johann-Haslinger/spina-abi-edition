@@ -47,7 +47,7 @@ export function ActionDialog(props: {
             transition={{ duration: 0.2, ease: 'easeOut' }}
           >
             <div className="text-center">
-              <div className="text-sm font-semibold text-white">{props.title}</div>
+              <div className="text-base font-semibold text-white">{props.title}</div>
               <div className="mt-2 text-sm text-white/60">{props.message}</div>
             </div>
             <div className="mt-5 flex flex-col gap-3">
@@ -57,7 +57,7 @@ export function ActionDialog(props: {
                   type="button"
                   onClick={action.onClick}
                   disabled={busy || action.disabled}
-                  className={`w-full cursor-pointer rounded-full px-3 py-2 text-sm font-semibold disabled:opacity-50 ${toneClass(
+                  className={`w-full cursor-pointer rounded-full px-3 py-2 text-sm font-medium disabled:opacity-50 ${toneClass(
                     action.tone ?? 'neutral',
                   )}`}
                 >
@@ -82,5 +82,5 @@ function toneClass(tone: ActionDialogTone): string {
   if (tone === 'danger') {
     return 'bg-rose-600 hover:bg-rose-700 text-white';
   }
-  return 'border-white/20 border text-white';
+  return 'bg-white/3 text-white';
 }

@@ -13,7 +13,7 @@ export function AppShell() {
       <NavBar />
       <NotificationCenter />
 
-      <main className="mx-auto xl:w-4/5 px-16 h-full">
+      <main className="mx-auto h-full">
         <Outlet />
       </main>
     </div>

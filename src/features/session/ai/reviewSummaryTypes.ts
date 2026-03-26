@@ -14,7 +14,6 @@ export type ReviewSummaryExerciseItem = {
   result: ReviewSummaryAttemptResult;
   /** z. B. "3 Min" — für die KI */
   duration: string;
-  aiScore?: number;
 };
 
 export type ReviewSummaryExercisePayload = {

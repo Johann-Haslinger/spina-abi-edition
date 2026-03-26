@@ -243,7 +243,6 @@ export async function generateChapterExplanationWithAi(input: {
 }
 
 export type AttemptReviewResponse = {
-  score: number;
   result: 'correct' | 'partial' | 'wrong';
   messageToUser?: string;
   notes?: string;
@@ -257,6 +256,7 @@ export type AttemptReviewResponse = {
     requirementName: string;
     confidence: number;
     masteryDelta: number;
+    percent: number;
   }>;
 };
 

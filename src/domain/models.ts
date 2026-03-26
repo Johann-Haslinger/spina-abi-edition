@@ -182,6 +182,15 @@ export type Attempt = {
   note?: string;
   errorType?: string;
   reviewStatus: AttemptReviewStatus;
+  requirementUpdates?: AttemptRequirementUpdate[];
+};
+
+export type AttemptRequirementUpdate = {
+  requirementId?: Id;
+  requirementName: string;
+  confidence: number;
+  masteryDelta: number;
+  percent: number;
 };
 
 export type AttemptRequirementLink = {
@@ -195,7 +204,6 @@ export type AttemptRequirementLink = {
 export type AttemptAiReview = {
   id: Id;
   attemptId: Id;
-  score: number;
   result: AttemptResult;
   messageToUser?: string;
   notes?: string;
@@ -203,6 +211,7 @@ export type AttemptAiReview = {
   solutionExplanation?: string;
   createdAtMs: number;
   chapterIds: Id[];
+  requirementUpdates?: AttemptRequirementUpdate[];
 };
 
 export type AttemptReviewJobStatus =
