@@ -23,6 +23,7 @@ type Props = {
   assets: Asset[];
   exerciseStatusByAssetId: Record<string, ExercisePageStatus>;
   onOpenCurriculum: () => void;
+  onOpenLearnPath: () => void;
   sessionRegenKey: number;
 };
 
@@ -219,7 +220,7 @@ export function TopicSummaryPanel(props: Props) {
             </button>
           </div>
           <div className="w-2/3 h-fit flex flex-col gap-2 mt-auto">
-            <PrimaryButton onClick={() => {}}>Weiter lernen</PrimaryButton>
+            <PrimaryButton onClick={props.onOpenLearnPath}>Weiter lernen</PrimaryButton>
           </div>
         </div>
 

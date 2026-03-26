@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { SecondaryButton } from '../../../components/Button';
 import { PageHeader } from '../../../components/PageHeader';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetType } from '../../../domain/models';
@@ -198,15 +199,30 @@ export function TopicPage() {
         <PageHeader
           title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
           actions={
-            <button
-              type="button"
-              onClick={() =>
-                setViewMode((current) => (current === 'assets' ? 'curriculum' : 'assets'))
-              }
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-            >
-              {viewMode === 'assets' ? 'Kapitel & Skills' : 'Übungen'}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'assets', label: 'Übungen' },
+                { key: 'curriculum', label: 'Kapitel & Skills' },
+              ].map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setViewMode(option.key as 'assets' | 'curriculum')}
+                  className={`rounded-full border px-4 py-2 text-sm transition-colors ${
+                    viewMode === option.key
+                      ? 'border-white bg-white text-black'
+                      : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <SecondaryButton
+                onClick={() => navigate(`/subjects/${subjectId}/topics/${topicId}/learnpath`)}
+              >
+                Wissenspfad
+              </SecondaryButton>
+            </div>
           }
         />
       </div>
@@ -219,6 +235,7 @@ export function TopicPage() {
             assets={assets}
             exerciseStatusByAssetId={exerciseStatusByAssetId}
             onOpenCurriculum={() => setViewMode('curriculum')}
+            onOpenLearnPath={() => navigate(`/subjects/${subjectId}/topics/${topicId}/learnpath`)}
             sessionRegenKey={topicSummaryRegenKey}
           />
 

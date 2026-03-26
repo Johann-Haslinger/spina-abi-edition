@@ -3,9 +3,9 @@ import { Bot, Maximize2 } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { IoClose } from 'react-icons/io5';
 import { GhostButton, SecondaryButton } from '../../../../../components/Button';
+import { ChatInputRow } from '../../../../../components/chat/ChatInputRow';
 import type { StudyAiMessage, StudyAiUiMode } from '../../../stores/studyAiChatStore';
 import { StudyAiGeneratingDots } from './StudyAiGeneratingDots';
-import { StudyAiInputRow } from './StudyAiInputRow';
 import { StudyAiMessageList } from './StudyAiMessageList';
 
 const SPRING = { type: 'spring', stiffness: 520, damping: 44 } as const;
@@ -100,7 +100,7 @@ export function StudyAiMorphShell(props: {
 
         {props.mode === 'center' ? (
           <div>
-            <StudyAiInputRow
+            <ChatInputRow
               value={props.draft}
               onChange={props.onDraftChange}
               onSubmit={props.onSubmit}
@@ -114,7 +114,7 @@ export function StudyAiMorphShell(props: {
 
         {props.mode === 'overlay' ? (
           <div>
-            <StudyAiInputRow
+            <ChatInputRow
               value={props.draft}
               onChange={props.onDraftChange}
               onSubmit={props.onSubmit}
@@ -176,7 +176,7 @@ export function StudyAiMorphShell(props: {
             </div>
 
             <div className="p-2 pt-4 bg-linear-to-b from-transparent to-[#243957] absolute bottom-0 left-0 right-0">
-              <StudyAiInputRow
+              <ChatInputRow
                 value={props.draft}
                 onChange={props.onDraftChange}
                 onSubmit={props.onSubmit}

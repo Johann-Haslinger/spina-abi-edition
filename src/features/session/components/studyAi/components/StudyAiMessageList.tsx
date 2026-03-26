@@ -1,20 +1,10 @@
-import 'katex/dist/katex.min.css';
 import { Copy, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
+import { ChatMarkdownContent } from '../../../../../components/chat/ChatMarkdownContent';
+import { ChatMessage } from '../../../../../components/chat/ChatMessage';
 import { GhostButton, PrimaryButton } from '../../../../../components/Button';
+import { chatMarkdownClassName } from '../../../../../components/chat/chatMarkdownUtils';
 import type { StudyAiMessage } from '../../../stores/studyAiChatStore';
-
-function normalizeMathDelimiters(input: string) {
-  return input
-    .replace(/\\\[/g, '$$')
-    .replace(/\\\]/g, '$$')
-    .replace(/\\\(/g, '$')
-    .replace(/\\\)/g, '$');
-}
 
 const REVEAL_DURATION_MS = 900;
 const CHUNK_SIZE = 3;
@@ -34,57 +24,6 @@ function isTouchLikeDevice() {
 
 function copyToClipboard(text: string) {
   void navigator.clipboard.writeText(text);
-}
-
-const markdownClass = [
-  'max-w-full',
-  'text-slate-100 leading-relaxed wrap-anywhere',
-  '[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0',
-  '[&_ul]:my-2 [&_ol]:my-2 [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-1',
-  '[&_ul]:list-disc [&_ol]:list-decimal [&_ul]:list-outside [&_ol]:list-outside [&_li]:list-item',
-  '[&_li::marker]:text-slate-200/80',
-  '[&_h1]:text-[1.05em] [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1',
-  '[&_h2]:text-[1.02em] [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1',
-  '[&_h3]:text-[1em] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1',
-  '[&_blockquote]:my-2 [&_blockquote]:border-l [&_blockquote]:border-white/20 [&_blockquote]:pl-3 [&_blockquote]:text-slate-200/90',
-  '[&_hr]:my-3 [&_hr]:border-white/10',
-  '[&_a]:text-sky-300 [&_a]:underline [&_a:hover]:text-sky-200',
-  '[&_table]:my-2 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border [&_table]:border-white/10 [&_table]:rounded-lg',
-  '[&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:border-b [&_th]:border-white/10 [&_th]:bg-white/5',
-  '[&_td]:px-2 [&_td]:py-1 [&_td]:border-b [&_td]:border-white/10',
-  '[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/30 [&_pre]:p-3',
-  '[&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.95em]',
-  '[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:px-0 [&_pre_code]:py-0',
-  '[&_.katex-display]:my-2 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden',
-].join(' ');
-
-function MarkdownContent({
-  content,
-  compact,
-  className,
-}: {
-  content: string;
-  compact?: boolean;
-  className?: string;
-}) {
-  return (
-    <div className={[markdownClass, compact ? 'text-sm' : 'text-base', className ?? ''].join(' ')}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          a: (p) => <a {...p} target="_blank" rel="noreferrer noopener" />,
-          code: ({ className: c, children, ...p }) => (
-            <code className={c} {...p}>
-              {children}
-            </code>
-          ),
-        }}
-      >
-        {normalizeMathDelimiters(content)}
-      </ReactMarkdown>
-    </div>
-  );
 }
 
 function StudyAiAssistantMessage(props: {
@@ -112,7 +51,10 @@ function StudyAiAssistantMessage(props: {
   const [revealedWordCount, setRevealedWordCount] = useState(() =>
     animateReveal ? 0 : splitRevealWords(content).length,
   );
-  const displayedContent = animateReveal ? words.slice(0, revealedWordCount).join(' ') : content;
+  const displayedContent =
+    !animateReveal || revealedWordCount >= words.length
+      ? content
+      : words.slice(0, revealedWordCount).join(' ');
 
   useEffect(() => {
     if (!animateReveal || revealedWordCount >= words.length) {
@@ -142,9 +84,9 @@ function StudyAiAssistantMessage(props: {
 
   return (
     <div className="w-full">
-      <div className={[markdownClass, compact ? 'text-sm' : 'text-base'].join(' ')}>
+      <div className={[chatMarkdownClassName, compact ? 'text-sm' : 'text-base'].join(' ')}>
         {displayedContent.length > 0 ? (
-          <MarkdownContent content={displayedContent} compact={compact} />
+          <ChatMarkdownContent content={displayedContent} compact={compact} />
         ) : null}
       </div>
       <div className="mt-6 flex items-center gap-2">
@@ -250,84 +192,83 @@ export function StudyAiMessageList(props: {
         ].join(' ');
 
         return (
-          <div
+          <ChatMessage
             key={message.id}
-            className={`group flex flex-col ${isUserMessage ? 'items-end' : 'items-start'}`}
+            align={isUserMessage ? 'end' : 'start'}
+            bubbleClassName={bubbleClassName}
+            onBubbleClick={() => {
+              if (
+                !isUserMessage ||
+                isEditingMessage ||
+                !onStartEditMessage ||
+                sending ||
+                !isTouchLikeDevice()
+              ) {
+                return;
+              }
+              const now = Date.now();
+              if (lastTap && lastTap.messageId === message.id && now - lastTap.atMs < 320) {
+                startEditing(message);
+                setLastTap(null);
+                return;
+              }
+              setLastTap({ messageId: message.id, atMs: now });
+            }}
+            action={
+              canStartEditing ? (
+                <button
+                  type="button"
+                  onClick={() => startEditing(message)}
+                  aria-label="Nachricht bearbeiten"
+                  className="mt-2 rounded-md p-1 text-white/80 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/10 hover:text-white"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              ) : null
+            }
           >
-            <div
-              className={bubbleClassName}
-              onClick={() => {
-                if (
-                  !isUserMessage ||
-                  isEditingMessage ||
-                  !onStartEditMessage ||
-                  sending ||
-                  !isTouchLikeDevice()
-                ) {
-                  return;
-                }
-                const now = Date.now();
-                if (lastTap && lastTap.messageId === message.id && now - lastTap.atMs < 320) {
-                  startEditing(message);
-                  setLastTap(null);
-                  return;
-                }
-                setLastTap({ messageId: message.id, atMs: now });
-              }}
-            >
-              {message.role === 'assistant' ? (
-                <StudyAiAssistantMessage
-                  content={message.content}
-                  compact={compact}
-                  isLastAssistant={message.id === lastAssistantId}
-                  sending={sending}
-                  animateReveal={message.id === lastAssistantId && !revealedMessageIds.has(message.id)}
-                  onRevealComplete={() => revealedMessageIds.add(message.id)}
-                  onCopy={() => copyToClipboard(message.content)}
-                  onRegenerate={message.id === lastAssistantId ? onRegenerate : undefined}
-                />
-              ) : (
-                <div className="select-text">
-                  {isEditingMessage ? (
-                    <div className="w-full">
-                      <textarea
-                        value={editingDraft}
-                        onChange={(event) =>
-                          setEditingState({ draft: event.target.value, messageId: message.id })
-                        }
-                        className="w-full resize-none text-white outline-none"
-                        rows={3}
-                        autoFocus
-                      />
-                      <div className="mt-2 flex justify-end gap-2">
-                        <GhostButton onClick={cancelEditing}>Abbrechen</GhostButton>
-                        <PrimaryButton
-                          disabled={!editingDraft.trim() || sending}
-                          onClick={() => onSubmitEditMessage?.(message.id, editingDraft)}
-                        >
-                          Senden
-                        </PrimaryButton>
-                      </div>
+            {message.role === 'assistant' ? (
+              <StudyAiAssistantMessage
+                content={message.content}
+                compact={compact}
+                isLastAssistant={message.id === lastAssistantId}
+                sending={sending}
+                animateReveal={message.id === lastAssistantId && !revealedMessageIds.has(message.id)}
+                onRevealComplete={() => revealedMessageIds.add(message.id)}
+                onCopy={() => copyToClipboard(message.content)}
+                onRegenerate={message.id === lastAssistantId ? onRegenerate : undefined}
+              />
+            ) : (
+              <div className="select-text">
+                {isEditingMessage ? (
+                  <div className="w-full">
+                    <textarea
+                      value={editingDraft}
+                      onChange={(event) =>
+                        setEditingState({ draft: event.target.value, messageId: message.id })
+                      }
+                      className="w-full resize-none text-white outline-none"
+                      rows={3}
+                      autoFocus
+                    />
+                    <div className="mt-2 flex justify-end gap-2">
+                      <GhostButton onClick={cancelEditing}>Abbrechen</GhostButton>
+                      <PrimaryButton
+                        disabled={!editingDraft.trim() || sending}
+                        onClick={() => onSubmitEditMessage?.(message.id, editingDraft)}
+                      >
+                        Senden
+                      </PrimaryButton>
                     </div>
-                  ) : (
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">{message.content}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {canStartEditing ? (
-              <button
-                type="button"
-                onClick={() => startEditing(message)}
-                aria-label="Nachricht bearbeiten"
-                className="mt-2 rounded-md p-1 text-white/80 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/10 hover:text-white"
-              >
-                <Pencil className="size-3.5" />
-              </button>
-            ) : null}
-          </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">{message.content}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </ChatMessage>
         );
       })}
     </div>
