@@ -22,7 +22,10 @@ export function TopicLearnPathPage() {
     if (subjectId) void refreshBySubject(subjectId);
   }, [refreshBySubject, subjectId]);
 
-  const subject = useMemo(() => subjects.find((item) => item.id === subjectId), [subjectId, subjects]);
+  const subject = useMemo(
+    () => subjects.find((item) => item.id === subjectId),
+    [subjectId, subjects],
+  );
   const topic = useMemo(() => {
     if (!subjectId) return undefined;
     return (topicsBySubject[subjectId] ?? []).find((item) => item.id === topicId);
@@ -37,15 +40,23 @@ export function TopicLearnPathPage() {
       <ViewerIconButton
         ariaLabel="Zurück zum Thema"
         onClick={() => navigate(`/subjects/${subjectId}/topics/${topicId}`)}
-        className="fixed left-8 top-18"
+        className="fixed left-6 top-6"
       >
         <IoChevronBack />
       </ViewerIconButton>
       <div className="px-16">
         <PageHeader
-          title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name} Wissenspfad` : 'Wissenspfad'}
+          title={
+            topic
+              ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name} Wissenspfad`
+              : 'Wissenspfad'
+          }
         />
-        <TopicKnowledgePathView topicId={topicId} topicName={topic?.name} subjectName={subject?.name} />
+        <TopicKnowledgePathView
+          topicId={topicId}
+          topicName={topic?.name}
+          subjectName={subject?.name}
+        />
       </div>
     </div>
   );

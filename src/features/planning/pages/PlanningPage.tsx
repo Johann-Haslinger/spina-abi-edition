@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { IoChevronBack } from 'react-icons/io5';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import { db } from '../../../db/db';
 import type { PlannedItem, PlannedItemType, StudySession, Topic } from '../../../domain/models';
 import { plannedItemRepo } from '../../../repositories';
@@ -21,6 +24,18 @@ import {
 const DAYS_IN_WEEK = 7;
 
 export function PlanningPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
+
+  const goBack = () => {
+    if (from) {
+      navigate(from);
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   const [weekOffset, setWeekOffset] = useState(0);
   const nowMs = useMemo(() => Date.now(), []);
   const [createInitialType, setCreateInitialType] = useState<PlannedItemType>('studySession');
@@ -184,6 +199,10 @@ export function PlanningPage() {
 
   return (
     <div className="flex flex-col overflow-hidden pt-20" style={{ height: '100dvh' }}>
+      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-6 top-6">
+        <IoChevronBack />
+      </ViewerIconButton>
+
       <div className="flex items-start justify-between gap-3 pb-4">
         <button
           type="button"

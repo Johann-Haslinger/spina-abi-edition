@@ -1,13 +1,12 @@
-import { useActiveSessionStore } from '../../stores/activeSessionStore'
-import { useNotificationsStore } from '../../stores/notificationsStore'
-import { useStudyHudVisibility } from './stores/studyHudStore'
-import { ActiveSessionWidget } from './sessionWidget/ActiveSessionWidget'
-import { NoActiveSessionWidget } from './sessionWidget/NoActiveSessionWidget'
+import { useActiveSessionStore } from '../../stores/activeSessionStore';
+import { useNotificationsStore } from '../../stores/notificationsStore';
+import { ActiveSessionWidget } from './sessionWidget/ActiveSessionWidget';
+import { useStudyHudVisibility } from './stores/studyHudStore';
 
 export function SessionWidget() {
-  const { active } = useActiveSessionStore()
-  const { suppressNonStudyAi } = useStudyHudVisibility()
-  const attemptReviewPanelOpen = useNotificationsStore((s) => s.attemptReviewPanelOpen)
+  const { active } = useActiveSessionStore();
+  const { suppressNonStudyAi } = useStudyHudVisibility();
+  const attemptReviewPanelOpen = useNotificationsStore((s) => s.attemptReviewPanelOpen);
   if (active)
     return (
       <ActiveSessionWidget
@@ -15,6 +14,6 @@ export function SessionWidget() {
         hidden={suppressNonStudyAi || attemptReviewPanelOpen}
         offscreenMode={attemptReviewPanelOpen ? 'review' : suppressNonStudyAi ? 'studyAi' : null}
       />
-    )
-  return <NoActiveSessionWidget />
+    );
+  return null;
 }
