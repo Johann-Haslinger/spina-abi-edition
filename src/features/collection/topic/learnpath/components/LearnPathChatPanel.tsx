@@ -1,33 +1,55 @@
 import { ChatInputRow } from '../../../../../components/chat/ChatInputRow';
 import { ChatMessage } from '../../../../../components/chat/ChatMessage';
 import { PrimaryButton, SecondaryButton } from '../../../../../components/Button';
-import { getRailStepNumber, RAIL_STATE_LABELS } from '../rail/standardRequirementRail';
-import { formatRailStateList } from '../learnPathUtils';
-import type { LearnPathMessage, LearnPathState } from '../types';
+import { getPlanStepPosition } from '../learnPathUtils';
+import type {
+  LearnPathExercise,
+  LearnPathMessage,
+  LearnPathState,
+  LearnPathTurnResponse,
+  RequirementPlan,
+  RequirementPlanStep,
+} from '../types';
+import { FreeTextExercise } from './FreeTextExercise';
 import { LearnPathThinkingCard } from './LearnPathThinkingCard';
+import { MatchingExercise } from './MatchingExercise';
+import { SingleChoiceExercise } from './SingleChoiceExercise';
 
 export function LearnPathChatPanel(props: {
   state: LearnPathState;
+  mode: 'learn' | 'review' | null;
   draft: string;
   totalChapters: number;
   totalRequirements: number;
   currentRequirementPosition: number;
   currentChapterName?: string;
   currentRequirementName?: string;
+  activePlan: RequirementPlan | null;
+  activeStep?: RequirementPlanStep;
   onDraftChange: (value: string) => void;
+  onBack: () => void;
   onRestart: () => void;
   onContinue: () => void;
   onSend: () => void;
+  onExerciseSubmit: (response: LearnPathTurnResponse, exercise: LearnPathExercise | null) => void;
 }) {
   const {
     state,
+    mode,
     draft,
     totalChapters,
     totalRequirements,
     currentRequirementPosition,
     currentChapterName,
     currentRequirementName,
+    activePlan,
+    activeStep,
   } = props;
+  const currentStepPosition = getPlanStepPosition(activePlan, state.activeStepId);
+  const canUseTextInput =
+    state.waitingForUser &&
+    !state.pendingExercise &&
+    (state.inputMode === 'text' || state.inputMode === 'free_text');
 
   return (
     <div className="rounded-3xl border border-white/8 bg-slate-950/25">
@@ -35,16 +57,26 @@ export function LearnPathChatPanel(props: {
         <div>
           <div className="text-xl font-semibold text-white">Wissenspfad</div>
           <div className="mt-2 text-sm text-white/65">
+            {mode ? `${mode === 'learn' ? 'Lernmodus' : 'Wiederholmodus'} · ` : ''}
             Kapitel {state.currentChapterIndex + 1} von {totalChapters}
             {' · '}
             Requirement {currentRequirementPosition} von {totalRequirements}
-            {' · '}
-            State {getRailStepNumber(state.currentState)} von 7
+            {activePlan ? (
+              <>
+                {' · '}
+                Schritt {currentStepPosition} von {activePlan.steps.length}
+              </>
+            ) : null}
           </div>
         </div>
-        <SecondaryButton onClick={props.onRestart} disabled={state.loading}>
-          Neu starten
-        </SecondaryButton>
+        <div className="flex flex-wrap gap-2">
+          <SecondaryButton onClick={props.onBack} disabled={state.loading}>
+            Zur Übersicht
+          </SecondaryButton>
+          <SecondaryButton onClick={props.onRestart} disabled={state.loading}>
+            Neu starten
+          </SecondaryButton>
+        </div>
       </div>
 
       <div className="border-b border-white/8 px-5 py-4">
@@ -55,9 +87,16 @@ export function LearnPathChatPanel(props: {
           {currentRequirementName ?? 'Requirement'}
         </div>
         <div className="mt-2 text-sm text-white/70">
-          Current State: <span className="text-white">{state.currentState}</span>
-          {' · '}
-          {RAIL_STATE_LABELS[state.currentState]}
+          {activeStep ? (
+            <>
+              <span className="text-white">{activeStep.title}</span>
+              {' · '}
+              {activeStep.type}
+              {activeStep.exerciseType ? ` · ${activeStep.exerciseType}` : ''}
+            </>
+          ) : (
+            'Fahrplan wird erstellt…'
+          )}
         </div>
       </div>
 
@@ -81,10 +120,40 @@ export function LearnPathChatPanel(props: {
             </div>
             <PrimaryButton onClick={props.onRestart}>Erneut starten</PrimaryButton>
           </div>
+        ) : state.waitingForUser && state.pendingExercise?.type === 'single_choice' ? (
+          <SingleChoiceExercise
+            key={`${state.activeStepId ?? 'exercise'}-single_choice`}
+            exercise={state.pendingExercise}
+            disabled={state.loading}
+            onSubmit={(selectedOptionId) =>
+              props.onExerciseSubmit(
+                { kind: 'single_choice', selectedOptionId },
+                state.pendingExercise,
+              )
+            }
+          />
+        ) : state.waitingForUser && state.pendingExercise?.type === 'matching' ? (
+          <MatchingExercise
+            key={`${state.activeStepId ?? 'exercise'}-matching`}
+            exercise={state.pendingExercise}
+            disabled={state.loading}
+            onSubmit={(pairs) =>
+              props.onExerciseSubmit({ kind: 'matching', pairs }, state.pendingExercise)
+            }
+          />
+        ) : state.waitingForUser && state.pendingExercise?.type === 'free_text' ? (
+          <FreeTextExercise
+            key={`${state.activeStepId ?? 'exercise'}-free_text`}
+            exercise={state.pendingExercise}
+            disabled={state.loading}
+            onSubmit={(text) =>
+              props.onExerciseSubmit({ kind: 'free_text', text }, state.pendingExercise)
+            }
+          />
         ) : state.canContinue ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-white/70">
-              Die KI bleibt im aktuellen Schritt. Mit einem Klick geht es im selben State weiter.
+              Die KI hat den naechsten Schritt vorbereitet. Mit einem Klick geht es weiter.
             </div>
             <PrimaryButton onClick={props.onContinue} disabled={state.loading}>
               Weiter
@@ -99,20 +168,26 @@ export function LearnPathChatPanel(props: {
               sending={state.loading}
               placeholder={
                 state.waitingForUser
-                  ? 'Antworte auf die Frage der KI…'
-                  : 'Antworten werden freigeschaltet, sobald der Rail eine Nutzerantwort erwartet.'
+                  ? state.inputMode === 'free_text'
+                    ? 'Schreibe deine Antwort auf die Aufgabe…'
+                    : 'Antworte kurz auf die Verstaendnisfrage…'
+                  : 'Antworten werden freigeschaltet, sobald der aktuelle Schritt Textinput erwartet.'
               }
-              disabled={!state.waitingForUser || state.loading}
+              disabled={!canUseTextInput || state.loading}
             />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-white/45">
                 {state.waitingForUser
                   ? 'Die KI wartet auf deine Antwort.'
-                  : 'Die KI steuert den Rail aktuell selbst.'}
+                  : 'Die KI steuert den Fahrplan aktuell selbst.'}
               </div>
               <PrimaryButton
                 onClick={props.onSend}
-                disabled={!state.waitingForUser || state.loading || !draft.trim()}
+                disabled={
+                  !canUseTextInput ||
+                  state.loading ||
+                  !draft.trim()
+                }
               >
                 Antworten
               </PrimaryButton>
@@ -146,14 +221,21 @@ function LearnPathChatMessage(props: { message: LearnPathMessage }) {
       }`}
     >
       <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
-      {!isUser && message.currentState ? (
-        <div className="mt-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-white/65">
-          <div>Current State: {message.currentState}</div>
-          <div>Allowed Next States: {formatRailStateList(message.allowedNextStates ?? [])}</div>
-          <div>Suggested Next State: {message.suggestedNextState ?? '–'}</div>
-          <div>Applied Next State: {message.appliedNextState ?? '–'}</div>
-          <div>State Changed: {message.stateChanged ? 'yes' : 'no'}</div>
-          <div>Await User Reply: {message.awaitUserReply ? 'yes' : 'no'}</div>
+      {!isUser ? (
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/55">
+          {message.messageKind ? (
+            <span className="rounded-full border border-white/10 px-2 py-1">
+              {message.messageKind}
+            </span>
+          ) : null}
+          {message.stepType ? (
+            <span className="rounded-full border border-white/10 px-2 py-1">{message.stepType}</span>
+          ) : null}
+          {message.exercise?.type ? (
+            <span className="rounded-full border border-white/10 px-2 py-1">
+              {message.exercise.type}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </ChatMessage>

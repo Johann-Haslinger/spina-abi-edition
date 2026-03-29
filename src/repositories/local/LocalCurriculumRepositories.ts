@@ -2,6 +2,7 @@ import { db } from '../../db/db';
 import type {
   Chapter,
   CurriculumDocument,
+  LearnPathProgress,
   Requirement,
   ScheduledReview,
 } from '../../domain/models';
@@ -13,6 +14,8 @@ import type {
   CurriculumDocumentCreateInput,
   CurriculumDocumentRepository,
   CurriculumDocumentUpdateInput,
+  LearnPathProgressRepository,
+  LearnPathProgressUpsertInput,
   RequirementCreateInput,
   RequirementRepository,
   RequirementUpdateInput,
@@ -138,6 +141,57 @@ export class LocalRequirementRepository implements RequirementRepository {
   async deleteByChapterIds(chapterIds: string[]): Promise<void> {
     if (chapterIds.length === 0) return;
     await db.requirements.where('chapterId').anyOf(chapterIds).delete();
+  }
+}
+
+export class LocalLearnPathProgressRepository implements LearnPathProgressRepository {
+  async get(id: string): Promise<LearnPathProgress | undefined> {
+    return db.learnPathProgress.get(id);
+  }
+
+  async listByTopic(topicId: string): Promise<LearnPathProgress[]> {
+    return db.learnPathProgress
+      .where('topicId')
+      .equals(topicId)
+      .reverse()
+      .sortBy('updatedAtMs');
+  }
+
+  async getByTopicRequirementMode(
+    topicId: string,
+    requirementId: string,
+    mode: LearnPathProgress['mode'],
+  ): Promise<LearnPathProgress | undefined> {
+    return db.learnPathProgress
+      .where('[topicId+requirementId+mode]')
+      .equals([topicId, requirementId, mode])
+      .first();
+  }
+
+  async upsert(input: LearnPathProgressUpsertInput): Promise<LearnPathProgress> {
+    const now = Date.now();
+    const row: LearnPathProgress = {
+      id: input.id ?? `${input.topicId}:${input.requirementId}:${input.mode}`,
+      topicId: input.topicId,
+      chapterId: input.chapterId,
+      requirementId: input.requirementId,
+      mode: input.mode,
+      status: input.status,
+      startedAtMs: input.startedAtMs ?? now,
+      updatedAtMs: input.updatedAtMs ?? now,
+      completedAtMs: input.completedAtMs,
+      currentChapterIndex: input.currentChapterIndex,
+      currentRequirementIndex: input.currentRequirementIndex,
+      lastStepId: input.lastStepId,
+      lastPlanJson: input.lastPlanJson,
+      lastMessagesJson: input.lastMessagesJson,
+    };
+    await db.learnPathProgress.put(row);
+    return row;
+  }
+
+  async deleteByTopic(topicId: string): Promise<void> {
+    await db.learnPathProgress.where('topicId').equals(topicId).delete();
   }
 }
 

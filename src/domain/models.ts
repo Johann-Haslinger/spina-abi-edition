@@ -98,6 +98,27 @@ export type Requirement = {
   mastery: number;
 };
 
+export type LearnPathMode = 'learn' | 'review';
+
+export type LearnPathProgressStatus = 'in_progress' | 'completed';
+
+export type LearnPathProgress = {
+  id: Id;
+  topicId: Id;
+  chapterId: Id;
+  requirementId: Id;
+  mode: LearnPathMode;
+  status: LearnPathProgressStatus;
+  startedAtMs: number;
+  updatedAtMs: number;
+  completedAtMs?: number;
+  currentChapterIndex: number;
+  currentRequirementIndex: number;
+  lastStepId?: string;
+  lastPlanJson?: string;
+  lastMessagesJson?: string;
+};
+
 export type ExercisePageStatus = 'unknown' | 'partial' | 'captured' | 'covered';
 
 export type StudySession = {

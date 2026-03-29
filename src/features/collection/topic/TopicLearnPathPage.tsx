@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PageHeader } from '../../../components/PageHeader';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
@@ -44,14 +43,7 @@ export function TopicLearnPathPage() {
       >
         <IoChevronBack />
       </ViewerIconButton>
-      <div className="px-16">
-        <PageHeader
-          title={
-            topic
-              ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name} Wissenspfad`
-              : 'Wissenspfad'
-          }
-        />
+      <div className="px-6">
         <TopicKnowledgePathView
           topicId={topicId}
           topicName={topic?.name}

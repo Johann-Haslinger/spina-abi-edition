@@ -5,6 +5,8 @@ import type {
   Chapter,
   CurriculumDocument,
   Folder,
+  LearnPathMode,
+  LearnPathProgress,
   Requirement,
   ScheduledReview,
   Subject,
@@ -99,6 +101,15 @@ export type RequirementUpdateInput = Partial<
   Pick<Requirement, 'name' | 'description' | 'difficulty' | 'mastery'>
 >;
 
+export type LearnPathProgressUpsertInput = Omit<
+  LearnPathProgress,
+  'id' | 'startedAtMs' | 'updatedAtMs'
+> & {
+  id?: string;
+  startedAtMs?: number;
+  updatedAtMs?: number;
+};
+
 export interface SubjectRepository {
   list(): Promise<Subject[]>;
   get(id: string): Promise<Subject | undefined>;
@@ -157,6 +168,18 @@ export interface RequirementRepository {
   create(input: RequirementCreateInput): Promise<Requirement>;
   update(id: string, patch: RequirementUpdateInput): Promise<Requirement>;
   deleteByChapterIds(chapterIds: string[]): Promise<void>;
+}
+
+export interface LearnPathProgressRepository {
+  get(id: string): Promise<LearnPathProgress | undefined>;
+  listByTopic(topicId: string): Promise<LearnPathProgress[]>;
+  getByTopicRequirementMode(
+    topicId: string,
+    requirementId: string,
+    mode: LearnPathMode,
+  ): Promise<LearnPathProgress | undefined>;
+  upsert(input: LearnPathProgressUpsertInput): Promise<LearnPathProgress>;
+  deleteByTopic(topicId: string): Promise<void>;
 }
 
 export interface ScheduledReviewRepository {

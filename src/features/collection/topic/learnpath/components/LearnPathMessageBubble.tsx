@@ -1,4 +1,3 @@
-import { formatRailStateList } from '../learnPathUtils';
 import type { LearnPathMessage } from '../types';
 
 export function LearnPathMessageBubble(props: { message: LearnPathMessage }) {
@@ -22,14 +21,21 @@ export function LearnPathMessageBubble(props: { message: LearnPathMessage }) {
         }`}
       >
         <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
-        {!isUser && message.currentState ? (
-          <div className="mt-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-xs text-white/65">
-            <div>Current State: {message.currentState}</div>
-            <div>Allowed Next States: {formatRailStateList(message.allowedNextStates ?? [])}</div>
-            <div>Suggested Next State: {message.suggestedNextState ?? '–'}</div>
-            <div>Applied Next State: {message.appliedNextState ?? '–'}</div>
-            <div>State Changed: {message.stateChanged ? 'yes' : 'no'}</div>
-            <div>Await User Reply: {message.awaitUserReply ? 'yes' : 'no'}</div>
+        {!isUser ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/55">
+            {message.messageKind ? (
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                {message.messageKind}
+              </span>
+            ) : null}
+            {message.stepType ? (
+              <span className="rounded-full border border-white/10 px-2 py-1">{message.stepType}</span>
+            ) : null}
+            {message.exercise?.type ? (
+              <span className="rounded-full border border-white/10 px-2 py-1">
+                {message.exercise.type}
+              </span>
+            ) : null}
           </div>
         ) : null}
       </div>

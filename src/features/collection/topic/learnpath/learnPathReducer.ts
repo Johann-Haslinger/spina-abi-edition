@@ -10,19 +10,29 @@ export function reduceLearnPathState(
     return {
       ...initialLearnPathState,
       started: true,
-      currentChapterIndex: 0,
-      currentRequirementIndex: 0,
-      currentState: 'intro',
-      messages: [
-        {
-          id: newId(),
-          role: 'system',
-          content: `Kapitel gestartet: ${action.chapterName} · Requirement: ${action.requirementName}`,
-          chapterId: action.chapterId,
-          requirementId: action.requirementId,
-        },
-      ],
-      requestNonce: state.requestNonce + 1,
+      mode: action.mode,
+      activeProgressId: action.progressId,
+      currentChapterIndex: action.chapterIndex,
+      currentRequirementIndex: action.requirementIndex,
+      activePlan: action.plan ?? null,
+      activeStepId: action.stepId ?? null,
+      inputMode: action.inputMode ?? 'none',
+      waitingForUser: action.waitingForUser ?? false,
+      canContinue: action.canContinue ?? false,
+      pendingExercise: action.exercise ?? null,
+      messages:
+        action.messages && action.messages.length > 0
+          ? action.messages
+          : [
+              {
+                id: newId(),
+                role: 'system',
+                content: `Kapitel gestartet: ${action.chapterName} · Requirement: ${action.requirementName}`,
+                chapterId: action.chapterId,
+                requirementId: action.requirementId,
+              },
+            ],
+      requestNonce: action.requestAi === false ? state.requestNonce : state.requestNonce + 1,
     };
   }
 
@@ -30,6 +40,13 @@ export function reduceLearnPathState(
     return {
       ...state,
       loading: action.loading,
+    };
+  }
+
+  if (action.type === 'SET_PROGRESS_LOADING') {
+    return {
+      ...state,
+      progressLoading: action.loading,
     };
   }
 
@@ -51,10 +68,15 @@ export function reduceLearnPathState(
           content: action.content,
           chapterId: action.chapterId,
           requirementId: action.requirementId,
+          stepId: action.stepId ?? undefined,
+          stepType: action.stepType,
+          response: action.response,
         },
       ],
       waitingForUser: false,
       canContinue: false,
+      inputMode: 'none',
+      pendingExercise: null,
       error: null,
     };
   }
@@ -67,12 +89,23 @@ export function reduceLearnPathState(
     };
   }
 
+  if (action.type === 'SET_REQUIREMENT_PLAN') {
+    return {
+      ...state,
+      activePlan: action.plan,
+      activeStepId: action.stepId,
+      error: null,
+    };
+  }
+
   if (action.type === 'SET_INTERACTION_STATE') {
     return {
       ...state,
-      currentState: action.railState,
+      activeStepId: action.stepId,
+      inputMode: action.inputMode,
       waitingForUser: action.waitingForUser,
       canContinue: action.canContinue,
+      pendingExercise: action.exercise,
       error: null,
     };
   }
@@ -82,19 +115,34 @@ export function reduceLearnPathState(
       ...state,
       waitingForUser: false,
       canContinue: false,
+      inputMode: 'none',
+      pendingExercise: null,
       error: null,
       requestNonce: state.requestNonce + 1,
+    };
+  }
+
+  if (action.type === 'RESET_TO_OVERVIEW') {
+    return {
+      ...initialLearnPathState,
+      progressLoading: state.progressLoading,
+      requestNonce: state.requestNonce,
     };
   }
 
   if (action.type === 'START_NEXT_REQUIREMENT') {
     return {
       ...state,
+      mode: action.mode,
+      activeProgressId: action.progressId,
       currentChapterIndex: action.chapterIndex,
       currentRequirementIndex: action.requirementIndex,
-      currentState: 'intro',
       waitingForUser: false,
       canContinue: false,
+      activePlan: null,
+      activeStepId: null,
+      inputMode: 'none',
+      pendingExercise: null,
       error: null,
       messages: [
         ...state.messages,
