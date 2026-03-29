@@ -1,4 +1,4 @@
-import { matchPath, NavLink, useLocation } from 'react-router-dom';
+import { matchPath, useLocation } from 'react-router-dom';
 import { SessionWidget } from '../features/session';
 
 // const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -24,12 +24,12 @@ export function NavBar() {
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       <div className="mx-auto flex justify-between items-center px-4 md:px-8 py-4">
-        <NavLink
+        {/* <NavLink
           to="/dashboard"
           className="justify-self-start invisible md:visible flex font-bold items-center pt-2 gap-3 text-xl"
         >
           Spina
-        </NavLink>
+        </NavLink> */}
 
         {/* <nav className="justify-self-center flex items-center gap-2">
           <NavLink to="/dashboard" className={navLinkClass}>

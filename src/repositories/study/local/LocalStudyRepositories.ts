@@ -50,6 +50,10 @@ export class LocalStudySessionRepository implements StudySessionRepository {
     return db.studySessions.get(id);
   }
 
+  async listAll(): Promise<StudySession[]> {
+    return db.studySessions.toArray();
+  }
+
   async listByTopic(topicId: string): Promise<StudySession[]> {
     return db.studySessions.where('topicId').equals(topicId).toArray();
   }

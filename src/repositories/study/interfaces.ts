@@ -24,6 +24,7 @@ export interface StudySessionRepository {
   }): Promise<StudySession>;
   end(id: string, endedAtMs: number): Promise<void>;
   get(id: string): Promise<StudySession | undefined>;
+  listAll(): Promise<StudySession[]>;
   listByTopic(topicId: string): Promise<StudySession[]>;
 }
 

@@ -7,7 +7,7 @@ import { InkToolbar } from '../components/ink/InkToolbar';
 import { HUD_VARIANTS_DOWN } from '../components/studyHud/hudMotion';
 import { useStudyHudVisibility } from '../stores/studyHudStore';
 import { pdfjs } from './pdfjs';
-import { clamp, hexToRgba, INITIAL_TOP_MARGIN } from './viewerUtils';
+import { clamp, INITIAL_TOP_MARGIN } from './viewerUtils';
 
 type PdfCanvasViewerProps = {
   data: Uint8Array;
@@ -67,7 +67,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
   const showLoadingOverlay = docLoading || !layoutReady || !hasRenderedOnce;
 
   const ratio = viewScale / RENDER_SCALE;
-  const gridDotColor = hexToRgba(props.accentColor, 0.32) ?? 'rgba(0,0,0,0.18)';
+  const gridDotColor = 'rgba(255,255,255,0.15)';
   const gridCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
   const gridRafRef = useRef<number | null>(null);

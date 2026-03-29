@@ -6,6 +6,13 @@
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --app-page-bg: #151515;
+  --app-floating-bg: rgba(41, 51, 65, 0.74);
+  --app-floating-solid-bg: #293341;
+  --app-modal-bg: rgba(28, 36, 47, 0.92);
+  --app-modal-theme-color: #1c242f;
+  --app-overlay-bg: rgba(13, 18, 27, 0.72);
+  --app-theme-color: #151515;
 }
 
 *,
@@ -21,6 +28,7 @@ body {
   overscroll-behavior-x: auto;
   overscroll-behavior-y: none;
   touch-action: pan-x pan-y;
+  background-color: var(--app-page-bg);
 }
 
 #root {

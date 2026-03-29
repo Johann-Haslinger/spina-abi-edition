@@ -87,7 +87,10 @@ export function ActiveSessionWidget(props: {
       exit="hidden"
       aria-hidden={hidden}
     >
-      <div className="w-full h-full overflow-hidden rounded-full border bg-[#243957]/70 backdrop-blur dark:border-white/5">
+      <div
+        className="h-full w-full overflow-hidden rounded-full border backdrop-blur dark:border-white/5"
+        style={{ backgroundColor: 'var(--app-floating-bg)' }}
+      >
         <div className="flex p-1.5">
           <GhostButton onClick={() => setExpanded((v) => !v)} icon={<IoInformation />} />
           <button

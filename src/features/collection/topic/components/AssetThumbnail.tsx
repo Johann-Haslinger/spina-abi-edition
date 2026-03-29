@@ -1,8 +1,6 @@
-import { FileText, ImageIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { AssetFile, AssetType } from '../../../../domain/models';
 import { pdfjs } from '../../../session/viewer/pdfjs';
-import { assetTypeLabel } from '../utils/assetTypeLabel';
 
 const THUMBNAIL_WIDTH = 160;
 const THUMBNAIL_HEIGHT = 220;
@@ -148,19 +146,13 @@ async function loadThumbnail(
   return promise;
 }
 
-function FallbackIcon(props: { assetType: AssetType }) {
-  if (props.assetType === 'note') return <FileText className="h-7 w-7 text-slate-300" />;
-  if (props.assetType === 'exercise') return <FileText className="h-7 w-7 text-slate-300" />;
-  return <ImageIcon className="h-7 w-7 text-slate-300" />;
-}
-
 export function AssetThumbnail(props: {
   assetId: string;
   assetType: AssetType;
   title: string;
   loadFile: (assetId: string) => Promise<AssetFile | undefined>;
 }) {
-  const { assetId, assetType, title, loadFile } = props;
+  const { assetId, title, loadFile } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(() => thumbnailCache.has(assetId));
   const [loading, setLoading] = useState(() => shouldLoad && !thumbnailCache.has(assetId));
@@ -231,12 +223,7 @@ export function AssetThumbnail(props: {
           className="h-full w-full object-cover"
           loading="lazy"
         />
-      ) : (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center">
-          <FallbackIcon assetType={assetType} />
-          <div className="text-[11px] text-slate-400">{assetTypeLabel(assetType)}</div>
-        </div>
-      )}
+      ) : null}
 
       {loading ? <div className="absolute inset-0 animate-pulse bg-white/5" /> : null}
     </div>

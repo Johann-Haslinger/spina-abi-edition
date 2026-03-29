@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useThemeColorOverride } from '../ui/hooks/useAppSurfaceTheme';
 
 export function Modal(props: {
   open: boolean;
@@ -10,6 +11,7 @@ export function Modal(props: {
   footer?: ReactNode;
 }) {
   const { open, onClose, children, footer } = props;
+  useThemeColorOverride('var(--app-modal-theme-color)', open);
 
   const node = (
     <AnimatePresence>
@@ -22,7 +24,8 @@ export function Modal(props: {
           transition={{ duration: 0.18, ease: 'easeOut' }}
         >
           <motion.div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0"
+            style={{ backgroundColor: 'var(--app-overlay-bg)' }}
             onClick={onClose}
             aria-hidden
             initial={{ opacity: 0 }}
@@ -31,7 +34,8 @@ export function Modal(props: {
             transition={{ duration: 0.18, ease: 'easeOut' }}
           />
           <motion.div
-            className="absolute flex flex-col left-1/2 max-h-[80vh] overflow-hidden -translate-x-1/2 mx-auto w-full max-w-lg rounded-4xl min-h-2/3 top-1/2 -translate-y-1/2 border border-white/15 bg-[#1E1E1E]/90 backdrop-blur shadow-xl"
+            className="absolute left-1/2 top-1/2 mx-auto flex min-h-2/3 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-4xl border border-white/15 shadow-xl backdrop-blur"
+            style={{ backgroundColor: 'var(--app-modal-bg)' }}
             initial={{ opacity: 0, y: 14, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 14, scale: 0.985 }}

@@ -1,9 +1,9 @@
 import { Copy, Pencil, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChatMarkdownContent } from '../../../../../components/chat/ChatMarkdownContent';
-import { ChatMessage } from '../../../../../components/chat/ChatMessage';
 import { GhostButton, PrimaryButton } from '../../../../../components/Button';
+import { ChatMarkdownContent } from '../../../../../components/chat/ChatMarkdownContent';
 import { chatMarkdownClassName } from '../../../../../components/chat/chatMarkdownUtils';
+import { ChatMessage } from '../../../../../components/chat/ChatMessage';
 import type { StudyAiMessage } from '../../../stores/studyAiChatStore';
 
 const REVEAL_DURATION_MS = 900;
@@ -155,7 +155,7 @@ export function StudyAiMessageList(props: {
   const editingDraft =
     editingMessageId && editingState.messageId === editingMessageId
       ? editingState.draft
-      : activeEditingMessage?.content ?? '';
+      : (activeEditingMessage?.content ?? '');
 
   const startEditing = (message: StudyAiMessage) => {
     if (message.role !== 'user' || !onStartEditMessage || sending) {
@@ -188,7 +188,8 @@ export function StudyAiMessageList(props: {
           isUserMessage
             ? 'group whitespace-pre-wrap wrap-anywhere bg-white/10 text-white select-text'
             : 'text-white/95 select-text',
-          isUserMessage && isEditingMessage ? 'w-[60%] px-5 py-4' : 'max-w-full',
+          isUserMessage &&
+            (isEditingMessage ? 'w-[60%] px-5 py-4' : compact ? 'max-w-[80%]' : 'max-w-[60%]'),
         ].join(' ');
 
         return (
@@ -233,7 +234,9 @@ export function StudyAiMessageList(props: {
                 compact={compact}
                 isLastAssistant={message.id === lastAssistantId}
                 sending={sending}
-                animateReveal={message.id === lastAssistantId && !revealedMessageIds.has(message.id)}
+                animateReveal={
+                  message.id === lastAssistantId && !revealedMessageIds.has(message.id)
+                }
                 onRevealComplete={() => revealedMessageIds.add(message.id)}
                 onCopy={() => copyToClipboard(message.content)}
                 onRegenerate={message.id === lastAssistantId ? onRegenerate : undefined}

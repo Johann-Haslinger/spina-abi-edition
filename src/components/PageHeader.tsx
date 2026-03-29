@@ -8,9 +8,9 @@ export function PageHeader(props: {
   const { title, actions } = props;
 
   return (
-    <div className="flex items-start pt-40 justify-between gap-4">
+    <div className="flex items-start pt-28 justify-between gap-4">
       <div>
-        <h1 className="text-[2.6rem] mb-4 font-semibold text-black dark:text-white">{title}</h1>
+        <h1 className="text-[2.6rem] mb-4 font-semibold text-black dark:text-white/90">{title}</h1>
         {/* {breadcrumb ? <div>{breadcrumb}</div> : null} */}
       </div>
 

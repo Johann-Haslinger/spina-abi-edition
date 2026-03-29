@@ -1,3 +1,5 @@
+import { Download, ExternalLink, Trash2 } from 'lucide-react';
+import { CollectionItemActionWrapper } from '../../../../components/CollectionItemActionWrapper';
 import type { Asset, AssetFile, ExercisePageStatus } from '../../../../domain/models';
 import { formatExerciseStatus } from '../../../session/viewer/viewerUtils';
 import { assetTypeLabel } from '../utils/assetTypeLabel';
@@ -15,11 +17,32 @@ export function AssetGridItem(props: {
   const { asset } = props;
 
   return (
-    <li className="w-full group pb-6">
-      <button
-        type="button"
-        onClick={props.onOpen}
-        className="flex w-full flex-col cursor-pointer items-center justify-center"
+    <li className="w-full group list-none pb-6">
+      <CollectionItemActionWrapper
+        className="w-full"
+        contentClassName="flex w-full flex-col items-center justify-center"
+        primaryAction={props.onOpen}
+        actions={[
+          {
+            key: 'open',
+            label: 'Öffnen',
+            icon: <ExternalLink className="h-4 w-4" />,
+            onSelect: props.onOpen,
+          },
+          {
+            key: 'download',
+            label: 'Download',
+            icon: <Download className="h-4 w-4" />,
+            onSelect: props.onDownload,
+          },
+          {
+            key: 'delete',
+            label: 'Löschen',
+            icon: <Trash2 className="h-4 w-4" />,
+            tone: 'danger',
+            onSelect: props.onDelete,
+          },
+        ]}
       >
         <AssetThumbnail
           assetId={asset.id}
@@ -39,37 +62,7 @@ export function AssetGridItem(props: {
             )}
           </div>
         </div>
-      </button>
-
-      {/* <div className="flex items-center justify-end gap-1 border-t border-white/5 px-2 py-2">
-        <button
-          type="button"
-          onClick={props.onOpen}
-          className="rounded-md p-2 text-slate-300 hover:bg-slate-900 hover:text-slate-50"
-          aria-label="Öffnen"
-          title="Öffnen"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={props.onDownload}
-          className="rounded-md p-2 text-slate-300 hover:bg-slate-900 hover:text-slate-50"
-          aria-label="Download"
-          title="Download"
-        >
-          <Download className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={props.onDelete}
-          className="rounded-md p-2 text-rose-200 hover:bg-rose-950/50"
-          aria-label="Löschen"
-          title="Löschen"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div> */}
+      </CollectionItemActionWrapper>
     </li>
   );
 }

@@ -120,7 +120,8 @@ export function InkToolbar(props: {
             <motion.div
               layoutId="ink-toolbar-surface"
               transition={MORPH_TRANSITION}
-              className="w-fit rounded-full border overflow-hidden px-6 border-[#3C4E68] bg-[#243957]/70 shadow-lg backdrop-blur-xs dark:border-white/5"
+              className="w-fit overflow-hidden rounded-full border px-6 shadow-lg backdrop-blur-xs dark:border-white/5"
+              style={{ backgroundColor: 'var(--app-floating-bg)' }}
             >
               <motion.div
                 key="content"
@@ -258,7 +259,8 @@ export function InkToolbar(props: {
                   setOpen(true);
                 }
               }}
-              className="size-18 overflow-hidden rounded-full border border-white/5 bg-[#243957]/70 shadow-xl backdrop-blur active:scale-[0.98] flex items-center justify-center"
+              className="flex size-18 items-center justify-center overflow-hidden rounded-full border border-white/5 shadow-xl backdrop-blur active:scale-[0.98]"
+              style={{ backgroundColor: 'var(--app-floating-bg)' }}
             >
               <ToolPreview
                 baseSrc={activeTool.src}

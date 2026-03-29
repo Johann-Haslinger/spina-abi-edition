@@ -15,11 +15,12 @@ export function ChatMessage(props: {
     align === 'end' ? 'items-end' : align === 'center' ? 'items-center' : 'items-start';
 
   return (
-    <div className={['group flex flex-col', alignmentClassName, props.containerClassName ?? ''].join(' ')}>
-      <div
-        className={['max-w-full', props.bubbleClassName ?? ''].join(' ')}
-        onClick={props.onBubbleClick}
-      >
+    <div
+      className={['group flex flex-col', alignmentClassName, props.containerClassName ?? ''].join(
+        ' ',
+      )}
+    >
+      <div className={[props.bubbleClassName ?? ''].join(' ')} onClick={props.onBubbleClick}>
         {props.children}
       </div>
       {props.action ? props.action : null}

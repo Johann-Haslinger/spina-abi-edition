@@ -8,6 +8,10 @@ export const SubjectColorId = {
   Orange: 'orange',
   Red: 'red',
   DarkBlue: 'darkBlue',
+  Yellow: 'yellow',
+  DarkViolet: 'darkViolet',
+  LightViolet: 'lightViolet',
+  Pink: 'pink',
 } as const;
 
 export type SubjectColorId = (typeof SubjectColorId)[keyof typeof SubjectColorId];

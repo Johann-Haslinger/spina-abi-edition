@@ -79,8 +79,8 @@ export function SubjectPage() {
   if (!subjectsLoading && !subject) return <NotFoundPage />;
 
   return (
-    <div className="space-y-4 pb-40">
-      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-8 top-18">
+    <div className="space-y-4 p-6">
+      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-6 top-6">
         <IoChevronBack />
       </ViewerIconButton>
 
@@ -163,18 +163,6 @@ export function SubjectPage() {
                   subjectId={subjectId}
                   topic={t}
                   from={from}
-                  onStartSession={(tid) => {
-                    if (
-                      active &&
-                      !window.confirm('Es läuft bereits eine Session. Neue Session starten?')
-                    ) {
-                      return;
-                    }
-                    start({ subjectId, topicId: tid });
-                    navigate(`/subjects/${subjectId}/topics/${tid}`, {
-                      state: { from },
-                    });
-                  }}
                   onEdit={(topic) => {
                     setEditing(topic);
                     setEditOpen(true);

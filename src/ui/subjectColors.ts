@@ -15,6 +15,10 @@ export const subjectColorOptions: SubjectColorOption[] = [
   { id: SubjectColorId.Orange, name: 'Orange' },
   { id: SubjectColorId.Red, name: 'Rot' },
   { id: SubjectColorId.DarkBlue, name: 'Dunkelblau' },
+  { id: SubjectColorId.Yellow, name: 'Gelb' },
+  { id: SubjectColorId.DarkViolet, name: 'Dunkelviolett' },
+  { id: SubjectColorId.LightViolet, name: 'Hellviolett' },
+  { id: SubjectColorId.Pink, name: 'Pink' },
 ];
 
 export const SUBJECT_COLORS: Record<ThemeMode, Record<SubjectColorId, SubjectColorHex>> = {
@@ -22,15 +26,23 @@ export const SUBJECT_COLORS: Record<ThemeMode, Record<SubjectColorId, SubjectCol
     [SubjectColorId.Green]: '#16A34A',
     [SubjectColorId.LightBlue]: '#2563EB',
     [SubjectColorId.Orange]: '#E98226',
-    [SubjectColorId.Red]: '#E12F25',
+    [SubjectColorId.Red]: '#FF3B30',
     [SubjectColorId.DarkBlue]: '#1C65CB',
+    [SubjectColorId.DarkViolet]: '#5856D6',
+    [SubjectColorId.LightViolet]: '#AF52DE',
+    [SubjectColorId.Pink]: '#FF2D55',
+    [SubjectColorId.Yellow]: '#FFD600',
   },
   dark: {
-    [SubjectColorId.Green]: '#22C55E',
-    [SubjectColorId.LightBlue]: '#3B82F6',
-    [SubjectColorId.Orange]: '#F97316',
-    [SubjectColorId.Red]: '#FB7185',
-    [SubjectColorId.DarkBlue]: '#60A5FA',
+    [SubjectColorId.Red]: '#FF3B30',
+    [SubjectColorId.Orange]: '#FF9500',
+    [SubjectColorId.Yellow]: '#FFD600',
+    [SubjectColorId.Green]: '#34C759',
+    [SubjectColorId.LightBlue]: '#5AC8FA',
+    [SubjectColorId.DarkBlue]: '#007AFF',
+    [SubjectColorId.DarkViolet]: '#5856D6',
+    [SubjectColorId.LightViolet]: '#AF52DE',
+    [SubjectColorId.Pink]: '#FF2D55',
   },
 };
 

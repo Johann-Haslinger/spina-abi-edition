@@ -192,10 +192,10 @@ export function TopicPage() {
 
   return (
     <div className="h-full pb-16">
-      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-8 top-18">
+      <ViewerIconButton ariaLabel="Zurück" onClick={goBack} className="fixed left-6 top-6">
         <IoChevronBack />
       </ViewerIconButton>
-      <div className="px-16">
+      <div className="px-6 pt-6">
         <PageHeader
           title={topic ? `${topic.iconEmoji ? topic.iconEmoji + ' ' : ''}${topic.name}` : 'Thema'}
           actions={
@@ -239,7 +239,7 @@ export function TopicPage() {
             sessionRegenKey={topicSummaryRegenKey}
           />
 
-          <section className="lg:col-span-2 px-16">
+          <section className="lg:col-span-2 px-6">
             {viewMode === 'assets' ? (
               <TopicAssetsView
                 assetsError={assetsError}

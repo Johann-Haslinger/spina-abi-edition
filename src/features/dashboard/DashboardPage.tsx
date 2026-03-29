@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../../components/PageHeader';
-import type { Subject } from '../../domain/models';
+import type { StudySession, Subject } from '../../domain/models';
+import { studySessionRepo } from '../../repositories';
 import { useSubjectsStore } from '../../stores/subjectsStore';
+import { SessionTimeBarChart7 } from './components/SessionTimeBarChart7';
+import { SessionTimeHeatmap90 } from './components/SessionTimeHeatmap90';
 import { SubjectItem } from './components/SubjectItem';
 import { UpsertSubjectModal } from './modals/UpsertSubjectModal';
+import { aggregateSessionMsByDay, buildRecentSessionDayStats } from './sessionDayStats';
 
 export function DashboardPage() {
   const { subjects, loading, error, refresh, createSubject, updateSubject, deleteSubject } =
@@ -16,6 +20,47 @@ export function DashboardPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Subject | null>(null);
+  const [completedSessions, setCompletedSessions] = useState<StudySession[]>([]);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSessions() {
+      setStatsLoading(true);
+      setStatsError(null);
+      try {
+        const sessions = await studySessionRepo.listAll();
+        if (cancelled) return;
+        setCompletedSessions(sessions.filter((session) => typeof session.endedAtMs === 'number'));
+      } catch {
+        if (cancelled) return;
+        setCompletedSessions([]);
+        setStatsError('Session-Statistiken konnten nicht geladen werden.');
+      } finally {
+        if (!cancelled) setStatsLoading(false);
+      }
+    }
+
+    void loadSessions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sessionMsByDay = useMemo(
+    () => aggregateSessionMsByDay(completedSessions),
+    [completedSessions],
+  );
+  const heatmapDays = useMemo(
+    () => buildRecentSessionDayStats({ dayCount: 90, totalsByDay: sessionMsByDay }),
+    [sessionMsByDay],
+  );
+  const barChartDays = useMemo(
+    () => buildRecentSessionDayStats({ dayCount: 7, totalsByDay: sessionMsByDay }),
+    [sessionMsByDay],
+  );
 
   function openCreate() {
     setEditing(null);
@@ -28,7 +73,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <PageHeader
         title="Dashboard"
         actions={
@@ -65,9 +110,38 @@ export function DashboardPage() {
       ) : (
         <ul className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-3">
           {subjects.map((s) => (
-            <SubjectItem key={s.id} subject={s} onEdit={openEdit} />
+            <SubjectItem
+              key={s.id}
+              subject={s}
+              onEdit={openEdit}
+              onDelete={async (subject) => {
+                if (
+                  !window.confirm(
+                    `Fach „${subject.name}“ wirklich löschen? (Themen/Assets werden mit gelöscht)`,
+                  )
+                ) {
+                  return;
+                }
+                await deleteSubject(subject.id);
+              }}
+            />
           ))}
         </ul>
+      )}
+
+      {statsError ? (
+        <div className="rounded-md border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-sm text-rose-200">
+          {statsError}
+        </div>
+      ) : statsLoading ? (
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-6 text-sm text-slate-400">
+          Lade Session-Statistiken…
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <SessionTimeHeatmap90 days={heatmapDays} />
+          <SessionTimeBarChart7 days={barChartDays} />
+        </div>
       )}
 
       <UpsertSubjectModal

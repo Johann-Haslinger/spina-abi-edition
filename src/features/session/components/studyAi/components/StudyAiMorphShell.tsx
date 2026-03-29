@@ -86,6 +86,10 @@ export function StudyAiMorphShell(props: {
         layout
         transition={SPRING}
         className={['pointer-events-auto', shellClass].join(' ')}
+        style={{
+          backgroundColor:
+            props.mode === 'overlay' ? 'var(--app-modal-bg)' : 'var(--app-floating-bg)',
+        }}
       >
         {props.mode === 'button' ? (
           <button
@@ -175,7 +179,10 @@ export function StudyAiMorphShell(props: {
               ) : null}
             </div>
 
-            <div className="p-2 pt-4 bg-linear-to-b from-transparent to-[#243957] absolute bottom-0 left-0 right-0">
+            <div
+              className="absolute bottom-0 left-0 right-0 bg-linear-to-b from-transparent p-2 pt-4"
+              style={{ ['--tw-gradient-to' as string]: 'var(--app-floating-solid-bg)' }}
+            >
               <ChatInputRow
                 value={props.draft}
                 onChange={props.onDraftChange}
@@ -206,22 +213,22 @@ function useStudyAiMorphLayout(mode: StudyAiUiMode) {
       button: {
         stageClass: 'absolute inset-0 flex items-end justify-start p-6 pointer-events-none',
         shellClass:
-          'grid size-18 place-items-center rounded-full border border-white/5 bg-[#243957]/80 text-white shadow-lg backdrop-blur',
+          'grid size-18 place-items-center rounded-full border border-white/5 text-white shadow-lg backdrop-blur',
       },
       center: {
         stageClass: 'absolute inset-0 grid place-items-center items-end p-6 pointer-events-auto',
         shellClass:
-          'w-124 rounded-4xl border border-white/5 bg-[#243957]/80 px-3 py-2 text-white shadow-lg backdrop-blur',
+          'w-124 rounded-4xl border border-white/5 px-3 py-2 text-white shadow-lg backdrop-blur',
       },
       overlay: {
         stageClass: 'absolute inset-0 flex items-end justify-center pb-6 pointer-events-none',
         shellClass:
-          'w-124 rounded-4xl border border-white/5 bg-white/10 p-2 text-white shadow-lg backdrop-blur',
+          'w-124 rounded-4xl border border-white/5 p-2 text-white shadow-lg backdrop-blur',
       },
       floating: {
         stageClass: 'absolute inset-0 flex items-end justify-start p-6 pointer-events-none',
         shellClass:
-          'w-[360px] relative overflow-hidden rounded-3xl border border-white/10 bg-[#243957]/70 text-white shadow-2xl backdrop-blur',
+          'relative w-[360px] overflow-hidden rounded-3xl border border-white/10 text-white shadow-2xl backdrop-blur',
       },
     };
 

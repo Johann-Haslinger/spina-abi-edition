@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
+import { useThemeColorOverride } from '../ui/hooks/useAppSurfaceTheme';
 
 type ActionDialogTone = 'primary' | 'danger' | 'neutral';
 
@@ -20,6 +21,7 @@ export function ActionDialog(props: {
   busy?: boolean;
 }) {
   const busy = Boolean(props.busy);
+  useThemeColorOverride('var(--app-modal-theme-color)', props.open);
   const node = (
     <AnimatePresence>
       {props.open ? (
@@ -31,7 +33,8 @@ export function ActionDialog(props: {
           transition={{ duration: 0.18, ease: 'easeOut' }}
         >
           <motion.div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0"
+            style={{ backgroundColor: 'var(--app-overlay-bg)' }}
             onClick={busy ? undefined : props.onClose}
             aria-hidden
             initial={{ opacity: 0 }}
@@ -40,7 +43,8 @@ export function ActionDialog(props: {
             transition={{ duration: 0.18, ease: 'easeOut' }}
           />
           <motion.div
-            className="absolute left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/15 bg-[#1E1E1E]/95 p-5 shadow-xl backdrop-blur"
+            className="absolute left-1/2 top-1/2 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/15 p-5 shadow-xl backdrop-blur"
+            style={{ backgroundColor: 'var(--app-modal-bg)' }}
             initial={{ opacity: 0, y: 12, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.985 }}

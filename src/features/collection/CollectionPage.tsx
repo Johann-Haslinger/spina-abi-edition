@@ -41,7 +41,21 @@ export function CollectionPage() {
         ) : (
           <ul className="mt-4 grid grid-cols-1 gap-2.5 md:grid-cols-3">
             {subjects.map((s) => (
-              <SubjectItem key={s.id} subject={s} onEdit={openEdit} />
+              <SubjectItem
+                key={s.id}
+                subject={s}
+                onEdit={openEdit}
+                onDelete={async (subject) => {
+                  if (
+                    !window.confirm(
+                      `Fach „${subject.name}“ wirklich löschen? (Themen/Assets werden mit gelöscht)`,
+                    )
+                  ) {
+                    return;
+                  }
+                  await deleteSubject(subject.id);
+                }}
+              />
             ))}
           </ul>
         )}

@@ -6,7 +6,7 @@ import { ViewerIconButton } from '../../../../components/ViewerIconButton';
 import type { Asset, AssetFile } from '../../../../domain/models';
 import { assetFileStore, assetRepo } from '../../../../repositories';
 import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
-import { useSubjectAccentColor } from '../../../../ui/hooks/useSubjectColors';
+import { usePageSurfaceTheme, useSubjectAccentColor } from '../../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../../common/ErrorPage';
 import { NotFoundPage } from '../../../common/NotFoundPage';
 import { AssetViewer } from '../../../session/viewer/AssetViewer';
@@ -18,6 +18,7 @@ export function ExerciseAssetView(props: { assetId: string }) {
   const { asset, file, pdfData, loading, error } = useExerciseAssetData(props.assetId);
   const [pageNumber, setPageNumber] = useState(1);
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
+  const pageSurfaceTheme = usePageSurfaceTheme(asset?.subjectId);
 
   const state = useMemo(() => {
     if (loading) return { kind: 'loading' as const };
@@ -31,7 +32,7 @@ export function ExerciseAssetView(props: { assetId: string }) {
   if (state.kind === 'notfound') return <NotFoundPage />;
   if (state.kind === 'loading')
     return (
-      <FullscreenViewerFrame>
+      <FullscreenViewerFrame surfaceTheme={pageSurfaceTheme}>
         <div className="absolute inset-0 grid place-items-center">
           <div
             role="status"
@@ -58,6 +59,7 @@ export function ExerciseAssetView(props: { assetId: string }) {
 
   return (
     <FullscreenViewerFrame
+      surfaceTheme={pageSurfaceTheme}
       overlayLeft={
         <ViewerIconButton ariaLabel="Zurück" onClick={() => navigate(-1)}>
           <IoChevronBack />

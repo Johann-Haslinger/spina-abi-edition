@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ActionDialog } from '../../../components/ActionDialog';
@@ -9,7 +9,7 @@ import type { Asset, AssetFile } from '../../../domain/models';
 import { attemptRepo, assetFileStore, assetRepo, studySessionRepo } from '../../../repositories';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { useNotificationsStore } from '../../../stores/notificationsStore';
-import { useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
+import { usePageSurfaceTheme, useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
 import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { AiErrorReviewPanel } from '../components/AiErrorReviewPanel';
@@ -33,7 +33,10 @@ export function StudyPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [backDialogOpen, setBackDialogOpen] = useState(false);
   const [backDialogBusy, setBackDialogBusy] = useState(false);
+  const [hadAttemptWhileOpen, setHadAttemptWhileOpen] = useState(false);
+  const [endedAttemptCountOnOpen, setEndedAttemptCountOnOpen] = useState<number | null>(null);
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
+  const pageSurfaceTheme = usePageSurfaceTheme(asset?.subjectId);
 
   const {
     boundSessionKey,
@@ -101,6 +104,15 @@ export function StudyPage() {
     void loadExerciseStatus(guardState.asset.id);
   }, [guardState.kind, guardState.asset, loadExerciseStatus]);
 
+  useEffect(() => {
+    setHadAttemptWhileOpen(false);
+    setEndedAttemptCountOnOpen(null);
+  }, [assetId, boundSessionKey]);
+
+  useEffect(() => {
+    if (currentAttempt?.assetId === assetId) setHadAttemptWhileOpen(true);
+  }, [assetId, currentAttempt]);
+
   const assetForNav =
     guardState.kind === 'ok' || guardState.kind === 'needStart' || guardState.kind === 'needSwitch'
       ? guardState.asset
@@ -133,22 +145,45 @@ export function StudyPage() {
     else navigate(target);
   };
 
-  const hasAnyEndedAttemptsForExercise = async () => {
-    if (!studySessionId) return false;
-    if (guardState.kind !== 'ok') return false;
+  const getEndedAttemptCountForExercise = useCallback(async () => {
+    if (!studySessionId) return 0;
+    if (guardState.kind !== 'ok') return 0;
     const attempts = await attemptRepo.listForSessionAsset({
       studySessionId,
       assetId: guardState.asset.id,
     });
-    return attempts.length > 0;
-  };
+    return attempts.length;
+  }, [guardState, studySessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      if (guardState.kind !== 'ok') {
+        setEndedAttemptCountOnOpen(null);
+        return;
+      }
+
+      if (!studySessionId) {
+        setEndedAttemptCountOnOpen(0);
+        return;
+      }
+
+      const count = await getEndedAttemptCountForExercise();
+      if (!cancelled) setEndedAttemptCountOnOpen(count);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [guardState.kind, studySessionId, getEndedAttemptCountForExercise]);
 
   const onPauseAndLeave = async () => {
     if (currentAttempt) cancelAttempt();
     setBackDialogOpen(false);
     setReviewOpen(false);
 
-    const hasAttempts = await hasAnyEndedAttemptsForExercise();
+    const hasAttempts = (await getEndedAttemptCountForExercise()) > 0;
     if (!hasAttempts) {
       goToAssetTopic();
       return;
@@ -168,7 +203,7 @@ export function StudyPage() {
       setBackDialogOpen(false);
       setReviewOpen(false);
 
-      const hasAttempts = await hasAnyEndedAttemptsForExercise();
+      const hasAttempts = (await getEndedAttemptCountForExercise()) > 0;
       navigateNow = !hasAttempts;
       if (hasAttempts) setReviewOpen(true);
     } finally {
@@ -179,17 +214,29 @@ export function StudyPage() {
   };
 
   const onBackClick = () => {
-    if (guardState.kind === 'ok') {
-      setBackDialogOpen(true);
+    if (guardState.kind !== 'ok') {
+      goToAssetTopic();
       return;
     }
-    goToAssetTopic();
+
+    void (async () => {
+      const endedAttemptCountNow = await getEndedAttemptCountForExercise();
+      const hasEndedAttemptWhileOpen =
+        endedAttemptCountNow > (endedAttemptCountOnOpen ?? endedAttemptCountNow);
+      const hasRunningAttemptForAsset = currentAttempt?.assetId === guardState.asset.id;
+
+      if (!hasEndedAttemptWhileOpen && !hasRunningAttemptForAsset && !hadAttemptWhileOpen) {
+        goToAssetTopic();
+        return;
+      }
+      setBackDialogOpen(true);
+    })();
   };
 
   if (guardState.kind === 'notfound') return <NotFoundPage />;
   if (guardState.kind === 'loading')
     return (
-      <FullscreenViewerFrame>
+      <FullscreenViewerFrame surfaceTheme={pageSurfaceTheme}>
         <div className="absolute inset-0 grid place-items-center">
           <div
             role="status"
@@ -204,8 +251,13 @@ export function StudyPage() {
 
   return (
     <FullscreenViewerFrame
+      surfaceTheme={pageSurfaceTheme}
       overlayLeft={
-        <ViewerIconButton ariaLabel="Zurück" onClick={onBackClick}>
+        <ViewerIconButton
+          ariaLabel="Zurück"
+          onClick={onBackClick}
+          className="border-white/10 bg-(--app-floating-bg) text-white hover:bg-(--app-floating-solid-bg) active:bg-(--app-floating-solid-bg)"
+        >
           <IoChevronBack />
         </ViewerIconButton>
       }

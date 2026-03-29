@@ -31,7 +31,10 @@ export function StudyAiFullscreenOverlay(props: {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.16, ease: 'easeOut' }}
     >
-      <div className="absolute inset-0 bg-[#26313F]/90 backdrop-blur" />
+      <div
+        className="absolute inset-0 backdrop-blur"
+        style={{ backgroundColor: 'var(--app-overlay-bg)' }}
+      />
 
       <div className="absolute h-full inset-x-0 top-0 flex justify-center">
         <div ref={scrollerRef} className="h-full w-full py-40 overflow-y-scroll px-4 select-text">

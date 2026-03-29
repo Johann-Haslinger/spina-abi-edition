@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { clamp, hexToRgba, INITIAL_TOP_MARGIN } from './viewerUtils';
+import { clamp, INITIAL_TOP_MARGIN } from './viewerUtils';
 
 type Point = { x: number; y: number };
 
@@ -25,7 +25,7 @@ export function ImagePanZoomViewer(props: { src: string; alt: string; accentColo
   const [pan, setPan] = useState<Point>({ x: 0, y: INITIAL_TOP_MARGIN });
 
   const gridSizePx = Math.max(10, Math.round(34 * scale));
-  const gridDotColor = hexToRgba(props.accentColor, 0.32) ?? 'rgba(0,0,0,0.18)';
+  const gridDotColor = 'rgba(255,255,255,0.05)';
   const dotRadiusPx = clamp(1.5 * scale, 0.6, 6);
 
   const containerPoint = useCallback((e: { clientX: number; clientY: number }) => {
