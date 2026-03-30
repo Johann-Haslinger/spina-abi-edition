@@ -20,7 +20,7 @@ export function LearnPathMessageBubble(props: { message: LearnPathMessage }) {
           isUser ? 'bg-white/10 text-white' : 'border border-white/8 bg-[#243957]/50 text-white'
         }`}
       >
-        <div className="whitespace-pre-wrap text-base leading-relaxed">{message.content}</div>
+        <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
         {!isUser ? (
           <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/55">
             {message.messageKind ? (
