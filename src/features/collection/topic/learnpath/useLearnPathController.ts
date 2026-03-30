@@ -458,13 +458,19 @@ export function useLearnPathController(props: {
   const handleSend = useCallback(() => {
     const trimmed = draft.trim();
     if (!trimmed) return;
-    if (state.inputMode !== 'text' && state.inputMode !== 'free_text') return;
+    if (
+      state.inputMode !== 'text' &&
+      state.inputMode !== 'free_text' &&
+      !(state.waitingForUser && !state.pendingExercise)
+    ) {
+      return;
+    }
 
     appendUserResponse(
       { kind: state.inputMode === 'free_text' ? 'free_text' : 'text', text: trimmed },
       trimmed,
     );
-  }, [appendUserResponse, draft, state.inputMode]);
+  }, [appendUserResponse, draft, state.inputMode, state.pendingExercise, state.waitingForUser]);
 
   const handleExerciseSubmit = useCallback(
     (response: LearnPathTurnResponse, exercise: LearnPathExercise | null) => {
@@ -619,7 +625,13 @@ function deriveRestoredInteraction(messages: LearnPathState['messages']) {
   }
 
   if (lastMessage.role === 'assistant') {
-    const inputMode = lastMessage.inputMode ?? 'none';
+    const inputMode =
+      !lastMessage.exercise &&
+      (lastMessage.inputMode === 'single_choice' ||
+        lastMessage.inputMode === 'matching' ||
+        lastMessage.inputMode === 'free_text')
+        ? 'text'
+        : (lastMessage.inputMode ?? 'none');
     const waitingForUser = lastMessage.awaitUserReply === true;
     return {
       inputMode,

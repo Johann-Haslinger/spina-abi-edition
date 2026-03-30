@@ -46,10 +46,19 @@ export function LearnPathChatPanel(props: {
     activeStep,
   } = props;
   const currentStepPosition = getPlanStepPosition(activePlan, state.activeStepId);
+  const isMissingExerciseFallback =
+    state.waitingForUser &&
+    !state.pendingExercise &&
+    (state.inputMode === 'single_choice' ||
+      state.inputMode === 'matching' ||
+      state.inputMode === 'free_text');
   const canUseTextInput =
     state.waitingForUser &&
     !state.pendingExercise &&
-    (state.inputMode === 'text' || state.inputMode === 'free_text');
+    (state.inputMode === 'text' ||
+      state.inputMode === 'free_text' ||
+      state.inputMode === 'single_choice' ||
+      state.inputMode === 'matching');
 
   return (
     <div className="rounded-3xl border border-white/8 bg-slate-950/25">
@@ -168,17 +177,27 @@ export function LearnPathChatPanel(props: {
               sending={state.loading}
               placeholder={
                 state.waitingForUser
-                  ? state.inputMode === 'free_text'
-                    ? 'Schreibe deine Antwort auf die Aufgabe…'
-                    : 'Antworte kurz auf die Verstaendnisfrage…'
+                  ? isMissingExerciseFallback
+                    ? 'Die Übung wurde nicht geladen. Antworte hier einfach per Text…'
+                    : state.inputMode === 'free_text'
+                      ? 'Schreibe deine Antwort auf die Aufgabe…'
+                      : 'Antworte kurz auf die Verstaendnisfrage…'
                   : 'Antworten werden freigeschaltet, sobald der aktuelle Schritt Textinput erwartet.'
               }
               disabled={!canUseTextInput || state.loading}
             />
+            {isMissingExerciseFallback ? (
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                Die erwartete Übung wurde gerade nicht geladen. Du kannst trotzdem per Text
+                antworten, damit der Lernfluss nicht blockiert.
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-xs text-white/45">
                 {state.waitingForUser
-                  ? 'Die KI wartet auf deine Antwort.'
+                  ? isMissingExerciseFallback
+                    ? 'Fallback aktiv: Antwort per Text ist freigeschaltet.'
+                    : 'Die KI wartet auf deine Antwort.'
                   : 'Die KI steuert den Fahrplan aktuell selbst.'}
               </div>
               <PrimaryButton
