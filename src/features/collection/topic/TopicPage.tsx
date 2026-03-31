@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { SecondaryButton } from '../../../components/Button';
 import { PageHeader } from '../../../components/PageHeader';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetType } from '../../../domain/models';
@@ -217,11 +216,6 @@ export function TopicPage() {
                   {option.label}
                 </button>
               ))}
-              <SecondaryButton
-                onClick={() => navigate(`/subjects/${subjectId}/topics/${topicId}/learnpath`)}
-              >
-                Wissenspfad
-              </SecondaryButton>
             </div>
           }
         />
@@ -236,6 +230,7 @@ export function TopicPage() {
             exerciseStatusByAssetId={exerciseStatusByAssetId}
             onOpenCurriculum={() => setViewMode('curriculum')}
             onOpenLearnPath={() => navigate(`/subjects/${subjectId}/topics/${topicId}/learnpath`)}
+            onOpenFlashcards={() => navigate(`/subjects/${subjectId}/topics/${topicId}/flashcards`)}
             sessionRegenKey={topicSummaryRegenKey}
           />
 

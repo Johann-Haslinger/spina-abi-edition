@@ -143,6 +143,8 @@ export type LearnPathRequirementOverviewItem = {
 
 export type LearnPathPanelView = 'current_requirement' | 'all_requirements';
 
+export type LearnPathCompletionPrompt = 'next_action' | 'after_flashcards';
+
 export type LearnPathMessage = {
   id: string;
   role: 'system' | 'user' | 'assistant';
@@ -178,6 +180,7 @@ export type LearnPathState = {
   interactionSurface: LearnPathInteractionSurface;
   inputMode: LearnPathInputMode;
   exerciseState: LearnPathExerciseState;
+  completionPrompt: LearnPathCompletionPrompt | null;
   messages: LearnPathMessage[];
   requestNonce: number;
 };
@@ -251,6 +254,13 @@ export type LearnPathAction =
       type: 'REQUEST_AI';
     }
   | {
+      type: 'SHOW_COMPLETION_PROMPT';
+      prompt: LearnPathCompletionPrompt;
+    }
+  | {
+      type: 'CLEAR_COMPLETION_PROMPT';
+    }
+  | {
       type: 'RESET_TO_OVERVIEW';
     }
   | {
@@ -291,6 +301,7 @@ export const initialLearnPathState: LearnPathState = {
     exercise: null,
     expectedType: null,
   },
+  completionPrompt: null,
   messages: [],
   requestNonce: 0,
 };

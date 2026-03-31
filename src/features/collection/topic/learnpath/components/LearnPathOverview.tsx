@@ -111,7 +111,7 @@ function StatusChip(props: { status: LearnPathRequirementOverviewItem['status'] 
   const labels: Record<LearnPathRequirementOverviewItem['status'], string> = {
     open: 'Offen',
     in_progress: 'In Bearbeitung',
-    completed: 'Abgehakt',
+    completed: 'Abgeschlossen',
     reviewing: 'Wiederholung laeuft',
   };
 

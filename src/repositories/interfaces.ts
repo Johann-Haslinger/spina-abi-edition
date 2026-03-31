@@ -4,6 +4,7 @@ import type {
   AssetType,
   Chapter,
   CurriculumDocument,
+  Flashcard,
   Folder,
   LearnPathMode,
   LearnPathProgress,
@@ -110,6 +111,12 @@ export type LearnPathProgressUpsertInput = Omit<
   updatedAtMs?: number;
 };
 
+export type FlashcardUpsertInput = Omit<Flashcard, 'id' | 'createdAtMs' | 'updatedAtMs'> & {
+  id?: string;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+};
+
 export interface SubjectRepository {
   list(): Promise<Subject[]>;
   get(id: string): Promise<Subject | undefined>;
@@ -180,6 +187,15 @@ export interface LearnPathProgressRepository {
   ): Promise<LearnPathProgress | undefined>;
   upsert(input: LearnPathProgressUpsertInput): Promise<LearnPathProgress>;
   deleteByTopic(topicId: string): Promise<void>;
+}
+
+export interface FlashcardRepository {
+  get(id: string): Promise<Flashcard | undefined>;
+  listByTopic(topicId: string): Promise<Flashcard[]>;
+  listDueByTopic(topicId: string, nowMs: number): Promise<Flashcard[]>;
+  upsert(input: FlashcardUpsertInput): Promise<Flashcard>;
+  bulkUpsert(inputs: FlashcardUpsertInput[]): Promise<Flashcard[]>;
+  delete(id: string): Promise<void>;
 }
 
 export interface ScheduledReviewRepository {

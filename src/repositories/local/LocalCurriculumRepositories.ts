@@ -2,6 +2,7 @@ import { db } from '../../db/db';
 import type {
   Chapter,
   CurriculumDocument,
+  Flashcard,
   LearnPathProgress,
   Requirement,
   ScheduledReview,
@@ -14,6 +15,8 @@ import type {
   CurriculumDocumentCreateInput,
   CurriculumDocumentRepository,
   CurriculumDocumentUpdateInput,
+  FlashcardRepository,
+  FlashcardUpsertInput,
   LearnPathProgressRepository,
   LearnPathProgressUpsertInput,
   RequirementCreateInput,
@@ -195,6 +198,57 @@ export class LocalLearnPathProgressRepository implements LearnPathProgressReposi
   }
 }
 
+export class LocalFlashcardRepository implements FlashcardRepository {
+  async get(id: string): Promise<Flashcard | undefined> {
+    return db.flashcards.get(id);
+  }
+
+  async listByTopic(topicId: string): Promise<Flashcard[]> {
+    return db.flashcards
+      .where('topicId')
+      .equals(topicId)
+      .reverse()
+      .sortBy('updatedAtMs');
+  }
+
+  async listDueByTopic(topicId: string, nowMs: number): Promise<Flashcard[]> {
+    const rows = await db.flashcards.where('topicId').equals(topicId).toArray();
+    return rows
+      .filter((row) => row.state === 'active' && row.dueAtMs <= nowMs)
+      .sort((a, b) => a.dueAtMs - b.dueAtMs || a.updatedAtMs - b.updatedAtMs);
+  }
+
+  async upsert(input: FlashcardUpsertInput): Promise<Flashcard> {
+    const now = input.updatedAtMs ?? Date.now();
+    const current = input.id ? await db.flashcards.get(input.id) : undefined;
+    const row: Flashcard = {
+      ...(current ?? {}),
+      ...input,
+      id: current?.id ?? input.id ?? newId(),
+      front: input.front.trim(),
+      back: input.back.trim(),
+      source: input.source ?? current?.source ?? 'manual',
+      state: input.state ?? current?.state ?? 'active',
+      dueAtMs: input.dueAtMs,
+      createdAtMs: current?.createdAtMs ?? input.createdAtMs ?? now,
+      updatedAtMs: now,
+      intervalDays: clampIntervalDays(input.intervalDays),
+      successStreak: Math.max(0, input.successStreak),
+      reviewCount: Math.max(0, input.reviewCount),
+    };
+    await db.flashcards.put(row);
+    return row;
+  }
+
+  async bulkUpsert(inputs: FlashcardUpsertInput[]): Promise<Flashcard[]> {
+    return Promise.all(inputs.map((input) => this.upsert(input)));
+  }
+
+  async delete(id: string): Promise<void> {
+    await db.flashcards.delete(id);
+  }
+}
+
 export class LocalScheduledReviewRepository implements ScheduledReviewRepository {
   async listBySubject(subjectId: string): Promise<ScheduledReview[]> {
     return db.scheduledReviews.where('subjectId').equals(subjectId).sortBy('dueAtMs');
@@ -233,4 +287,9 @@ export class LocalScheduledReviewRepository implements ScheduledReviewRepository
 
 function clampMastery(mastery: number) {
   return Math.max(0, Math.min(1, Number.isFinite(mastery) ? mastery : 0));
+}
+
+function clampIntervalDays(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(365, value));
 }

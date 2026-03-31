@@ -245,7 +245,11 @@ export function buildRequirementOverviewItems(
 }
 
 export function getLatestInProgressProgress(progressRows: LearnPathProgress[]) {
-  return progressRows
+  const latestRows = [
+    ...pickLatestProgressByRequirement(progressRows, 'learn').values(),
+    ...pickLatestProgressByRequirement(progressRows, 'review').values(),
+  ];
+  return latestRows
     .filter((row) => row.status === 'in_progress')
     .sort((a, b) => b.updatedAtMs - a.updatedAtMs)[0];
 }

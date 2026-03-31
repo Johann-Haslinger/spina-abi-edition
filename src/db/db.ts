@@ -9,6 +9,7 @@ import type {
   Chapter,
   CurriculumDocument,
   Exercise,
+  Flashcard,
   Folder,
   InkStroke,
   LearnPathSessionRequirement,
@@ -37,6 +38,7 @@ export class AbiDb extends Dexie {
   requirements!: Table<Requirement, string>;
   learnPathProgress!: Table<LearnPathProgress, string>;
   learnPathSessionRequirements!: Table<LearnPathSessionRequirement, string>;
+  flashcards!: Table<Flashcard, string>;
 
   studySessions!: Table<StudySession, string>;
   exercises!: Table<Exercise, string>;
@@ -611,6 +613,42 @@ export class AbiDb extends Dexie {
             }
           });
       });
+
+    this.version(20).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+
+      curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+      chapters: 'id, topicId, orderIndex',
+      requirements: 'id, chapterId, difficulty, mastery',
+      learnPathProgress:
+        'id, topicId, chapterId, requirementId, mode, status, updatedAtMs, [topicId+requirementId+mode]',
+      learnPathSessionRequirements:
+        'id, studySessionId, topicId, chapterId, requirementId, status, updatedAtMs, [studySessionId+requirementId]',
+      flashcards:
+        'id, subjectId, topicId, chapterId, requirementId, state, dueAtMs, updatedAtMs, [topicId+dueAtMs], [topicId+requirementId]',
+
+      studySessions: 'id, subjectId, topicId, source, startedAtMs, endedAtMs',
+      exercises: 'id, assetId, status',
+      problems: 'id, [exerciseId+idx], exerciseId, idx',
+      subproblems: 'id, [problemId+label], problemId, label',
+      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+      attempts:
+        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+      attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+      attemptAiReviews: 'id, attemptId, result, createdAtMs',
+      attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+      inkStrokes:
+        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+      openAiPdfFileCache: 'pdfSha256, updatedAtMs',
+
+      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+      scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+    });
   }
 }
 

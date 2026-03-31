@@ -5,7 +5,7 @@ import { PrimaryButton, SecondaryButton } from '../../../../../components/Button
 import { ChatInputRow } from '../../../../../components/chat/ChatInputRow';
 import { ChatMarkdownContent } from '../../../../../components/chat/ChatMarkdownContent';
 import { ChatMessage } from '../../../../../components/chat/ChatMessage';
-import type { LearnPathMode } from '../../../../../domain/models';
+import type { Chapter, LearnPathMode, Requirement } from '../../../../../domain/models';
 import { StudyAiGeneratingDots } from '../../../../../features/session/components/studyAi/components/StudyAiGeneratingDots';
 import type {
   LearnPathMessage,
@@ -31,9 +31,21 @@ export function LearnPathChatPanel(props: {
   topicName?: string;
   currentChapterName?: string;
   currentRequirementName?: string;
+  chapters: Chapter[];
+  requirements: Requirement[];
   activePlan: RequirementPlan | null;
   activeStep?: RequirementPlanStep;
   overviewItems: LearnPathRequirementOverviewItem[];
+  generatedFlashcards: Array<{
+    id: string;
+    front: string;
+    back: string;
+    chapterId?: string;
+    requirementId?: string;
+  }>;
+  completionBusy: boolean;
+  completionError: string | null;
+  nextRequirementAvailable: boolean;
   onDraftChange: (value: string) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -43,6 +55,14 @@ export function LearnPathChatPanel(props: {
     exercise: LearnPathState['exerciseState']['exercise'],
   ) => void;
   onStartRequirement: (item: LearnPathRequirementOverviewItem, mode: LearnPathMode) => void;
+  onGenerateFlashcards: () => void;
+  onUpdateGeneratedFlashcard: (
+    flashcardId: string,
+    patch: { front?: string; back?: string; chapterId?: string; requirementId?: string },
+  ) => void;
+  onSaveGeneratedFlashcards: () => void;
+  onCompletionContinue: () => void;
+  onCompletionLeave: () => void;
   onPanelOpenChange: (open: boolean) => void;
   onPanelViewChange: (view: LearnPathPanelView) => void;
 }) {
@@ -56,6 +76,12 @@ export function LearnPathChatPanel(props: {
     activePlan,
     activeStep,
   } = props;
+  const requirementsByChapterId = new Map<string, Requirement[]>();
+  for (const requirement of props.requirements) {
+    const list = requirementsByChapterId.get(requirement.chapterId) ?? [];
+    list.push(requirement);
+    requirementsByChapterId.set(requirement.chapterId, list);
+  }
   const isMissingExerciseFallback =
     state.waitingForUser && state.exerciseState.status === 'missing';
   const canUseTextInput =
@@ -99,6 +125,45 @@ export function LearnPathChatPanel(props: {
             {state.messages.map((message) => (
               <LearnPathChatMessage key={message.id} message={message} />
             ))}
+            {props.generatedFlashcards.length > 0 ? (
+              <div className="space-y-3 rounded-4xl border border-white/8 bg-white/4 p-4">
+                <div className="text-sm font-medium text-white">Generierte Karteikarten</div>
+                <div className="text-sm -mt-1 pb-2 text-white/65">
+                  Du kannst die Karten vor dem Speichern noch anpassen.
+                </div>
+                {props.generatedFlashcards.map((flashcard) => {
+                  return (
+                    <div
+                      key={flashcard.id}
+                      className="space-y-3 divide-y divide-white/10 rounded-3xl border border-white/8 bg-black/15 p-4"
+                    >
+                      <textarea
+                        value={flashcard.front}
+                        rows={3}
+                        onChange={(event) =>
+                          props.onUpdateGeneratedFlashcard(flashcard.id, {
+                            front: event.currentTarget.value,
+                          })
+                        }
+                        className="w-full text-sm text-white outline-none"
+                        placeholder="Vorderseite"
+                      />
+                      <textarea
+                        value={flashcard.back}
+                        rows={4}
+                        onChange={(event) =>
+                          props.onUpdateGeneratedFlashcard(flashcard.id, {
+                            back: event.currentTarget.value,
+                          })
+                        }
+                        className="w-full text-sm text-white outline-none"
+                        placeholder="Rueckseite"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             {state.interactionSurface === 'exercise' && state.exerciseState.exercise ? (
               <div className="pt-2">
                 <LearnPathExerciseRenderer
@@ -163,6 +228,69 @@ export function LearnPathChatPanel(props: {
                   </div>
                   <PrimaryButton onClick={props.onBack}>Zur Übersicht</PrimaryButton>
                 </div>
+              ) : state.completionPrompt === 'next_action' ? (
+                <div className="space-y-3 rounded-4xl border border-white/8 bg-white/5 p-4">
+                  <div className="text-sm text-white/80">
+                    Requirement erfolgreich abgeschlossen. Wie möchtest du weitermachen?
+                  </div>
+                  {props.completionError ? (
+                    <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                      {props.completionError}
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <PrimaryButton
+                      onClick={props.onGenerateFlashcards}
+                      disabled={props.completionBusy}
+                    >
+                      Karteikarten generieren
+                    </PrimaryButton>
+                    <SecondaryButton
+                      onClick={props.onCompletionContinue}
+                      disabled={props.completionBusy}
+                    >
+                      {props.nextRequirementAvailable ? 'Direkt weiter' : 'Pfad abschließen'}
+                    </SecondaryButton>
+                    <SecondaryButton
+                      onClick={props.onCompletionLeave}
+                      disabled={props.completionBusy}
+                    >
+                      Chat verlassen
+                    </SecondaryButton>
+                  </div>
+                </div>
+              ) : state.completionPrompt === 'after_flashcards' ? (
+                <div className="space-y-3 rounded-4xl border border-white/8 bg-white/5 backdrop-blur-2xl p-4">
+                  <div className="text-sm text-white/80">
+                    Die Karteikarten sind bereit. Du kannst sie speichern oder direkt entscheiden,
+                    ob du weiterlernen oder den Chat verlassen willst.
+                  </div>
+                  {props.completionError ? (
+                    <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                      {props.completionError}
+                    </div>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <PrimaryButton
+                      onClick={props.onSaveGeneratedFlashcards}
+                      disabled={props.completionBusy || props.generatedFlashcards.length === 0}
+                    >
+                      Karteikarten speichern
+                    </PrimaryButton>
+                    <SecondaryButton
+                      onClick={props.onCompletionContinue}
+                      disabled={props.completionBusy}
+                    >
+                      {props.nextRequirementAvailable ? 'Weiter lernen' : 'Pfad abschließen'}
+                    </SecondaryButton>
+                    <SecondaryButton
+                      onClick={props.onCompletionLeave}
+                      disabled={props.completionBusy}
+                    >
+                      Verlassen
+                    </SecondaryButton>
+                  </div>
+                </div>
               ) : state.canContinue ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-sm text-white/70">
@@ -201,8 +329,8 @@ export function LearnPathChatPanel(props: {
                       />
                       {isMissingExerciseFallback ? (
                         <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                          Die erwartete Übung wurde gerade nicht geladen. Du kannst trotzdem per Text
-                          antworten, damit der Lernfluss nicht blockiert.
+                          Die erwartete Übung wurde gerade nicht geladen. Du kannst trotzdem per
+                          Text antworten, damit der Lernfluss nicht blockiert.
                         </div>
                       ) : null}
                     </motion.div>

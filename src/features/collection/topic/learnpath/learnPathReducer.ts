@@ -25,6 +25,7 @@ export function reduceLearnPathState(
       exerciseState:
         action.exerciseState ??
         initialLearnPathState.exerciseState,
+      completionPrompt: null,
       messages:
         action.messages && action.messages.length > 0
           ? action.messages
@@ -97,6 +98,7 @@ export function reduceLearnPathState(
       interactionSurface: 'idle',
       inputMode: 'none',
       exerciseState: initialLearnPathState.exerciseState,
+      completionPrompt: null,
       error: null,
     };
   }
@@ -111,6 +113,7 @@ export function reduceLearnPathState(
       waitingForUser: action.waitingForUser,
       canContinue: action.canContinue,
       exerciseState: action.exerciseState,
+      completionPrompt: null,
       error: null,
     };
   }
@@ -136,8 +139,29 @@ export function reduceLearnPathState(
         exercise: null,
         expectedType: null,
       },
+      completionPrompt: null,
       error: null,
       requestNonce: state.requestNonce + 1,
+    };
+  }
+
+  if (action.type === 'SHOW_COMPLETION_PROMPT') {
+    return {
+      ...state,
+      waitingForUser: false,
+      canContinue: false,
+      interactionSurface: 'idle',
+      inputMode: 'none',
+      exerciseState: initialLearnPathState.exerciseState,
+      completionPrompt: action.prompt,
+      error: null,
+    };
+  }
+
+  if (action.type === 'CLEAR_COMPLETION_PROMPT') {
+    return {
+      ...state,
+      completionPrompt: null,
     };
   }
 
@@ -163,6 +187,7 @@ export function reduceLearnPathState(
       activeStepId: null,
       inputMode: 'none',
       exerciseState: initialLearnPathState.exerciseState,
+      completionPrompt: null,
       error: null,
       messages: [
         ...state.messages,
@@ -185,6 +210,7 @@ export function reduceLearnPathState(
       waitingForUser: false,
       canContinue: false,
       interactionSurface: 'idle',
+      completionPrompt: null,
       messages: [
         ...state.messages,
         {

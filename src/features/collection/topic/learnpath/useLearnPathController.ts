@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Chapter, LearnPathMode, LearnPathProgress, Requirement } from '../../../../domain/models';
 import { newId } from '../../../../lib/id';
 import {
+  flashcardRepo,
   learnPathProgressRepo,
   learnPathSessionRequirementRepo,
   requirementRepo,
@@ -12,6 +13,8 @@ import { useCurriculumStore } from '../../../../stores/curriculumStore';
 import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
 import { useNotificationsStore } from '../../../../stores/notificationsStore';
 import { useStudyStore } from '../../../session/stores/studyStore';
+import { createInitialFlashcardSchedule } from '../flashcards/flashcardSrs';
+import { generateRequirementFlashcards } from './ai/requirementFlashcardAiClient';
 import { requestRequirementPlanTurn } from './ai/requirementRailAiClient';
 import { reduceLearnPathState } from './learnPathReducer';
 import {
@@ -48,6 +51,14 @@ import {
 const EMPTY_CHAPTERS: Chapter[] = [];
 const EMPTY_REQUIREMENTS: Requirement[] = [];
 
+type GeneratedRequirementFlashcard = {
+  id: string;
+  front: string;
+  back: string;
+  chapterId?: string;
+  requirementId?: string;
+};
+
 export function useLearnPathController(props: {
   subjectId: string;
   topicId: string;
@@ -73,6 +84,9 @@ export function useLearnPathController(props: {
   const [progressRows, setProgressRows] = useState<LearnPathProgress[]>([]);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [leaveDialogBusy, setLeaveDialogBusy] = useState(false);
+  const [generatedFlashcards, setGeneratedFlashcards] = useState<GeneratedRequirementFlashcard[]>([]);
+  const [completionBusy, setCompletionBusy] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
   const [state, dispatch] = useReducer(
     (currentState: LearnPathState, action: LearnPathAction) =>
       reduceLearnPathState(currentState, action),
@@ -123,6 +137,9 @@ export function useLearnPathController(props: {
     completedProgressIdsRef.current = new Set();
     setDraft('');
     setProgressRows([]);
+    setGeneratedFlashcards([]);
+    setCompletionBusy(false);
+    setCompletionError(null);
     dispatch({ type: 'RESET_TO_OVERVIEW' });
 
     const store = useCurriculumStore.getState();
@@ -192,6 +209,26 @@ export function useLearnPathController(props: {
     [currentRequirement, groupedRequirements, state.currentChapterIndex, state.currentRequirementIndex],
   );
   const currentRequirementGoal = currentRequirement ? buildRequirementGoal(currentRequirement) : '';
+  const nextRequirementAvailable = useMemo(
+    () =>
+      Boolean(
+        currentRequirement &&
+          getNextOpenRequirementPosition(
+            groupedRequirements,
+            progressRows,
+            state.currentChapterIndex,
+            state.currentRequirementIndex,
+            currentRequirement.id,
+          ),
+      ),
+    [
+      currentRequirement,
+      groupedRequirements,
+      progressRows,
+      state.currentChapterIndex,
+      state.currentRequirementIndex,
+    ],
+  );
 
   const ensureActiveTopicSession = useCallback(async () => {
     const currentActive = useActiveSessionStore.getState().active;
@@ -256,6 +293,9 @@ export function useLearnPathController(props: {
       handledRequestNonceRef.current = shouldRequestAi ? 0 : stateRef.current.requestNonce;
       completedProgressIdsRef.current.delete(progressId);
       setDraft('');
+      setGeneratedFlashcards([]);
+      setCompletionBusy(false);
+      setCompletionError(null);
       dispatch({
         type: 'START_PATH',
         chapterIndex: position.chapterIndex,
@@ -283,6 +323,9 @@ export function useLearnPathController(props: {
   const resetToOverview = useCallback(() => {
     handledRequestNonceRef.current = 0;
     setDraft('');
+    setGeneratedFlashcards([]);
+    setCompletionBusy(false);
+    setCompletionError(null);
     dispatch({ type: 'RESET_TO_OVERVIEW' });
     void loadProgress();
   }, [loadProgress]);
@@ -455,30 +498,10 @@ export function useLearnPathController(props: {
             dispatch({ type: 'RESET_TO_OVERVIEW' });
             return;
           }
-
-          const nextPosition = getNextOpenRequirementPosition(
-            groups,
-            progressRowsRef.current,
-            snapshot.currentChapterIndex,
-            snapshot.currentRequirementIndex,
-            requirement.id,
-          );
-          if (!nextPosition) {
-            dispatch({ type: 'RESET_TO_OVERVIEW' });
-            return;
-          }
-
-          dispatch({
-            type: 'START_NEXT_REQUIREMENT',
-            chapterIndex: nextPosition.chapterIndex,
-            requirementIndex: nextPosition.requirementIndex,
-            chapterName: nextPosition.chapter.name,
-            chapterId: nextPosition.chapter.id,
-            requirementName: nextPosition.requirement.name,
-            requirementId: nextPosition.requirement.id,
-            progressId: buildLearnPathProgressId(props.topicId, nextPosition.requirement.id, snapshot.mode),
-            mode: snapshot.mode,
-          });
+          setGeneratedFlashcards([]);
+          setCompletionError(null);
+          setCompletionBusy(false);
+          dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'next_action' });
           return;
         }
 
@@ -739,6 +762,151 @@ export function useLearnPathController(props: {
     }
   }, [endActiveSession, navigate, props.subjectId, props.topicId, resetStudyStore]);
 
+  const handleGenerateFlashcards = useCallback(async () => {
+    if (!currentChapter || !currentRequirement) return;
+    setCompletionBusy(true);
+    setCompletionError(null);
+    try {
+      const snapshot = stateRef.current;
+      const drafts = await generateRequirementFlashcards({
+        requirementGoal: buildRequirementGoal(currentRequirement),
+        history: buildRequirementHistory(snapshot.messages, currentChapter.id, currentRequirement.id),
+        chapterContext: {
+          subjectName: props.subjectName,
+          topicName: props.topicName,
+          chapterName: currentChapter.name,
+          requirementName: currentRequirement.name,
+        },
+      });
+      setGeneratedFlashcards(
+        drafts.map((draft) => ({
+          id: newId(),
+          front: draft.front,
+          back: draft.back,
+          chapterId: currentChapter.id,
+          requirementId: currentRequirement.id,
+        })),
+      );
+      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_flashcards' });
+    } catch (generationError) {
+      setCompletionError(
+        generationError instanceof Error
+          ? generationError.message
+          : 'Karteikarten konnten nicht erzeugt werden',
+      );
+    } finally {
+      if (mountedRef.current) setCompletionBusy(false);
+    }
+  }, [
+    currentChapter,
+    currentRequirement,
+    props.subjectName,
+    props.topicName,
+  ]);
+
+  const updateGeneratedFlashcard = useCallback(
+    (
+      flashcardId: string,
+      patch: Partial<Pick<GeneratedRequirementFlashcard, 'front' | 'back' | 'chapterId' | 'requirementId'>>,
+    ) => {
+      setGeneratedFlashcards((current) =>
+        current.map((entry) => {
+          if (entry.id !== flashcardId) return entry;
+          const nextChapterId = patch.chapterId !== undefined ? patch.chapterId : entry.chapterId;
+          const nextRequirementId =
+            patch.requirementId !== undefined ? patch.requirementId : entry.requirementId;
+          const requirementStillMatches =
+            !nextRequirementId ||
+            requirements.find(
+              (requirement) =>
+                requirement.id === nextRequirementId &&
+                (!nextChapterId || requirement.chapterId === nextChapterId),
+            );
+          return {
+            ...entry,
+            ...patch,
+            chapterId: nextChapterId,
+            requirementId: requirementStillMatches ? nextRequirementId : undefined,
+          };
+        }),
+      );
+    },
+    [requirements],
+  );
+
+  const handleSaveGeneratedFlashcards = useCallback(async () => {
+    if (generatedFlashcards.length === 0) return;
+    setCompletionBusy(true);
+    setCompletionError(null);
+    try {
+      const now = Date.now();
+      await flashcardRepo.bulkUpsert(
+        generatedFlashcards
+          .filter((card) => card.front.trim() && card.back.trim())
+          .map((card) => ({
+            subjectId: props.subjectId,
+            topicId: props.topicId,
+            chapterId: card.chapterId,
+            requirementId: card.requirementId,
+            front: card.front,
+            back: card.back,
+            source: 'ai_requirement',
+            state: 'active',
+            ...createInitialFlashcardSchedule(now),
+          })),
+      );
+      setGeneratedFlashcards([]);
+      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_flashcards' });
+      pushNotification({
+        tone: 'success',
+        title: 'Karteikarten gespeichert',
+        message: 'Die neuen Karten sind im Topic verfuegbar.',
+      });
+    } catch (saveError) {
+      setCompletionError(
+        saveError instanceof Error ? saveError.message : 'Karteikarten konnten nicht gespeichert werden',
+      );
+    } finally {
+      if (mountedRef.current) setCompletionBusy(false);
+    }
+  }, [generatedFlashcards, props.subjectId, props.topicId, pushNotification]);
+
+  const handleCompletionContinue = useCallback(() => {
+    if (!currentRequirement || !state.mode) return;
+    setGeneratedFlashcards([]);
+    setCompletionBusy(false);
+    setCompletionError(null);
+    dispatch({ type: 'CLEAR_COMPLETION_PROMPT' });
+    const nextPosition = getNextOpenRequirementPosition(
+      groupedRequirementsRef.current,
+      progressRowsRef.current,
+      state.currentChapterIndex,
+      state.currentRequirementIndex,
+      currentRequirement.id,
+    );
+    if (!nextPosition) {
+      dispatch({ type: 'COMPLETE_PATH' });
+      return;
+    }
+    dispatch({
+      type: 'START_NEXT_REQUIREMENT',
+      chapterIndex: nextPosition.chapterIndex,
+      requirementIndex: nextPosition.requirementIndex,
+      chapterName: nextPosition.chapter.name,
+      chapterId: nextPosition.chapter.id,
+      requirementName: nextPosition.requirement.name,
+      requirementId: nextPosition.requirement.id,
+      progressId: buildLearnPathProgressId(props.topicId, nextPosition.requirement.id, state.mode),
+      mode: state.mode,
+    });
+  }, [
+    currentRequirement,
+    props.topicId,
+    state.currentChapterIndex,
+    state.currentRequirementIndex,
+    state.mode,
+  ]);
+
   return {
     curriculumLoading,
     curriculumError,
@@ -748,6 +916,8 @@ export function useLearnPathController(props: {
     state,
     progressRows,
     groupedRequirements,
+    chapters,
+    requirements,
     overviewItems,
     latestInProgress,
     firstOpenRequirement,
@@ -758,6 +928,10 @@ export function useLearnPathController(props: {
     activeStep,
     currentRequirementPosition,
     currentRequirementGoal,
+    nextRequirementAvailable,
+    generatedFlashcards,
+    completionBusy,
+    completionError,
     leaveDialogOpen,
     leaveDialogBusy,
     setLeaveDialogOpen,
@@ -767,6 +941,10 @@ export function useLearnPathController(props: {
     handleRestart,
     handleResumeLatest,
     handleStartOverviewItem,
+    handleGenerateFlashcards,
+    updateGeneratedFlashcard,
+    handleSaveGeneratedFlashcards,
+    handleCompletionContinue,
     handleBack,
     handleLeavePage,
     handleEndSession,

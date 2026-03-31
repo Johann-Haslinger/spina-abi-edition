@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Asset, Chapter, ExercisePageStatus, Requirement } from '../../../../domain/models';
 import { useCurriculumStore } from '../../../../stores/curriculumStore';
 import { formatDuration, formatDurationForAiReview } from '../../../../utils/time';
@@ -23,6 +23,7 @@ type Props = {
   exerciseStatusByAssetId: Record<string, ExercisePageStatus>;
   onOpenCurriculum: () => void;
   onOpenLearnPath: () => void;
+  onOpenFlashcards: () => void;
   sessionRegenKey: number;
 };
 
@@ -218,7 +219,12 @@ export function TopicSummaryPanel(props: Props) {
               Zu Kapiteln &amp; Skills
             </button>
           </div>
-          <div className="w-2/3 h-fit flex flex-col gap-2 mt-auto"></div>
+          <div className="mt-auto flex h-fit w-2/3 flex-col gap-2">
+            <SecondaryLinkButton onClick={props.onOpenLearnPath}>Wissenspfad öffnen</SecondaryLinkButton>
+            <SecondaryLinkButton onClick={props.onOpenFlashcards}>
+              Karteikarten öffnen
+            </SecondaryLinkButton>
+          </div>
         </div>
 
         <div className="min-h-[120px]">
@@ -261,5 +267,17 @@ export function TopicSummaryPanel(props: Props) {
         </div>
       </div>
     </section>
+  );
+}
+
+function SecondaryLinkButton(props: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-left text-sm text-white transition hover:bg-white/10"
+    >
+      {props.children}
+    </button>
   );
 }

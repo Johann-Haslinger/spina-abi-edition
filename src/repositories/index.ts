@@ -2,6 +2,7 @@ import { IndexedDbAssetFileStore } from './local/IndexedDbAssetFileStore';
 import {
   LocalChapterRepository,
   LocalCurriculumDocumentRepository,
+  LocalFlashcardRepository,
   LocalLearnPathProgressRepository,
   LocalRequirementRepository,
   LocalScheduledReviewRepository,
@@ -37,6 +38,7 @@ export const curriculumDocumentRepo = new LocalCurriculumDocumentRepository();
 export const chapterRepo = new LocalChapterRepository();
 export const requirementRepo = new LocalRequirementRepository();
 export const learnPathProgressRepo = new LocalLearnPathProgressRepository();
+export const flashcardRepo = new LocalFlashcardRepository();
 
 export const studySessionRepo = new LocalStudySessionRepository();
 export const learnPathSessionRequirementRepo = new LocalLearnPathSessionRequirementRepository();

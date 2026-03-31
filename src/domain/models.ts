@@ -298,6 +298,31 @@ export type ScheduledReview = {
   completedAtMs?: number;
 };
 
+export type FlashcardSource = 'manual' | 'ai_requirement';
+
+export type FlashcardState = 'active' | 'archived';
+
+export type FlashcardReviewRating = 'known' | 'unknown';
+
+export type Flashcard = {
+  id: Id;
+  subjectId: Id;
+  topicId: Id;
+  chapterId?: Id;
+  requirementId?: Id;
+  front: string;
+  back: string;
+  source: FlashcardSource;
+  state: FlashcardState;
+  dueAtMs: number;
+  createdAtMs: number;
+  updatedAtMs: number;
+  lastReviewedAtMs?: number;
+  intervalDays: number;
+  successStreak: number;
+  reviewCount: number;
+};
+
 export type InkTool = 'pencil' | 'pen' | 'marker';
 
 export type InkBBox = {

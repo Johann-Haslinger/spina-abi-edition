@@ -51,7 +51,7 @@ export function TopicKnowledgePathView(props: {
         <ViewerIconButton
           ariaLabel="Zurück zum Thema"
           onClick={props.onBackToTopic}
-          className="fixed left-6 top-6 z-[60]"
+          className="fixed left-6 top-6 z-60"
         >
           <IoChevronBack />
         </ViewerIconButton>
@@ -82,15 +82,26 @@ export function TopicKnowledgePathView(props: {
         topicName={props.topicName}
         currentChapterName={controller.currentChapter?.name}
         currentRequirementName={controller.currentRequirement?.name}
+        chapters={controller.chapters}
+        requirements={controller.requirements}
         activePlan={controller.state.activePlan}
         activeStep={controller.activeStep}
         overviewItems={controller.overviewItems}
+        generatedFlashcards={controller.generatedFlashcards}
+        completionBusy={controller.completionBusy}
+        completionError={controller.completionError}
+        nextRequirementAvailable={controller.nextRequirementAvailable}
         onDraftChange={controller.setDraft}
         onBack={controller.resetToOverview}
         onContinue={controller.handleContinue}
         onSend={controller.handleSend}
         onExerciseSubmit={controller.handleExerciseSubmit}
         onStartRequirement={controller.handleStartOverviewItem}
+        onGenerateFlashcards={controller.handleGenerateFlashcards}
+        onUpdateGeneratedFlashcard={controller.updateGeneratedFlashcard}
+        onSaveGeneratedFlashcards={controller.handleSaveGeneratedFlashcards}
+        onCompletionContinue={controller.handleCompletionContinue}
+        onCompletionLeave={controller.handleEndSession}
         onPanelOpenChange={controller.setPanelOpen}
         onPanelViewChange={controller.setPanelView}
       />
