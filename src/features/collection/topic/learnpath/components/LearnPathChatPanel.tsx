@@ -1,4 +1,4 @@
-import { ChevronLeft, LayoutGrid } from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from '../../../../../components/Button';
 import { ChatInputRow } from '../../../../../components/chat/ChatInputRow';
 import { ChatMarkdownContent } from '../../../../../components/chat/ChatMarkdownContent';
@@ -130,7 +130,7 @@ export function LearnPathChatPanel(props: {
 
         <div className="fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-6 sm:px-6">
           <div className="relative w-full">
-            <button
+            {/* <button
               type="button"
               onClick={() => {
                 props.onPanelViewChange('current_requirement');
@@ -140,7 +140,7 @@ export function LearnPathChatPanel(props: {
             >
               <LayoutGrid className="size-4" />
               Übersicht
-            </button>
+            </button> */}
 
             <div className="mx-auto w-full max-w-2xl pl-0 sm:pl-24">
               {state.pathCompleted ? (
