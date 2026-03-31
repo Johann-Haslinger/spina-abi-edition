@@ -1,9 +1,12 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { PrimaryButton, SecondaryButton } from '../../../../../components/Button';
 import { ChatInputRow } from '../../../../../components/chat/ChatInputRow';
 import { ChatMarkdownContent } from '../../../../../components/chat/ChatMarkdownContent';
 import { ChatMessage } from '../../../../../components/chat/ChatMessage';
 import type { LearnPathMode } from '../../../../../domain/models';
+import { StudyAiGeneratingDots } from '../../../../../features/session/components/studyAi/components/StudyAiGeneratingDots';
 import type {
   LearnPathMessage,
   LearnPathPanelView,
@@ -15,11 +18,11 @@ import type {
 } from '../types';
 import { LearnPathExerciseRenderer } from './LearnPathExerciseRenderer';
 import { LearnPathOverviewPanel } from './LearnPathOverviewPanel';
-import { LearnPathThinkingCard } from './LearnPathThinkingCard';
 
 export function LearnPathChatPanel(props: {
   state: LearnPathState;
   mode: LearnPathMode | null;
+  subjectId?: string;
   draft: string;
   totalChapters: number;
   totalRequirements: number;
@@ -37,7 +40,7 @@ export function LearnPathChatPanel(props: {
   onSend: () => void;
   onExerciseSubmit: (
     response: LearnPathTurnResponse,
-    exercise: LearnPathState['pendingExercise'],
+    exercise: LearnPathState['exerciseState']['exercise'],
   ) => void;
   onStartRequirement: (item: LearnPathRequirementOverviewItem, mode: LearnPathMode) => void;
   onPanelOpenChange: (open: boolean) => void;
@@ -54,18 +57,25 @@ export function LearnPathChatPanel(props: {
     activeStep,
   } = props;
   const isMissingExerciseFallback =
-    state.waitingForUser &&
-    !state.pendingExercise &&
-    (state.inputMode === 'quiz' ||
-      state.inputMode === 'matching' ||
-      state.inputMode === 'free_text');
+    state.waitingForUser && state.exerciseState.status === 'missing';
   const canUseTextInput =
     state.waitingForUser &&
-    !state.pendingExercise &&
+    state.exerciseState.status !== 'ready' &&
     (state.inputMode === 'text' ||
       state.inputMode === 'free_text' ||
       state.inputMode === 'quiz' ||
       state.inputMode === 'matching');
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
+  const previousMessageCountRef = useRef(state.messages.length);
+
+  useEffect(() => {
+    const hasNewMessage = state.messages.length > previousMessageCountRef.current;
+    bottomAnchorRef.current?.scrollIntoView({
+      behavior: hasNewMessage ? 'smooth' : 'auto',
+      block: 'end',
+    });
+    previousMessageCountRef.current = state.messages.length;
+  }, [state.messages.length, state.loading, state.error, state.interactionSurface]);
 
   return (
     <section className="relative min-h-dvh">
@@ -86,24 +96,27 @@ export function LearnPathChatPanel(props: {
 
         <div className="absolute inset-0 overflow-y-auto px-4 pb-52 pt-28 sm:px-6">
           <div className="mx-auto w-full max-w-3xl space-y-4">
-            {activeStep ? (
-              <div className="rounded-[24px] border border-white/8 bg-white/5 px-4 py-3 text-sm text-white/70 backdrop-blur">
-                <span className="font-medium text-white">{activeStep.title}</span>
-                {' · '}
-                {activeStep.type}
-                {activeStep.exerciseType ? ` · ${activeStep.exerciseType}` : ''}
-              </div>
-            ) : null}
             {state.messages.map((message) => (
               <LearnPathChatMessage key={message.id} message={message} />
             ))}
-            {state.loading ? <LearnPathThinkingCard /> : null}
+            {state.interactionSurface === 'exercise' && state.exerciseState.exercise ? (
+              <div className="pt-2">
+                <LearnPathExerciseRenderer
+                  key={`${state.activeStepId ?? 'exercise'}-${state.exerciseState.exercise.type}`}
+                  exercise={state.exerciseState.exercise}
+                  subjectId={props.subjectId}
+                  disabled={state.loading}
+                  onSubmit={props.onExerciseSubmit}
+                />
+              </div>
+            ) : null}
+            {state.loading ? <StudyAiGeneratingDots /> : null}
             {state.error ? (
               <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                 {state.error}
               </div>
             ) : null}
-            <div className="h-8" />
+            <div ref={bottomAnchorRef} className="h-8" />
           </div>
         </div>
 
@@ -150,13 +163,6 @@ export function LearnPathChatPanel(props: {
                   </div>
                   <PrimaryButton onClick={props.onBack}>Zur Übersicht</PrimaryButton>
                 </div>
-              ) : state.waitingForUser && state.pendingExercise ? (
-                <LearnPathExerciseRenderer
-                  key={`${state.activeStepId ?? 'exercise'}-${state.pendingExercise.type}`}
-                  exercise={state.pendingExercise}
-                  disabled={state.loading}
-                  onSubmit={props.onExerciseSubmit}
-                />
               ) : state.canContinue ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-sm text-white/70">
@@ -167,39 +173,41 @@ export function LearnPathChatPanel(props: {
                   </PrimaryButton>
                 </div>
               ) : (
-                <div className="space-y-3 bg-white/10 rounded-4xl py-2 px-2 backdrop-blur-2xl">
-                  <ChatInputRow
-                    value={draft}
-                    onChange={props.onDraftChange}
-                    onSubmit={props.onSend}
-                    sending={state.loading}
-                    placeholder={
-                      state.waitingForUser
-                        ? isMissingExerciseFallback
-                          ? 'Die Übung wurde nicht geladen. Antworte hier einfach per Text…'
-                          : state.inputMode === 'free_text'
-                            ? 'Schreibe deine Antwort auf die Aufgabe…'
-                            : 'Antworte kurz auf die Verstaendnisfrage…'
-                        : 'Antworten werden freigeschaltet, sobald der aktuelle Schritt Textinput erwartet.'
-                    }
-                    disabled={!canUseTextInput || state.loading}
-                  />
-                  {isMissingExerciseFallback ? (
-                    <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                      Die erwartete Übung wurde gerade nicht geladen. Du kannst trotzdem per Text
-                      antworten, damit der Lernfluss nicht blockiert.
-                    </div>
+                <AnimatePresence initial={false} mode="wait">
+                  {canUseTextInput ? (
+                    <motion.div
+                      key="chat-input-shell"
+                      initial={{ opacity: 0, y: 22, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 18, scale: 0.98 }}
+                      transition={{ duration: 0.22, ease: 'easeOut' }}
+                      className="space-y-3 bg-white/5 border border-white/5 rounded-4xl py-2 px-2 backdrop-blur-2xl"
+                    >
+                      <ChatInputRow
+                        value={draft}
+                        onChange={props.onDraftChange}
+                        onSubmit={props.onSend}
+                        sending={state.loading}
+                        placeholder={
+                          state.waitingForUser
+                            ? isMissingExerciseFallback
+                              ? 'Die Übung wurde nicht geladen. Antworte hier einfach per Text…'
+                              : state.inputMode === 'free_text'
+                                ? 'Schreibe deine Antwort auf die Aufgabe…'
+                                : 'Antworte kurz auf die Verstaendnisfrage…'
+                            : 'Antworten werden freigeschaltet, sobald der aktuelle Schritt Textinput erwartet.'
+                        }
+                        disabled={!canUseTextInput || state.loading}
+                      />
+                      {isMissingExerciseFallback ? (
+                        <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                          Die erwartete Übung wurde gerade nicht geladen. Du kannst trotzdem per Text
+                          antworten, damit der Lernfluss nicht blockiert.
+                        </div>
+                      ) : null}
+                    </motion.div>
                   ) : null}
-                  {/* <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-xs text-white/45">
-                      {state.waitingForUser
-                        ? isMissingExerciseFallback
-                          ? 'Fallback aktiv: Antwort per Text ist freigeschaltet.'
-                          : 'Die KI wartet auf deine Antwort.'
-                        : 'Die KI steuert den Fahrplan aktuell selbst.'}
-                    </div>
-                  </div> */}
-                </div>
+                </AnimatePresence>
               )}
             </div>
           </div>
@@ -215,7 +223,7 @@ function LearnPathChatMessage(props: { message: LearnPathMessage }) {
     return (
       <ChatMessage
         align="center"
-        bubbleClassName="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/65"
+        bubbleClassName="rounded-full border border-white/10 bg-white/2 px-4 py-2 text-xs text-white/65"
       >
         {message.content}
       </ChatMessage>
@@ -226,9 +234,9 @@ function LearnPathChatMessage(props: { message: LearnPathMessage }) {
   return (
     <ChatMessage
       align={isUser ? 'end' : 'start'}
-      bubbleClassName={`rounded-3xl px-4 py-3 ${
+      bubbleClassName={`rounded-3xl px-4 py-2.5 ${
         isUser
-          ? 'bg-white/10 text-white max-w-[60%] shadow-[0_8px_30px_rgba(15,23,42,0.16)]'
+          ? 'bg-white/5 text-white max-w-[60%] shadow-[0_8px_30px_rgba(15,23,42,0.16)]'
           : 'bg-transparent text-white shadow-none'
       }`}
     >

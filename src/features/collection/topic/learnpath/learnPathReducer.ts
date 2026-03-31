@@ -18,10 +18,13 @@ export function reduceLearnPathState(
       currentRequirementIndex: action.requirementIndex,
       activePlan: action.plan ?? null,
       activeStepId: action.stepId ?? null,
+      interactionSurface: action.interactionSurface ?? 'idle',
       inputMode: action.inputMode ?? 'none',
       waitingForUser: action.waitingForUser ?? false,
       canContinue: action.canContinue ?? false,
-      pendingExercise: action.exercise ?? null,
+      exerciseState:
+        action.exerciseState ??
+        initialLearnPathState.exerciseState,
       messages:
         action.messages && action.messages.length > 0
           ? action.messages
@@ -91,16 +94,23 @@ export function reduceLearnPathState(
       ],
       waitingForUser: false,
       canContinue: false,
+      interactionSurface: 'idle',
       inputMode: 'none',
-      pendingExercise: null,
+      exerciseState: initialLearnPathState.exerciseState,
       error: null,
     };
   }
 
-  if (action.type === 'APPEND_ASSISTANT_MESSAGE') {
+  if (action.type === 'APPLY_ASSISTANT_TURN') {
     return {
       ...state,
       messages: [...state.messages, action.message],
+      activeStepId: action.stepId,
+      interactionSurface: action.interactionSurface,
+      inputMode: action.inputMode,
+      waitingForUser: action.waitingForUser,
+      canContinue: action.canContinue,
+      exerciseState: action.exerciseState,
       error: null,
     };
   }
@@ -114,25 +124,18 @@ export function reduceLearnPathState(
     };
   }
 
-  if (action.type === 'SET_INTERACTION_STATE') {
-    return {
-      ...state,
-      activeStepId: action.stepId,
-      inputMode: action.inputMode,
-      waitingForUser: action.waitingForUser,
-      canContinue: action.canContinue,
-      pendingExercise: action.exercise,
-      error: null,
-    };
-  }
-
   if (action.type === 'REQUEST_AI') {
     return {
       ...state,
       waitingForUser: false,
       canContinue: false,
+      interactionSurface: 'idle',
       inputMode: 'none',
-      pendingExercise: null,
+      exerciseState: {
+        status: 'loading',
+        exercise: null,
+        expectedType: null,
+      },
       error: null,
       requestNonce: state.requestNonce + 1,
     };
@@ -155,10 +158,11 @@ export function reduceLearnPathState(
       currentRequirementIndex: action.requirementIndex,
       waitingForUser: false,
       canContinue: false,
+      interactionSurface: 'idle',
       activePlan: null,
       activeStepId: null,
       inputMode: 'none',
-      pendingExercise: null,
+      exerciseState: initialLearnPathState.exerciseState,
       error: null,
       messages: [
         ...state.messages,
@@ -180,6 +184,7 @@ export function reduceLearnPathState(
       pathCompleted: true,
       waitingForUser: false,
       canContinue: false,
+      interactionSurface: 'idle',
       messages: [
         ...state.messages,
         {

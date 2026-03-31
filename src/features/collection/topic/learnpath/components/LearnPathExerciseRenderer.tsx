@@ -5,6 +5,7 @@ import { QuizExercise } from './QuizExercise';
 
 export function LearnPathExerciseRenderer(props: {
   exercise: LearnPathExercise;
+  subjectId?: string;
   disabled?: boolean;
   onSubmit: (response: LearnPathTurnResponse, exercise: LearnPathExercise) => void;
 }) {
@@ -12,8 +13,14 @@ export function LearnPathExerciseRenderer(props: {
     return (
       <QuizExercise
         exercise={props.exercise}
+        subjectId={props.subjectId}
         disabled={props.disabled}
-        onSubmit={(answers) => props.onSubmit({ kind: 'quiz', answers }, props.exercise)}
+        onSubmit={(payload) =>
+          props.onSubmit(
+            { kind: 'quiz', answers: payload.answers, summary: payload.summary },
+            props.exercise,
+          )
+        }
       />
     );
   }

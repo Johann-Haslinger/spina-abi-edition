@@ -73,6 +73,7 @@ export function TopicKnowledgePathView(props: {
       <LearnPathChatPanel
         state={controller.state}
         mode={controller.state.mode}
+        subjectId={props.subjectId}
         draft={controller.draft}
         totalChapters={controller.groupedRequirements.length}
         totalRequirements={controller.totalRequirements}

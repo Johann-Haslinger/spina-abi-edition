@@ -16,6 +16,17 @@ export type LearnPathInputMode =
   | 'matching'
   | 'free_text';
 
+export type LearnPathInteractionSurface = 'idle' | 'chat' | 'exercise' | 'continue';
+
+export type LearnPathExerciseStateStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'error';
+
+export type LearnPathExerciseState = {
+  status: LearnPathExerciseStateStatus;
+  exercise: LearnPathExercise | null;
+  expectedType: LearnPathExerciseType | null;
+  degradedReason?: string;
+};
+
 export type LearnPathMessageKind =
   | 'plan'
   | 'explanation'
@@ -27,12 +38,15 @@ export type LearnPathMessageKind =
 export type LearnPathOption = {
   id: string;
   text: string;
+  feedback?: string;
 };
 
 export type LearnPathQuizQuestion = {
   id: string;
   prompt: string;
   options: LearnPathOption[];
+  correctOptionId: string;
+  explanation?: string;
 };
 
 export type LearnPathMatchingItem = {
@@ -93,6 +107,11 @@ export type LearnPathTurnResponse =
         questionId: string;
         selectedOptionId: string;
       }[];
+      summary?: {
+        score: number;
+        total: number;
+        incorrectQuestionIds: string[];
+      };
     }
   | {
       kind: 'matching';
@@ -133,6 +152,7 @@ export type LearnPathMessage = {
   stepId?: string;
   stepType?: LearnPathStepType;
   messageKind?: LearnPathMessageKind;
+  interactionSurface?: LearnPathInteractionSurface;
   inputMode?: LearnPathInputMode;
   awaitUserReply?: boolean;
   exercise?: LearnPathExercise;
@@ -155,8 +175,9 @@ export type LearnPathState = {
   currentRequirementIndex: number;
   activePlan: RequirementPlan | null;
   activeStepId: string | null;
+  interactionSurface: LearnPathInteractionSurface;
   inputMode: LearnPathInputMode;
-  pendingExercise: LearnPathExercise | null;
+  exerciseState: LearnPathExerciseState;
   messages: LearnPathMessage[];
   requestNonce: number;
 };
@@ -176,9 +197,10 @@ export type LearnPathAction =
       stepId?: string | null;
       messages?: LearnPathMessage[];
       inputMode?: LearnPathInputMode;
+      interactionSurface?: LearnPathInteractionSurface;
       waitingForUser?: boolean;
       canContinue?: boolean;
-      exercise?: LearnPathExercise | null;
+      exerciseState?: LearnPathExerciseState;
       requestAi?: boolean;
     }
   | {
@@ -211,21 +233,19 @@ export type LearnPathAction =
       response?: LearnPathTurnResponse;
     }
   | {
-      type: 'APPEND_ASSISTANT_MESSAGE';
+      type: 'APPLY_ASSISTANT_TURN';
       message: LearnPathMessage;
+      stepId: string | null;
+      interactionSurface: LearnPathInteractionSurface;
+      inputMode: LearnPathInputMode;
+      waitingForUser: boolean;
+      canContinue: boolean;
+      exerciseState: LearnPathExerciseState;
     }
   | {
       type: 'SET_REQUIREMENT_PLAN';
       plan: RequirementPlan;
       stepId: string | null;
-    }
-  | {
-      type: 'SET_INTERACTION_STATE';
-      stepId: string | null;
-      inputMode: LearnPathInputMode;
-      waitingForUser: boolean;
-      canContinue: boolean;
-      exercise: LearnPathExercise | null;
     }
   | {
       type: 'REQUEST_AI';
@@ -264,8 +284,13 @@ export const initialLearnPathState: LearnPathState = {
   currentRequirementIndex: 0,
   activePlan: null,
   activeStepId: null,
+  interactionSurface: 'idle',
   inputMode: 'none',
-  pendingExercise: null,
+  exerciseState: {
+    status: 'idle',
+    exercise: null,
+    expectedType: null,
+  },
   messages: [],
   requestNonce: 0,
 };

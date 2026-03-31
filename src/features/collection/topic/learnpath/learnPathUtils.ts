@@ -1,7 +1,11 @@
 import type { Chapter, LearnPathProgress, Requirement } from '../../../../domain/models';
 import type {
   LearnPathExercise,
+  LearnPathExerciseState,
+  LearnPathExerciseType,
   LearnPathGroup,
+  LearnPathInputMode,
+  LearnPathInteractionSurface,
   LearnPathMessage,
   LearnPathRequirementOverviewItem,
   LearnPathTurnResponse,
@@ -124,13 +128,22 @@ export function describeResponse(response: LearnPathTurnResponse, exercise?: Lea
   if (response.kind === 'quiz') {
     if (exercise?.type !== 'quiz') return 'Quiz-Antwort gesendet';
     const questionLookup = new Map(exercise.questions.map((question) => [question.id, question]));
-    return response.answers
+    const answerLines = response.answers
       .map((answer, index) => {
         const question = questionLookup.get(answer.questionId);
         const option = question?.options.find((item) => item.id === answer.selectedOptionId);
-        return `${index + 1}. ${question?.prompt ?? answer.questionId}: ${option?.text ?? answer.selectedOptionId}`;
+        const isCorrect = question?.correctOptionId === answer.selectedOptionId;
+        const correctOption = question?.options.find((item) => item.id === question.correctOptionId);
+        if (isCorrect) {
+          return `${index + 1}. ${question?.prompt ?? answer.questionId}: ${option?.text ?? answer.selectedOptionId} (richtig)`;
+        }
+        return `${index + 1}. ${question?.prompt ?? answer.questionId}: ${option?.text ?? answer.selectedOptionId} (falsch, richtig: ${correctOption?.text ?? question?.correctOptionId ?? '-'})`;
       })
       .join('\n');
+    const summaryLine = response.summary
+      ? `Ergebnis: ${response.summary.score}/${response.summary.total} korrekt`
+      : '';
+    return [summaryLine, answerLines].filter(Boolean).join('\n');
   }
 
   const leftLookup =
@@ -173,6 +186,34 @@ export function parseLearnPathMessagesJson(value?: string) {
   } catch {
     return [];
   }
+}
+
+export function deriveInteractionFromAssistantTurn(input: {
+  inputMode: LearnPathInputMode;
+  awaitUserReply: boolean;
+  exerciseState: LearnPathExerciseState;
+}) {
+  const waitingForUser = input.awaitUserReply || input.inputMode !== 'none';
+  const hasReadyExercise = input.exerciseState.status === 'ready' && input.exerciseState.exercise != null;
+  const interactionSurface: LearnPathInteractionSurface = hasReadyExercise
+    ? 'exercise'
+    : waitingForUser
+      ? 'chat'
+      : input.inputMode === 'none'
+        ? 'continue'
+        : 'idle';
+  return {
+    waitingForUser,
+    canContinue: !waitingForUser && interactionSurface === 'continue',
+    interactionSurface,
+  };
+}
+
+export function expectedExerciseTypeFromInputMode(
+  inputMode: LearnPathInputMode | undefined,
+): LearnPathExerciseType | null {
+  if (inputMode === 'quiz' || inputMode === 'matching' || inputMode === 'free_text') return inputMode;
+  return null;
 }
 
 export function buildRequirementOverviewItems(
@@ -257,11 +298,14 @@ function normalizeLegacyMessage(message: LearnPathMessage) {
       ? {
           type: 'quiz' as const,
           prompt: rawMessage.exercise.prompt ?? '',
+          // Legacy single choice payloads had no explicit correct answer. We default to first option.
+          // This keeps old history parseable without blocking the current quiz flow.
           questions: [
             {
               id: 'q1',
               prompt: rawMessage.exercise.prompt ?? '',
               options: rawMessage.exercise.options ?? [],
+              correctOptionId: rawMessage.exercise.options?.[0]?.id ?? 'opt_1',
             },
           ],
         }

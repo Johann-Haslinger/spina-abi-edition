@@ -1,7 +1,9 @@
-import { getSupabaseClient } from '../../../../../lib/supabaseClient';
 import type { LearnPathMode } from '../../../../../domain/models';
+import { getSupabaseClient } from '../../../../../lib/supabaseClient';
 import type {
   LearnPathExercise,
+  LearnPathExerciseState,
+  LearnPathExerciseType,
   LearnPathInputMode,
   LearnPathMessageKind,
   RequirementPlan,
@@ -24,12 +26,13 @@ export type RequirementPlanAiRequest = {
 };
 
 export type RequirementPlanAiResponse = {
+  reqId?: string;
   plan?: RequirementPlan;
   currentStepId?: string;
   message: string;
   messageKind: LearnPathMessageKind;
   expectsInput: LearnPathInputMode;
-  exercise?: LearnPathExercise;
+  exerciseState: LearnPathExerciseState;
   awaitUserReply: boolean;
   completeRequirement: boolean;
   masteryDelta?: number;
@@ -50,6 +53,7 @@ export async function requestRequirementPlanTurn(
       currentStepId: input.currentStepId,
     },
   });
+  console.log('data', data);
   const payload = await unwrapFunctionResponse(data, error);
   if (!payload || typeof payload !== 'object') {
     throw new Error('Ungueltige Wissenspfad-Antwort');
@@ -66,7 +70,14 @@ export async function requestRequirementPlanTurn(
   const currentStepId = typeof p.current_step_id === 'string' ? p.current_step_id : undefined;
   const messageKind = parseMessageKind(p.message_kind);
   const expectsInput = parseInputMode(p.expects_input);
+  const expectedExerciseType = parseExpectedExerciseType(p.expected_exercise_type);
   const exercise = parseExercise(p.exercise);
+  const exerciseState = parseExerciseState(
+    p.exercise_status,
+    exercise,
+    expectedExerciseType,
+    p.degraded_reason,
+  );
   const masteryDelta =
     typeof p.mastery_delta === 'number' && Number.isFinite(p.mastery_delta)
       ? p.mastery_delta
@@ -75,12 +86,13 @@ export async function requestRequirementPlanTurn(
   const completeRequirement = p.complete_requirement === true;
 
   return {
+    reqId: typeof p.req_id === 'string' ? p.req_id : undefined,
     plan: parsedPlan,
     currentStepId,
     message,
     messageKind,
     expectsInput,
-    exercise,
+    exerciseState,
     awaitUserReply,
     completeRequirement,
     masteryDelta,
@@ -166,47 +178,79 @@ function parseExercise(value: unknown): LearnPathExercise | undefined {
           id?: unknown;
           prompt?: unknown;
           options?: unknown;
+          correctOptionId?: unknown;
+          explanation?: unknown;
         } | null;
         if (
           !item ||
           typeof item.id !== 'string' ||
           typeof item.prompt !== 'string' ||
-          !Array.isArray(item.options)
+          !Array.isArray(item.options) ||
+          typeof item.correctOptionId !== 'string'
         ) {
           return null;
         }
         const options = item.options
           .map((option) => {
-            const entry = (option ?? null) as { id?: unknown; text?: unknown } | null;
-            if (!entry || typeof entry.id !== 'string' || typeof entry.text !== 'string') return null;
-            return { id: entry.id, text: entry.text };
+            const entry = (option ?? null) as { id?: unknown; text?: unknown; feedback?: unknown } | null;
+            if (!entry || typeof entry.id !== 'string' || typeof entry.text !== 'string')
+              return null;
+            const feedback = typeof entry.feedback === 'string' ? entry.feedback : undefined;
+            return feedback
+              ? { id: entry.id, text: entry.text, feedback }
+              : { id: entry.id, text: entry.text };
           })
-          .filter((option): option is { id: string; text: string } => option != null);
-        return options.length > 1 ? { id: item.id, prompt: item.prompt, options } : null;
+          .filter((option): option is { id: string; text: string; feedback?: string } => option != null);
+        const hasCorrectOption = options.some((option) => option.id === item.correctOptionId);
+        return options.length > 1 && hasCorrectOption
+          ? {
+              id: item.id,
+              prompt: item.prompt,
+              options,
+              correctOptionId: item.correctOptionId,
+              ...(typeof item.explanation === 'string' ? { explanation: item.explanation } : {}),
+            }
+          : null;
       })
       .filter(
-        (question): question is {
+        (
+          question,
+        ): question is {
           id: string;
           prompt: string;
-          options: { id: string; text: string }[];
+          options: { id: string; text: string; feedback?: string }[];
+          correctOptionId: string;
+          explanation?: string;
         } => question != null,
       );
     if (questions.length > 0) return { type: 'quiz', prompt: row.prompt, questions };
   }
 
   if (row.type === 'single_choice' && Array.isArray(row.options)) {
+    const correctOptionId =
+      typeof row.correctOptionId === 'string'
+        ? row.correctOptionId
+        : typeof row.correct_option_id === 'string'
+          ? row.correct_option_id
+          : undefined;
     const options = row.options
       .map((option) => {
-        const item = (option ?? null) as { id?: unknown; text?: unknown } | null;
+        const item = (option ?? null) as { id?: unknown; text?: unknown; feedback?: unknown } | null;
         if (!item || typeof item.id !== 'string' || typeof item.text !== 'string') return null;
-        return { id: item.id, text: item.text };
+        const feedback = typeof item.feedback === 'string' ? item.feedback : undefined;
+        return feedback ? { id: item.id, text: item.text, feedback } : { id: item.id, text: item.text };
       })
-      .filter((option): option is { id: string; text: string } => option != null);
+      .filter((option): option is { id: string; text: string; feedback?: string } => option != null);
     if (options.length > 1) {
+      const safeCorrectOptionId =
+        correctOptionId && options.some((option) => option.id === correctOptionId)
+          ? correctOptionId
+          : options[0]?.id;
+      if (!safeCorrectOptionId) return undefined;
       return {
         type: 'quiz',
         prompt: row.prompt,
-        questions: [{ id: 'q1', prompt: row.prompt, options }],
+        questions: [{ id: 'q1', prompt: row.prompt, options, correctOptionId: safeCorrectOptionId }],
       };
     }
   }
@@ -242,6 +286,36 @@ function parseExercise(value: unknown): LearnPathExercise | undefined {
   return undefined;
 }
 
+function parseExpectedExerciseType(value: unknown): LearnPathExerciseType | null {
+  if (value === 'single_choice') return 'quiz';
+  return isExerciseType(value) ? value : null;
+}
+
+function parseExerciseState(
+  statusValue: unknown,
+  exercise: LearnPathExercise | undefined,
+  expectedType: LearnPathExerciseType | null,
+  degradedReason: unknown,
+): LearnPathExerciseState {
+  const status =
+    statusValue === 'loading' ||
+    statusValue === 'ready' ||
+    statusValue === 'missing' ||
+    statusValue === 'error'
+      ? statusValue
+      : exercise
+        ? 'ready'
+        : expectedType
+          ? 'missing'
+          : 'idle';
+  return {
+    status,
+    exercise: exercise ?? null,
+    expectedType,
+    degradedReason: typeof degradedReason === 'string' ? degradedReason : undefined,
+  };
+}
+
 function isStepType(value: unknown): value is RequirementPlan['steps'][number]['type'] {
   return (
     value === 'explain' ||
@@ -252,7 +326,9 @@ function isStepType(value: unknown): value is RequirementPlan['steps'][number]['
   );
 }
 
-function isExerciseType(value: unknown): value is NonNullable<RequirementPlan['steps'][number]['exerciseType']> {
+function isExerciseType(
+  value: unknown,
+): value is NonNullable<RequirementPlan['steps'][number]['exerciseType']> {
   return value === 'quiz' || value === 'matching' || value === 'free_text';
 }
 

@@ -90,6 +90,8 @@ serve(async (req) => {
         : undefined;
     const currentStep =
       plan && currentStepId ? (plan.steps.find((step) => step.id === currentStepId) ?? null) : null;
+    const currentStepAlreadyAnswered = hasUserResponseForStep(history, currentStepId);
+    const nextStepIdAfterCurrent = getNextStepId(plan, currentStepId);
 
     if (mode === 'turn' && (!plan || !currentStep)) {
       return json(400, { error: 'turn mode braucht plan und currentStepId' });
@@ -106,6 +108,8 @@ serve(async (req) => {
       plan,
       currentStepId,
       currentStep,
+      currentStepAlreadyAnswered,
+      nextStepIdAfterCurrent,
     });
 
     log(reqId, 'openai_request_start', {
@@ -131,7 +135,7 @@ serve(async (req) => {
         body: JSON.stringify({
           model,
           temperature: 0.2,
-          max_output_tokens: 900,
+          max_output_tokens: 1200,
           input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
         }),
       });
@@ -151,6 +155,7 @@ serve(async (req) => {
         }
 
         return json(200, {
+          req_id: reqId,
           message:
             openaiStatus === 429
               ? 'Ich bin gerade kurz an einem Rate-Limit gescheitert. Bitte sende deine letzte Antwort gleich nochmal.'
@@ -173,6 +178,7 @@ serve(async (req) => {
         assistantSnippet: extractAssistantText(openaiJson).slice(0, 300),
       });
       return json(200, {
+        req_id: reqId,
         message:
           'Ich konnte meine letzte Antwort leider nicht sauber als Lernschritt einordnen. Antworte bitte nochmal kurz auf die letzte Frage.',
         message_kind: 'feedback',
@@ -182,10 +188,11 @@ serve(async (req) => {
       });
     }
 
-    const responsePlan = normalizePlan(parsed.plan) ?? plan;
+    const responsePlan = mode === 'plan' ? normalizePlan(parsed.plan) ?? plan : plan;
     const message = asNonEmptyString(parsed.message);
     if (!message) {
       return json(200, {
+        req_id: reqId,
         message:
           'Es ist ein kleines Formatproblem aufgetreten. Bitte antworte nochmal kurz auf die letzte Frage.',
         message_kind: 'feedback',
@@ -195,18 +202,45 @@ serve(async (req) => {
       });
     }
 
-    const returnedStepId =
-      asNonEmptyString(parsed.current_step_id) ?? currentStepId ?? responsePlan?.steps[0]?.id;
+    let returnedStepId =
+      asNonEmptyString(parsed.current_step_id) ??
+      (currentStep?.type === 'exercise' && currentStepAlreadyAnswered
+        ? nextStepIdAfterCurrent
+        : currentStepId) ??
+      responsePlan?.steps[0]?.id;
+    if (
+      currentStep?.type === 'exercise' &&
+      currentStepAlreadyAnswered &&
+      returnedStepId === currentStepId &&
+      nextStepIdAfterCurrent
+    ) {
+      returnedStepId = nextStepIdAfterCurrent;
+    }
     const messageKind = isMessageKind(parsed.message_kind)
       ? (parsed.message_kind as MessageKind)
       : 'explanation';
-    const expectsInput =
+    const parsedExpectsInput =
       parsed.expects_input === 'single_choice'
         ? 'quiz'
         : isInputMode(parsed.expects_input)
           ? (parsed.expects_input as InputMode)
           : 'none';
-    const exercise = normalizeExercise(parsed.exercise);
+    const responseStep =
+      responsePlan && returnedStepId
+        ? (responsePlan.steps.find((step) => step.id === returnedStepId) ?? null)
+        : currentStep;
+    const shouldForceCurrentStepExerciseInput = !(
+      currentStep?.type === 'exercise' &&
+      currentStepAlreadyAnswered &&
+      returnedStepId === currentStepId
+    );
+    let expectsInput = shouldForceCurrentStepExerciseInput
+      ? expectedInputModeForStep(responseStep) ?? parsedExpectsInput
+      : parsedExpectsInput;
+    const expectedExerciseType = inferExpectedExerciseType(expectsInput, responseStep);
+    let exercise = normalizeExercise(parsed.exercise);
+    let exerciseStatus: 'idle' | 'loading' | 'ready' | 'missing' | 'error' = exercise ? 'ready' : 'idle';
+    let degradedReason: string | undefined;
     const completeRequirement = parsed.complete_requirement === true;
     const masteryDelta = completeRequirement
       ? clampMasteryDelta(
@@ -216,20 +250,105 @@ serve(async (req) => {
         )
       : undefined;
 
+    log(reqId, 'turn_response_pre_repair', {
+      returnedStepId,
+      parsedExpectsInput: parsed.expects_input,
+      normalizedExpectsInput: expectsInput,
+      responseStepType: responseStep?.type ?? null,
+      responseStepExerciseType: responseStep?.exerciseType ?? null,
+      normalizedExerciseType: exercise?.type ?? null,
+      hasParsedExercise: parsed.exercise != null,
+      hasNormalizedExercise: exercise != null,
+      expectedExerciseType,
+    });
+
+    log(reqId, 'turn_response_interpreted', {
+      returnedStepId,
+      parsedExpectsInput,
+      effectiveExpectsInput: expectsInput,
+      responseStepType: responseStep?.type ?? null,
+      responseStepExerciseType: responseStep?.exerciseType ?? null,
+      rawExerciseType:
+        parsed.exercise && typeof parsed.exercise === 'object' && 'type' in parsed.exercise
+          ? String((parsed.exercise as Record<string, unknown>).type ?? '')
+          : null,
+      rawExerciseSnippet: safeSnippet(JSON.stringify(parsed.exercise ?? null), 500),
+      normalizedExerciseType: exercise?.type ?? null,
+      messageKind,
+      awaitUserReply: parsed.await_user_reply === true,
+    });
+
+    if (isExerciseInputMode(expectsInput) && !exercise) {
+      log(reqId, 'exercise_missing_repair_start', {
+        returnedStepId,
+        expectsInput,
+        responseStepType: responseStep?.type ?? null,
+        responseStepExerciseType: responseStep?.exerciseType ?? null,
+      });
+      const repairedExercise = await repairMissingExercise({
+        apiKey,
+        model,
+        reqId,
+        requirementGoal,
+        chapterContext,
+        responseStep,
+        message,
+        expectsInput,
+      });
+      if (repairedExercise) {
+        exercise = repairedExercise;
+        exerciseStatus = 'ready';
+        log(reqId, 'turn_response_repair_succeeded', {
+          returnedStepId,
+          expectsInput,
+          repairedExerciseType: repairedExercise.type,
+        });
+      } else {
+        log(reqId, 'turn_response_repair_failed', {
+          returnedStepId,
+          expectsInput,
+          fallbackExpectsInput: 'text',
+        });
+        exerciseStatus = 'missing';
+        degradedReason = 'missing_exercise_payload';
+        expectsInput = 'text';
+      }
+    }
+    if (!isExerciseInputMode(expectsInput)) {
+      exerciseStatus = 'idle';
+    } else if (!exercise && exerciseStatus === 'idle') {
+      exerciseStatus = 'missing';
+      degradedReason = degradedReason ?? 'missing_exercise_payload';
+    }
+
+    log(reqId, 'turn_response_final', {
+      returnedStepId,
+      finalExpectsInput: expectsInput,
+      finalExerciseType: exercise?.type ?? null,
+      finalExerciseStatus: exerciseStatus,
+      awaitUserReply: parsed.await_user_reply === true,
+      completeRequirement,
+    });
+
     return json(200, {
-      plan: responsePlan,
+      req_id: reqId,
+      plan: mode === 'plan' ? responsePlan : undefined,
       current_step_id: returnedStepId,
       message,
       message_kind: messageKind,
       expects_input: expectsInput,
+      expected_exercise_type: expectedExerciseType,
+      exercise_status: exerciseStatus,
       exercise,
+      degraded_reason: degradedReason,
       await_user_reply: parsed.await_user_reply === true,
       complete_requirement: completeRequirement,
       mastery_delta: masteryDelta,
     });
   } catch {
-    log(newReqId(), 'unexpected_error', {});
+    log(reqId, 'unexpected_error', {});
     return json(200, {
+      req_id: reqId,
       message:
         'Es gab einen unerwarteten technischen Fehler beim Wissenspfad. Bitte versuche es erneut oder sende deine letzte Antwort nochmal.',
       message_kind: 'feedback',
@@ -249,6 +368,8 @@ function buildPrompt(input: {
   plan: RequirementPlan | null;
   currentStepId?: string;
   currentStep: RequirementPlanStep | null;
+  currentStepAlreadyAnswered: boolean;
+  nextStepIdAfterCurrent: string | null;
 }) {
   const base = [
     'Du steuerst den Wissenspfad einer Abi-Lern-App fuer lehrplanbasiertes Lernen.',
@@ -263,6 +384,7 @@ function buildPrompt(input: {
     '- Wechsle Schritt oder Interaktionsform, sobald es didaktisch sinnvoll ist. Bleibe nicht kuenstlich zu lange im selben Schritt.',
     '- Uebungen duerfen nur die Typen quiz, matching oder free_text verwenden.',
     '- Bei exercise-Schritten setze expects_input passend zum exercise type und liefere ein exercise-Objekt.',
+    '- Wenn expects_input auf quiz, matching oder free_text steht, darf exercise NICHT null oder leer sein.',
     '- Wenn du auf eine Nutzerantwort wartest, setze await_user_reply=true.',
     '- mastery_delta darf nur gesetzt werden, wenn complete_requirement=true.',
     '- Keine Markdown-Tabellen, kein JSON ausserhalb des geforderten Schemas.',
@@ -288,6 +410,7 @@ function buildPrompt(input: {
       '- Gib bereits die erste fachliche Erklaerung fuer den ersten Schritt.',
       '- Diese erste Nachricht endet mit genau einer kurzen Verstaendnisfrage zum eben erklaerten Inhalt.',
       '- Setze current_step_id auf den ersten Schritt.',
+      '- Im Planungsmodus MUSS ein plan-Objekt enthalten sein.',
       '- Im Lernmodus soll der Plan neue Inhalte schrittweise aufbauen.',
       '- Im Wiederholmodus soll der Plan kuerzer, recall-orientierter und uebungsnäher sein.',
       '- Setze message_kind="explanation", expects_input="text", await_user_reply=true und complete_requirement=false.',
@@ -300,9 +423,12 @@ function buildPrompt(input: {
     `Aktueller Plan: ${safeSnippet(JSON.stringify(input.plan), 2500)}`,
     `Aktuelle Schritt-ID: ${JSON.stringify(input.currentStepId ?? null)}`,
     `Aktueller Schritt: ${JSON.stringify(input.currentStep)}`,
+    `Aktueller Schritt bereits beantwortet: ${input.currentStepAlreadyAnswered ? 'ja' : 'nein'}`,
+    `Naechste Schritt-ID nach aktuell: ${JSON.stringify(input.nextStepIdAfterCurrent)}`,
     '',
     'Turn-Modus:',
     '- Arbeite immer entlang des bestehenden Plans.',
+    '- Im Turn-Modus darfst du KEIN neues plan-Objekt schicken.',
     '- Im Lernmodus darfst du zuerst kurz erklaeren und dann abfragen.',
     '- Im Wiederholmodus sollst du knapper sein, frueher in Fragen/Uebungen wechseln und eher abrufen als neu aufbauen.',
     '- Nutze den vorhandenen Verlauf aktiv, um Fortschritt, Korrekturen und bereits gegebene Antworten zu erkennen.',
@@ -311,10 +437,13 @@ function buildPrompt(input: {
     '- Wenn der Nutzer explizit schreibt, dass er etwas schon gemacht hat, es schon verstanden hat oder zum naechsten Schritt will, entscheide anhand des Verlaufs, ob du den Schritt direkt abschliessen kannst.',
     '- Bei explain/check/review: erklaere oder reagiere knapp und ende mit genau einer kurzen Verstaendnisfrage. Setze expects_input="text" und await_user_reply=true.',
     '- Bei exercise: wenn fuer den aktuellen Schritt noch keine Nutzerantwort vorliegt, liefere SOFORT die eigentliche Uebung als exercise-Objekt.',
+    '- Wenn der aktuelle Plan-Schritt type="exercise" mit exerciseType gesetzt hat, muss expects_input exakt diesem exerciseType entsprechen.',
+    '- WICHTIG: Wenn der aktuelle exercise-Schritt bereits beantwortet wurde, darfst du NICHT in diesem Schritt bleiben. Wechsle in einen neuen Schritt, setze current_step_id entsprechend und liefere KEIN weiteres exercise-Objekt fuer denselben Schritt.',
     '- Frage vor einer Uebung NICHT, ob der Nutzer bereit ist, und stelle keine Meta-Zwischenfrage vor dem exercise-Objekt.',
-    '- Wenn expects_input auf quiz, matching oder free_text steht, MUSS im selben Turn auch ein passendes exercise-Objekt geliefert werden.',
-    '- Wenn bereits eine Antwort auf die Uebung vorliegt, bewerte sie knapp und gehe dann weiter oder lasse gezielt wiederholen.',
-    '- Bei quiz liefere einen kompletten Exercise-Block mit 2 bis 4 Fragen in exercise.questions; jede Frage hat 3 bis 5 Optionen.',
+    '- Wenn expects_input auf quiz, matching oder free_text steht, MUSS im selben Turn auch ein passendes exercise-Objekt geliefert werden und exercise darf dann niemals null sein.',
+    '- Wenn bereits eine Antwort auf die Uebung vorliegt, bewerte sie knapp und gehe danach in den naechsten sinnvollen Plan-Schritt weiter, statt dieselbe Uebung erneut zu generieren.',
+    '- Bei quiz liefere einen kompletten Exercise-Block mit 2 bis 4 Fragen in exercise.questions; jede Frage hat 3 bis 5 Optionen, ein correctOptionId und optional eine kurze explanation.',
+    '- Bei quiz soll jede Option ein kurzes feedback tragen (ein kurzer Satz), das direkt nach der Auswahl angezeigt werden kann.',
     '- Bei matching liefere 3 bis 5 linke und rechte Eintraege.',
     '- Bei free_text liefere eine klare, kurze Aufgabenstellung und optional placeholder.',
     '- Wenn du in den complete-Schritt wechselst, gib eine kurze Abschlussnachricht und setze complete_requirement=true, expects_input="none", await_user_reply=false und mastery_delta auf 0.08 bis 0.15.',
@@ -379,25 +508,86 @@ function normalizePlanStep(input: unknown): RequirementPlanStep | null {
 function normalizeExercise(input: unknown) {
   const row = (input ?? null) as Record<string, unknown> | null;
   if (!row) return null;
-  const prompt = asNonEmptyString(row.prompt);
-  if (!prompt || typeof row.type !== 'string') return null;
+  const rawType = asNonEmptyString(row.type)?.toLowerCase();
+  const normalizedType =
+    rawType === 'single_choice' ||
+    rawType === 'multiple_choice' ||
+    rawType === 'mcq' ||
+    rawType === 'quiz_exercise'
+      ? 'quiz'
+      : rawType === 'free-text' || rawType === 'freetext' || rawType === 'short_answer'
+        ? 'free_text'
+        : rawType;
+  const prompt =
+    asNonEmptyString(row.prompt) ??
+    asNonEmptyString(row.question) ??
+    asNonEmptyString(row.task) ??
+    asNonEmptyString(row.title) ??
+    asNonEmptyString(row.instruction);
+  if (!prompt || !normalizedType) return null;
 
-  if (row.type === 'quiz' && Array.isArray(row.questions)) {
-    const questions = row.questions
+  if (
+    normalizedType === 'quiz' &&
+    (Array.isArray(row.questions) ||
+      Array.isArray(row.items) ||
+      Array.isArray(row.quizQuestions) ||
+      Array.isArray(row.aufgaben))
+  ) {
+    const rawQuestions = (row.questions ??
+      row.items ??
+      row.quizQuestions ??
+      row.aufgaben ??
+      []) as unknown[];
+    const questions = rawQuestions
       .map((question) => {
         const item = (question ?? null) as Record<string, unknown> | null;
         const id = asNonEmptyString(item?.id);
-        const questionPrompt = asNonEmptyString(item?.prompt);
-        if (!id || !questionPrompt || !Array.isArray(item?.options)) return null;
-        const options = item.options
+        const questionPrompt =
+          asNonEmptyString(item?.prompt) ??
+          asNonEmptyString(item?.question) ??
+          asNonEmptyString(item?.text) ??
+          asNonEmptyString(item?.title);
+        const correctOptionId =
+          asNonEmptyString(item?.correctOptionId) ??
+          asNonEmptyString(item?.correct_option_id) ??
+          asNonEmptyString(item?.correctAnswerId) ??
+          asNonEmptyString(item?.correct_answer_id) ??
+          asNonEmptyString(item?.correct);
+        const rawOptions = (item?.options ??
+          item?.choices ??
+          item?.answers ??
+          item?.answerOptions) as unknown;
+        if (!id || !questionPrompt || !Array.isArray(rawOptions) || !correctOptionId) return null;
+        const options = rawOptions
           .map((option) => {
             const entry = (option ?? null) as Record<string, unknown> | null;
-            const optionId = asNonEmptyString(entry?.id);
-            const text = asNonEmptyString(entry?.text);
-            return optionId && text ? { id: optionId, text } : null;
+            const optionId = asNonEmptyString(entry?.id) ?? asNonEmptyString(entry?.key);
+            const text =
+              asNonEmptyString(entry?.text) ??
+              asNonEmptyString(entry?.label) ??
+              asNonEmptyString(entry?.content) ??
+              asNonEmptyString(entry?.value);
+            const feedback =
+              asNonEmptyString(entry?.feedback) ??
+              asNonEmptyString(entry?.reason) ??
+              asNonEmptyString(entry?.rationale) ??
+              asNonEmptyString(entry?.hint);
+            if (!optionId || !text) return null;
+            return feedback ? { id: optionId, text, feedback } : { id: optionId, text };
           })
-          .filter((option): option is { id: string; text: string } => option != null);
-        return options.length >= 2 ? { id, prompt: questionPrompt, options } : null;
+          .filter((option): option is { id: string; text: string; feedback?: string } => option != null);
+        const hasCorrectOption = options.some((option) => option.id === correctOptionId);
+        return options.length >= 2 && hasCorrectOption
+          ? {
+              id,
+              prompt: questionPrompt,
+              options,
+              correctOptionId,
+              ...(asNonEmptyString(item?.explanation)
+                ? { explanation: asNonEmptyString(item?.explanation) }
+                : {}),
+            }
+          : null;
       })
       .filter(
         (
@@ -405,61 +595,198 @@ function normalizeExercise(input: unknown) {
         ): question is {
           id: string;
           prompt: string;
-          options: { id: string; text: string }[];
+          options: { id: string; text: string; feedback?: string }[];
+          correctOptionId: string;
+          explanation?: string;
         } => question != null,
       );
     if (questions.length >= 1) return { type: 'quiz', prompt, questions };
   }
 
-  if (row.type === 'single_choice' && Array.isArray(row.options)) {
+  if (normalizedType === 'quiz' && Array.isArray(row.options)) {
+    const correctOptionId =
+      asNonEmptyString(row.correctOptionId) ??
+      asNonEmptyString(row.correct_option_id) ??
+      asNonEmptyString(row.correctAnswerId) ??
+      asNonEmptyString(row.correct_answer_id) ??
+      asNonEmptyString(row.correct);
+    const options = row.options
+      .map((option) => {
+        const item = (option ?? null) as Record<string, unknown> | null;
+        const id = asNonEmptyString(item?.id) ?? asNonEmptyString(item?.key);
+        const text =
+          asNonEmptyString(item?.text) ??
+          asNonEmptyString(item?.label) ??
+          asNonEmptyString(item?.content) ??
+          asNonEmptyString(item?.value);
+        const feedback =
+          asNonEmptyString(item?.feedback) ??
+          asNonEmptyString(item?.reason) ??
+          asNonEmptyString(item?.rationale) ??
+          asNonEmptyString(item?.hint);
+        if (!id || !text) return null;
+        return feedback ? { id, text, feedback } : { id, text };
+      })
+      .filter((option): option is { id: string; text: string; feedback?: string } => option != null);
+    if (options.length >= 2) {
+      const safeCorrectOptionId =
+        correctOptionId && options.some((option) => option.id === correctOptionId)
+          ? correctOptionId
+          : options[0]?.id;
+      if (!safeCorrectOptionId) return null;
+      return {
+        type: 'quiz',
+        prompt,
+        questions: [{ id: 'q1', prompt, options, correctOptionId: safeCorrectOptionId }],
+      };
+    }
+  }
+
+  if (normalizedType === 'single_choice' && Array.isArray(row.options)) {
+    const correctOptionId =
+      asNonEmptyString(row.correctOptionId) ??
+      asNonEmptyString(row.correct_option_id) ??
+      asNonEmptyString(row.correctAnswerId) ??
+      asNonEmptyString(row.correct_answer_id) ??
+      asNonEmptyString(row.correct);
     const options = row.options
       .map((option) => {
         const item = (option ?? null) as Record<string, unknown> | null;
         const id = asNonEmptyString(item?.id);
         const text = asNonEmptyString(item?.text);
-        return id && text ? { id, text } : null;
+        const feedback =
+          asNonEmptyString(item?.feedback) ??
+          asNonEmptyString(item?.reason) ??
+          asNonEmptyString(item?.rationale) ??
+          asNonEmptyString(item?.hint);
+        if (!id || !text) return null;
+        return feedback ? { id, text, feedback } : { id, text };
       })
-      .filter((option): option is { id: string; text: string } => option != null);
+      .filter((option): option is { id: string; text: string; feedback?: string } => option != null);
     if (options.length >= 2) {
+      const safeCorrectOptionId =
+        correctOptionId && options.some((option) => option.id === correctOptionId)
+          ? correctOptionId
+          : options[0]?.id;
+      if (!safeCorrectOptionId) return null;
       return {
         type: 'quiz',
         prompt,
-        questions: [{ id: 'q1', prompt, options }],
+        questions: [{ id: 'q1', prompt, options, correctOptionId: safeCorrectOptionId }],
       };
     }
   }
 
-  if (row.type === 'matching' && Array.isArray(row.leftItems) && Array.isArray(row.rightItems)) {
-    const leftItems = row.leftItems
+  if (
+    normalizedType === 'matching' &&
+    (Array.isArray(row.leftItems) ||
+      Array.isArray(row.left_items) ||
+      Array.isArray(row.left) ||
+      Array.isArray(row.pairsLeft)) &&
+    (Array.isArray(row.rightItems) ||
+      Array.isArray(row.right_items) ||
+      Array.isArray(row.right) ||
+      Array.isArray(row.pairsRight))
+  ) {
+    const rawLeft = (row.leftItems ?? row.left_items ?? row.left ?? row.pairsLeft ?? []) as unknown[];
+    const rawRight = (row.rightItems ?? row.right_items ?? row.right ?? row.pairsRight ?? []) as unknown[];
+    const leftItems = rawLeft
       .map((item) => {
         const entry = (item ?? null) as Record<string, unknown> | null;
-        const id = asNonEmptyString(entry?.id);
-        const text = asNonEmptyString(entry?.text);
+        const id = asNonEmptyString(entry?.id) ?? asNonEmptyString(entry?.key);
+        const text =
+          asNonEmptyString(entry?.text) ?? asNonEmptyString(entry?.label) ?? asNonEmptyString(entry?.value);
         return id && text ? { id, text } : null;
       })
       .filter((item): item is { id: string; text: string } => item != null);
-    const rightItems = row.rightItems
+    const rightItems = rawRight
       .map((item) => {
         const entry = (item ?? null) as Record<string, unknown> | null;
-        const id = asNonEmptyString(entry?.id);
-        const text = asNonEmptyString(entry?.text);
+        const id = asNonEmptyString(entry?.id) ?? asNonEmptyString(entry?.key);
+        const text =
+          asNonEmptyString(entry?.text) ?? asNonEmptyString(entry?.label) ?? asNonEmptyString(entry?.value);
         return id && text ? { id, text } : null;
       })
       .filter((item): item is { id: string; text: string } => item != null);
     if (leftItems.length >= 2 && rightItems.length >= 2) {
-      return { type: row.type, prompt, leftItems, rightItems };
+      return { type: 'matching', prompt, leftItems, rightItems };
     }
   }
 
-  if (row.type === 'free_text') {
+  if (normalizedType === 'free_text' || normalizedType === 'open_text') {
     return {
-      type: row.type,
+      type: 'free_text',
       prompt,
-      placeholder: asNonEmptyString(row.placeholder),
+      placeholder:
+        asNonEmptyString(row.placeholder) ??
+        asNonEmptyString(row.hint) ??
+        asNonEmptyString(row.example),
     };
   }
 
   return null;
+}
+
+async function repairMissingExercise(input: {
+  apiKey: string;
+  model: string;
+  reqId: string;
+  requirementGoal: string;
+  chapterContext: ReturnType<typeof normalizeChapterContext>;
+  responseStep: RequirementPlanStep | null;
+  message: string;
+  expectsInput: InputMode;
+}) {
+  const expectedType = inferExpectedExerciseType(input.expectsInput, input.responseStep);
+  if (!expectedType) return null;
+
+  log(input.reqId, 'repair_missing_exercise_start', {
+    expectsInput: input.expectsInput,
+    expectedType,
+    responseStepId: input.responseStep?.id ?? null,
+    responseStepType: input.responseStep?.type ?? null,
+    responseStepExerciseType: input.responseStep?.exerciseType ?? null,
+  });
+
+  const prompt = [
+    'Du reparierst eine fehlerhafte Wissenspfad-Antwort.',
+    'Es wurde ein Exercise-Schritt angekuendigt, aber das exercise-Objekt fehlt.',
+    'Antworte NUR als JSON mit diesem Schema:',
+    '{ "exercise": { ... } }',
+    '',
+    `Requirement-Ziel: ${input.requirementGoal}`,
+    `Kapitelkontext: ${JSON.stringify(input.chapterContext)}`,
+    `Aktueller Schritt: ${JSON.stringify(input.responseStep)}`,
+    `Erwarteter Exercise-Typ: ${expectedType}`,
+    `Nachricht an den Nutzer: ${JSON.stringify(input.message)}`,
+    '',
+    'Regeln:',
+    `- Liefere genau ein exercise-Objekt vom Typ "${expectedType}".`,
+    '- Die Aufgabe muss direkt zur Nachricht und zum aktuellen Schritt passen.',
+    '- Bei quiz: liefere prompt und 2 bis 4 questions, jede mit 3 bis 5 Optionen, correctOptionId, optional explanation und pro Option ein kurzes feedback.',
+    '- Bei matching: liefere prompt sowie 3 bis 5 leftItems und 3 bis 5 rightItems.',
+    '- Bei free_text: liefere prompt und optional placeholder.',
+    '- Kein zusaetzlicher Text ausserhalb des JSON.',
+  ].join('\n');
+
+  const repaired = await requestOpenAiJson({
+    apiKey: input.apiKey,
+    model: input.model,
+    prompt,
+    reqId: input.reqId,
+    eventPrefix: 'repair_missing_exercise',
+    maxOutputTokens: 1200,
+  });
+
+  const normalizedExercise = normalizeExercise(repaired?.exercise);
+  log(input.reqId, 'repair_missing_exercise_result', {
+    expectedType,
+    rawHasExercise:
+      repaired != null && typeof repaired === 'object' && 'exercise' in repaired ? true : false,
+    rawExerciseSnippet: safeSnippet(JSON.stringify(repaired?.exercise ?? null), 500),
+    normalizedExerciseType: normalizedExercise?.type ?? null,
+  });
+  return normalizedExercise;
 }
 
 function normalizeUserResponse(input: unknown): UserResponse | undefined {
@@ -522,6 +849,20 @@ function normalizeChapterContext(input: unknown) {
   };
 }
 
+function hasUserResponseForStep(history: HistoryMessage[], stepId?: string) {
+  if (!stepId) return false;
+  return history.some(
+    (message) => message.role === 'user' && message.stepId === stepId && message.response != null,
+  );
+}
+
+function getNextStepId(plan: RequirementPlan | null, currentStepId?: string) {
+  if (!plan || !currentStepId) return null;
+  const index = plan.steps.findIndex((step) => step.id === currentStepId);
+  if (index < 0) return null;
+  return plan.steps[index + 1]?.id ?? null;
+}
+
 function isStepType(value: unknown): value is StepType {
   return typeof value === 'string' && STEP_TYPES.includes(value as StepType);
 }
@@ -536,6 +877,23 @@ function isMessageKind(value: unknown): value is MessageKind {
 
 function isInputMode(value: unknown): value is InputMode {
   return typeof value === 'string' && INPUT_MODES.includes(value as InputMode);
+}
+
+function isExerciseInputMode(value: InputMode) {
+  return value === 'quiz' || value === 'matching' || value === 'free_text';
+}
+
+function inferExpectedExerciseType(stepInput: InputMode, step: RequirementPlanStep | null) {
+  if (stepInput === 'quiz' || stepInput === 'matching' || stepInput === 'free_text')
+    return stepInput;
+  if (step?.type === 'exercise' && step.exerciseType) return step.exerciseType;
+  return null;
+}
+
+function expectedInputModeForStep(step: RequirementPlanStep | null): InputMode | null {
+  if (!step) return null;
+  if (step.type === 'exercise' && step.exerciseType) return step.exerciseType;
+  return null;
 }
 
 function clampMasteryDelta(value: number) {
@@ -558,6 +916,57 @@ function extractAssistantText(r: unknown): string {
     }
   }
   return parts.join('\n').trim();
+}
+
+async function requestOpenAiJson(input: {
+  apiKey: string;
+  model: string;
+  prompt: string;
+  reqId: string;
+  eventPrefix: string;
+  maxOutputTokens: number;
+}) {
+  let openaiJson: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const openaiRes = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: input.model,
+        temperature: 0.2,
+        max_output_tokens: input.maxOutputTokens,
+        input: [{ role: 'user', content: [{ type: 'input_text', text: input.prompt }] }],
+      }),
+    });
+
+    if (!openaiRes.ok) {
+      const errText = await openaiRes.text().catch(() => '');
+      log(input.reqId, `${input.eventPrefix}_not_ok`, {
+        attempt,
+        openaiStatus: openaiRes.status,
+        errorSnippet: safeSnippet(errText, 900),
+      });
+      if (attempt === 0 && (openaiRes.status === 429 || openaiRes.status >= 500)) {
+        await sleep(500 + attempt * 500);
+        continue;
+      }
+      return null;
+    }
+
+    openaiJson = await openaiRes.json();
+    const parsed = safeJsonParse(extractAssistantText(openaiJson));
+    if (parsed && typeof parsed === 'object') return parsed;
+
+    log(input.reqId, `${input.eventPrefix}_parse_failed`, {
+      attempt,
+      assistantSnippet: extractAssistantText(openaiJson).slice(0, 300),
+    });
+  }
+
+  return null;
 }
 
 function safeJsonParse(text: string) {

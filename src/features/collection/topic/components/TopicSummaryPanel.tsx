@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PrimaryButton } from '../../../../components/Button';
 import type { Asset, Chapter, ExercisePageStatus, Requirement } from '../../../../domain/models';
 import { useCurriculumStore } from '../../../../stores/curriculumStore';
 import { formatDuration, formatDurationForAiReview } from '../../../../utils/time';
@@ -219,9 +218,7 @@ export function TopicSummaryPanel(props: Props) {
               Zu Kapiteln &amp; Skills
             </button>
           </div>
-          <div className="w-2/3 h-fit flex flex-col gap-2 mt-auto">
-            <PrimaryButton onClick={props.onOpenLearnPath}>Weiter lernen</PrimaryButton>
-          </div>
+          <div className="w-2/3 h-fit flex flex-col gap-2 mt-auto"></div>
         </div>
 
         <div className="min-h-[120px]">

@@ -22,6 +22,8 @@ import {
   clampMastery,
   clampMasteryDelta,
   describeResponse,
+  deriveInteractionFromAssistantTurn,
+  expectedExerciseTypeFromInputMode,
   formatMasteryDelta,
   getActivePlanStep,
   getCurrentRequirementPosition,
@@ -268,9 +270,10 @@ export function useLearnPathController(props: {
         stepId: !options?.fresh ? progress?.lastStepId ?? null : null,
         messages: restoredMessages,
         inputMode: restoredInteraction.inputMode,
+        interactionSurface: restoredInteraction.interactionSurface,
         waitingForUser: restoredInteraction.waitingForUser,
         canContinue: restoredInteraction.canContinue,
-        exercise: restoredInteraction.exercise,
+        exerciseState: restoredInteraction.exerciseState,
         requestAi: shouldRequestAi,
       });
     },
@@ -318,14 +321,12 @@ export function useLearnPathController(props: {
         const fallbackStepId = responsePlan?.steps[0]?.id ?? null;
         const nextStepId = response.currentStepId ?? snapshot.activeStepId ?? fallbackStepId;
         const nextStep = getActivePlanStep(responsePlan ?? null, nextStepId);
-        const inputMode =
-          response.exercise == null &&
-          (response.expectsInput === 'quiz' ||
-            response.expectsInput === 'matching' ||
-            response.expectsInput === 'free_text')
-            ? 'text'
-            : response.expectsInput;
-        const awaitUserReply = response.awaitUserReply || inputMode !== 'none';
+        const inputMode = response.expectsInput;
+        const interaction = deriveInteractionFromAssistantTurn({
+          inputMode,
+          awaitUserReply: response.awaitUserReply,
+          exerciseState: response.exerciseState,
+        });
 
         if (response.plan) {
           dispatch({
@@ -344,14 +345,21 @@ export function useLearnPathController(props: {
           stepId: nextStepId ?? undefined,
           stepType: nextStep?.type,
           messageKind: response.messageKind,
+          interactionSurface: interaction.interactionSurface,
           inputMode,
-          awaitUserReply,
-          exercise: response.exercise,
+          awaitUserReply: interaction.waitingForUser,
+          exercise: response.exerciseState.exercise ?? undefined,
         };
 
         dispatch({
-          type: 'APPEND_ASSISTANT_MESSAGE',
+          type: 'APPLY_ASSISTANT_TURN',
           message: assistantMessage,
+          stepId: nextStepId,
+          interactionSurface: interaction.interactionSurface,
+          inputMode,
+          waitingForUser: interaction.waitingForUser,
+          canContinue: interaction.canContinue,
+          exerciseState: response.exerciseState,
         });
 
         if (response.completeRequirement) {
@@ -474,14 +482,6 @@ export function useLearnPathController(props: {
           return;
         }
 
-        dispatch({
-          type: 'SET_INTERACTION_STATE',
-          stepId: nextStepId,
-          inputMode,
-          waitingForUser: awaitUserReply,
-          canContinue: !awaitUserReply && inputMode === 'none',
-          exercise: response.exercise ?? null,
-        });
       } catch (error) {
         dispatch({
           type: 'SET_ERROR',
@@ -643,7 +643,7 @@ export function useLearnPathController(props: {
       state.inputMode !== 'text' &&
       state.inputMode !== 'free_text' &&
       state.inputMode !== 'quiz' &&
-      !(state.waitingForUser && !state.pendingExercise)
+      !(state.waitingForUser && state.exerciseState.status !== 'ready')
     ) {
       return;
     }
@@ -652,7 +652,7 @@ export function useLearnPathController(props: {
       { kind: state.inputMode === 'free_text' ? 'free_text' : 'text', text: trimmed },
       trimmed,
     );
-  }, [appendUserResponse, draft, state.inputMode, state.pendingExercise, state.waitingForUser]);
+  }, [appendUserResponse, draft, state.exerciseState.status, state.inputMode, state.waitingForUser]);
 
   const handleExerciseSubmit = useCallback(
     (response: LearnPathTurnResponse, exercise: LearnPathExercise | null) => {
@@ -844,47 +844,68 @@ function deriveRestoredInteraction(messages: LearnPathState['messages']) {
   const lastMessage = messages[messages.length - 1];
   if (!lastMessage) {
     return {
+      interactionSurface: 'idle' as const,
       inputMode: 'none' as const,
       waitingForUser: false,
       canContinue: false,
-      exercise: null,
+      exerciseState: {
+        status: 'idle' as const,
+        exercise: null,
+        expectedType: null,
+      },
       requestAi: true,
     };
   }
 
   if (lastMessage.role === 'user') {
     return {
+      interactionSurface: 'idle' as const,
       inputMode: 'none' as const,
       waitingForUser: false,
       canContinue: false,
-      exercise: null,
+      exerciseState: {
+        status: 'idle' as const,
+        exercise: null,
+        expectedType: null,
+      },
       requestAi: true,
     };
   }
 
   if (lastMessage.role === 'assistant') {
-    const inputMode =
-      !lastMessage.exercise &&
-      (lastMessage.inputMode === 'quiz' ||
-        lastMessage.inputMode === 'matching' ||
-        lastMessage.inputMode === 'free_text')
-        ? 'text'
-        : (lastMessage.inputMode ?? 'none');
-    const waitingForUser = lastMessage.awaitUserReply === true;
-    return {
-      inputMode,
-      waitingForUser,
-      canContinue: !waitingForUser && inputMode === 'none',
+    const inputMode = lastMessage.inputMode ?? 'none';
+    const expectedType = expectedExerciseTypeFromInputMode(inputMode);
+    const exerciseState = {
+      status: lastMessage.exercise ? ('ready' as const) : expectedType ? ('missing' as const) : ('idle' as const),
       exercise: lastMessage.exercise ?? null,
+      expectedType,
+      degradedReason: lastMessage.exercise || !expectedType ? undefined : 'resume_missing_exercise',
+    };
+    const projection = deriveInteractionFromAssistantTurn({
+      inputMode,
+      awaitUserReply: lastMessage.awaitUserReply === true,
+      exerciseState,
+    });
+    return {
+      interactionSurface: projection.interactionSurface,
+      inputMode,
+      waitingForUser: projection.waitingForUser,
+      canContinue: projection.canContinue,
+      exerciseState,
       requestAi: false,
     };
   }
 
   return {
+    interactionSurface: 'idle' as const,
     inputMode: 'none' as const,
     waitingForUser: false,
     canContinue: false,
-    exercise: null,
+    exerciseState: {
+      status: 'idle' as const,
+      exercise: null,
+      expectedType: null,
+    },
     requestAi: true,
   };
 }
