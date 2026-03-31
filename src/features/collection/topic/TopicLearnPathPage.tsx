@@ -1,7 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { IoChevronBack } from 'react-icons/io5';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ViewerIconButton } from '../../../components/ViewerIconButton';
+import { useParams } from 'react-router-dom';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
 import { NotFoundPage } from '../../common/NotFoundPage';
@@ -9,7 +7,6 @@ import { TopicKnowledgePathView } from './learnpath/TopicKnowledgePathView';
 
 export function TopicLearnPathPage() {
   const { subjectId, topicId } = useParams();
-  const navigate = useNavigate();
   const { subjects, refresh: refreshSubjects } = useSubjectsStore();
   const { topicsBySubject, refreshBySubject } = useTopicsStore();
 
@@ -35,22 +32,11 @@ export function TopicLearnPathPage() {
   if (!topic && (topicsBySubject[subjectId]?.length ?? 0) > 0) return <NotFoundPage />;
 
   return (
-    <div className="h-full pb-16">
-      <ViewerIconButton
-        ariaLabel="Zurück zum Thema"
-        onClick={() => navigate(`/subjects/${subjectId}/topics/${topicId}`)}
-        className="fixed left-6 top-6"
-      >
-        <IoChevronBack />
-      </ViewerIconButton>
-      <div className="px-6">
-        <TopicKnowledgePathView
-          subjectId={subjectId}
-          topicId={topicId}
-          topicName={topic?.name}
-          subjectName={subject?.name}
-        />
-      </div>
-    </div>
+    <TopicKnowledgePathView
+      subjectId={subjectId}
+      topicId={topicId}
+      topicName={topic?.name}
+      subjectName={subject?.name}
+    />
   );
 }
