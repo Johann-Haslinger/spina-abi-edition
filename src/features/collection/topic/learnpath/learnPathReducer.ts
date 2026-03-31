@@ -12,6 +12,8 @@ export function reduceLearnPathState(
       started: true,
       mode: action.mode,
       activeProgressId: action.progressId,
+      panelOpen: false,
+      panelView: 'current_requirement',
       currentChapterIndex: action.chapterIndex,
       currentRequirementIndex: action.requirementIndex,
       activePlan: action.plan ?? null,
@@ -47,6 +49,20 @@ export function reduceLearnPathState(
     return {
       ...state,
       progressLoading: action.loading,
+    };
+  }
+
+  if (action.type === 'SET_PANEL_OPEN') {
+    return {
+      ...state,
+      panelOpen: action.open,
+    };
+  }
+
+  if (action.type === 'SET_PANEL_VIEW') {
+    return {
+      ...state,
+      panelView: action.view,
     };
   }
 

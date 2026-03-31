@@ -45,6 +45,7 @@ export function TopicLearnPathPage() {
       </ViewerIconButton>
       <div className="px-6">
         <TopicKnowledgePathView
+          subjectId={subjectId}
           topicId={topicId}
           topicName={topic?.name}
           subjectName={subject?.name}

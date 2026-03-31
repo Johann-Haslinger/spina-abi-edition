@@ -27,6 +27,23 @@ export type ReviewSummarySessionExercise = {
   totals: ReviewSummaryExerciseTotals;
 };
 
+export type ReviewSummaryLearnPathRequirement = {
+  name: string;
+  chapterName: string;
+  mode: 'learn' | 'review';
+  status: 'in_progress' | 'completed';
+  duration: string;
+  masteryDeltaPercent: number;
+  summary?: string;
+};
+
+export type ReviewSummaryLearnPathPayload = {
+  requirementCount: number;
+  completedCount: number;
+  totalMasteryDeltaPercent: number;
+  requirements: ReviewSummaryLearnPathRequirement[];
+};
+
 export type ReviewSummaryTopicChapter = {
   name: string;
   avgMastery: number;
@@ -46,6 +63,7 @@ export type ReviewSummaryTopicContext = {
 };
 
 export type ReviewSummarySessionPayload = {
+  sessionKind?: 'exercise' | 'learnpath';
   /** Session-Gesamtdauer (Wandzeit), z. B. "45 Min" */
   sessionDuration: string;
   /** Summe Arbeitszeit an Aufgaben */
@@ -54,6 +72,7 @@ export type ReviewSummarySessionPayload = {
   totals: ReviewSummaryExerciseTotals;
   exercises: ReviewSummarySessionExercise[];
   topicContext: ReviewSummaryTopicContext;
+  learnPath?: ReviewSummaryLearnPathPayload;
 };
 
 export type ReviewSummaryRequest =

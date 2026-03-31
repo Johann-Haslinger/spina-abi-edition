@@ -13,6 +13,7 @@ import { resolveSubjectHex } from '../../../ui/subjectColorResolvers';
 import { PlanningEntryDetailsModal } from '../components/PlanningEntryDetailsModal';
 import { PlanningEventModal } from '../components/PlanningEventModal';
 import { WeekCalendar } from '../components/WeekCalendar';
+import { deleteStudySessionCascade } from '../utils/deleteStudySessionCascade';
 import {
   addDaysMs,
   expandPlannedItemOccurrences,
@@ -341,6 +342,19 @@ export function PlanningPage() {
                 setCreateStartAtMs(undefined);
                 setCreateDurationMinutes(undefined);
                 setModalOpen(true);
+              }
+            : undefined
+        }
+        onDelete={
+          detailsEntry?.source === 'past'
+            ? async () => {
+                const ok = window.confirm(
+                  'Diese vergangene Session wirklich löschen? Zugehörige Versuche und Notizen in dieser Session gehen verloren.',
+                );
+                if (!ok) return;
+                await deleteStudySessionCascade(detailsEntry.id);
+                setDetailsEntry(undefined);
+                setReloadKey((k) => k + 1);
               }
             : undefined
         }

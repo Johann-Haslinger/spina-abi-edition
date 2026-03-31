@@ -136,6 +136,7 @@ export function StudyPage() {
           topicId: active.topicId,
           startedAtMs: active.startedAtMs,
           endedAtMs,
+          source: 'exercise',
         }
       : null;
     if (studySessionId) await studySessionRepo.end(studySessionId, endedAtMs);

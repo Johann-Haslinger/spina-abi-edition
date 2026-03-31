@@ -9,31 +9,45 @@ export function PlanningEntryDetailsModal(props: {
   topicName?: string;
   onClose: () => void;
   onEdit?: () => void;
+  onDelete?: () => void | Promise<void>;
 }) {
-  const { open, entry, subjectName, topicName, onClose, onEdit } = props;
+  const { open, entry, subjectName, topicName, onClose, onEdit, onDelete } = props;
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       footer={
-        <div className="flex w-full items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
-          >
-            Schließen
-          </button>
-          {entry?.source === 'planned' && onEdit ? (
+        <div className="flex w-full items-center justify-between gap-2">
+          <div>
+            {entry?.source === 'past' && onDelete ? (
+              <button
+                type="button"
+                onClick={() => void onDelete()}
+                className="rounded-md bg-red-900/80 px-3 py-2 text-sm font-semibold text-red-50 hover:bg-red-800"
+              >
+                Löschen
+              </button>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onEdit}
-              className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+              onClick={onClose}
+              className="rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-50 hover:bg-slate-700"
             >
-              Bearbeiten
+              Schließen
             </button>
-          ) : null}
+            {entry?.source === 'planned' && onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
+              >
+                Bearbeiten
+              </button>
+            ) : null}
+          </div>
         </div>
       }
     >

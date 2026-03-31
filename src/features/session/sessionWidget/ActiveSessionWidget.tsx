@@ -60,6 +60,7 @@ export function ActiveSessionWidget(props: {
       topicId: active.topicId,
       startedAtMs: active.startedAtMs,
       endedAtMs,
+      source: 'exercise',
     };
     if (studySessionId) await studySessionRepo.end(studySessionId, endedAtMs);
     end();

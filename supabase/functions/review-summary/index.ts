@@ -2,6 +2,12 @@
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 
+declare const Deno: {
+  env: {
+    get(name: string): string | undefined;
+  };
+};
+
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
@@ -55,12 +61,27 @@ type TopicContext = {
 };
 
 type SessionPayload = {
+  sessionKind?: 'exercise' | 'learnpath';
   sessionDuration: string;
   workTime: string;
   exerciseCount: number;
   totals: ExerciseTotals;
   exercises: SessionExerciseSummary[];
   topicContext: TopicContext;
+  learnPath?: {
+    requirementCount: number;
+    completedCount: number;
+    totalMasteryDeltaPercent: number;
+    requirements: Array<{
+      name: string;
+      chapterName: string;
+      mode: 'learn' | 'review';
+      status: 'in_progress' | 'completed';
+      duration: string;
+      masteryDeltaPercent: number;
+      summary?: string;
+    }>;
+  };
 };
 
 type ReqBody = {
@@ -126,7 +147,8 @@ serve(async (req) => {
             '- Antworte NUR als JSON mit genau diesem Schema:',
             '{ "headline": string, "summary": string, "tip": string, "focusAreas": string[] }',
             '- Alles auf Deutsch.',
-            '- summary: Verbinde Session-Ergebnisse (Versuche, Zeiten, richtig/teilweise/falsch) mit topicContext (Durchschnitts-Mastery, Kapitel, schwächste Requirements).',
+            '- Wenn sessionKind="exercise": Verbinde Session-Ergebnisse (Versuche, Zeiten, richtig/teilweise/falsch) mit topicContext (Durchschnitts-Mastery, Kapitel, schwächste Requirements).',
+            '- Wenn sessionKind="learnpath": Fasse bearbeitete Requirements, Lern-/Wiederholmodus, Completion, Mastery-Delta und die einzelnen Requirement-Summaries zusammen.',
             '- Erkläre kurz, wie die Session zum aktuellen Stand im Thema passt.',
             '- tip: EIN konkreter nächster Schritt (Session-Plan oder Übung).',
             '- focusAreas: 2–4 Strings — worauf künftig achten, optional mit Bezug zu schwachen Requirements.',

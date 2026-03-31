@@ -121,6 +121,8 @@ export type LearnPathProgress = {
 
 export type ExercisePageStatus = 'unknown' | 'partial' | 'captured' | 'covered';
 
+export type StudySessionSource = 'exercise' | 'learnpath';
+
 export type StudySession = {
   id: Id;
   subjectId: Id;
@@ -128,6 +130,28 @@ export type StudySession = {
   startedAtMs: number;
   plannedDurationMs?: number;
   endedAtMs?: number;
+  source: StudySessionSource;
+};
+
+export type LearnPathSessionRequirementStatus = 'in_progress' | 'completed';
+
+export type LearnPathSessionRequirement = {
+  id: Id;
+  studySessionId: Id;
+  topicId: Id;
+  chapterId: Id;
+  chapterName: string;
+  requirementId: Id;
+  requirementName: string;
+  mode: LearnPathMode;
+  status: LearnPathSessionRequirementStatus;
+  startedAtMs: number;
+  updatedAtMs: number;
+  completedAtMs?: number;
+  durationMs: number;
+  masteryDelta?: number;
+  aiSummary?: string;
+  messageCount: number;
 };
 
 export type PlannedItemType = 'studySession' | 'event';

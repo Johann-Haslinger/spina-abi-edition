@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Chapter, LearnPathMode, LearnPathProgress, Requirement } from '../../../../domain/models';
 import { newId } from '../../../../lib/id';
-import { learnPathProgressRepo, requirementRepo } from '../../../../repositories';
+import {
+  learnPathProgressRepo,
+  learnPathSessionRequirementRepo,
+  requirementRepo,
+  studySessionRepo,
+} from '../../../../repositories';
 import { useCurriculumStore } from '../../../../stores/curriculumStore';
+import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
 import { useNotificationsStore } from '../../../../stores/notificationsStore';
+import { useStudyStore } from '../../../session/stores/studyStore';
 import { requestRequirementPlanTurn } from './ai/requirementRailAiClient';
 import { reduceLearnPathState } from './learnPathReducer';
 import {
@@ -29,6 +37,7 @@ import {
   type LearnPathAction,
   type LearnPathExercise,
   type LearnPathGroup,
+  type LearnPathPanelView,
   type LearnPathRequirementOverviewItem,
   type LearnPathState,
   type LearnPathTurnResponse,
@@ -38,19 +47,30 @@ const EMPTY_CHAPTERS: Chapter[] = [];
 const EMPTY_REQUIREMENTS: Requirement[] = [];
 
 export function useLearnPathController(props: {
+  subjectId: string;
   topicId: string;
   topicName?: string;
   subjectName?: string;
 }) {
+  const navigate = useNavigate();
   const refreshTopicCurriculum = useCurriculumStore((s) => s.refreshTopicCurriculum);
   const chapters = useCurriculumStore((s) => s.chaptersByTopic[props.topicId] ?? EMPTY_CHAPTERS);
   const requirements = useCurriculumStore((s) => s.requirementsByTopic[props.topicId] ?? EMPTY_REQUIREMENTS);
   const curriculumLoading = useCurriculumStore((s) => s.loadingByTopic[props.topicId] ?? false);
   const curriculumError = useCurriculumStore((s) => s.errorByTopic[props.topicId]);
   const pushNotification = useNotificationsStore((s) => s.push);
+  const activeSession = useActiveSessionStore((s) => s.active);
+  const startActiveSession = useActiveSessionStore((s) => s.start);
+  const endActiveSession = useActiveSessionStore((s) => s.end);
+  const bindToSession = useStudyStore((s) => s.bindToSession);
+  const ensureStudySession = useStudyStore((s) => s.ensureStudySession);
+  const resetStudyStore = useStudyStore((s) => s.reset);
+  const studySessionId = useStudyStore((s) => s.studySessionId);
 
   const [draft, setDraft] = useState('');
   const [progressRows, setProgressRows] = useState<LearnPathProgress[]>([]);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [leaveDialogBusy, setLeaveDialogBusy] = useState(false);
   const [state, dispatch] = useReducer(
     (currentState: LearnPathState, action: LearnPathAction) =>
       reduceLearnPathState(currentState, action),
@@ -62,6 +82,8 @@ export function useLearnPathController(props: {
   const lastTopicIdRef = useRef<string | null>(null);
   const handledRequestNonceRef = useRef(0);
   const mountedRef = useRef(true);
+  const completedProgressIdsRef = useRef(new Set<string>());
+  const studySessionIdRef = useRef<string | null>(studySessionId);
 
   useEffect(() => {
     stateRef.current = state;
@@ -70,6 +92,10 @@ export function useLearnPathController(props: {
   useEffect(() => {
     progressRowsRef.current = progressRows;
   }, [progressRows]);
+
+  useEffect(() => {
+    studySessionIdRef.current = studySessionId;
+  }, [studySessionId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -92,6 +118,7 @@ export function useLearnPathController(props: {
     if (lastTopicIdRef.current === props.topicId) return;
     lastTopicIdRef.current = props.topicId;
     handledRequestNonceRef.current = 0;
+    completedProgressIdsRef.current = new Set();
     setDraft('');
     setProgressRows([]);
     dispatch({ type: 'RESET_TO_OVERVIEW' });
@@ -102,6 +129,24 @@ export function useLearnPathController(props: {
     if (!alreadyLoaded && !isLoading) void refreshTopicCurriculum(props.topicId);
     void loadProgress();
   }, [loadProgress, props.topicId, refreshTopicCurriculum]);
+
+  useEffect(() => {
+    if (!state.started) return;
+    if (!activeSession) return;
+    if (activeSession.subjectId !== props.subjectId || activeSession.topicId !== props.topicId) return;
+    bindToSession({
+      subjectId: activeSession.subjectId,
+      topicId: activeSession.topicId,
+      startedAtMs: activeSession.startedAtMs,
+    });
+    void ensureStudySession({
+      subjectId: activeSession.subjectId,
+      topicId: activeSession.topicId,
+      startedAtMs: activeSession.startedAtMs,
+      plannedDurationMs: activeSession.plannedDurationMs,
+      source: 'learnpath',
+    });
+  }, [activeSession, bindToSession, ensureStudySession, props.subjectId, props.topicId, state.started]);
 
   const groupedRequirements = useMemo(
     () => buildGroupedRequirements(chapters, requirements),
@@ -146,12 +191,53 @@ export function useLearnPathController(props: {
   );
   const currentRequirementGoal = currentRequirement ? buildRequirementGoal(currentRequirement) : '';
 
+  const ensureActiveTopicSession = useCallback(async () => {
+    const currentActive = useActiveSessionStore.getState().active;
+    if (
+      !currentActive ||
+      currentActive.subjectId !== props.subjectId ||
+      currentActive.topicId !== props.topicId
+    ) {
+      if (currentActive) {
+        endActiveSession();
+        resetStudyStore();
+      }
+      startActiveSession({
+        subjectId: props.subjectId,
+        topicId: props.topicId,
+      });
+    }
+    const nextActive = useActiveSessionStore.getState().active;
+    if (!nextActive) return null;
+    bindToSession({
+      subjectId: nextActive.subjectId,
+      topicId: nextActive.topicId,
+      startedAtMs: nextActive.startedAtMs,
+    });
+    return ensureStudySession({
+      subjectId: nextActive.subjectId,
+      topicId: nextActive.topicId,
+      startedAtMs: nextActive.startedAtMs,
+      plannedDurationMs: nextActive.plannedDurationMs,
+      source: 'learnpath',
+    });
+  }, [
+    bindToSession,
+    endActiveSession,
+    ensureStudySession,
+    props.subjectId,
+    props.topicId,
+    resetStudyStore,
+    startActiveSession,
+  ]);
+
   const startRequirement = useCallback(
-    (
+    async (
       requirementId: string,
       mode: LearnPathMode,
       options?: { progress?: LearnPathProgress; fresh?: boolean },
     ) => {
+      await ensureActiveTopicSession();
       const position = findRequirementPosition(groupedRequirementsRef.current, requirementId);
       if (!position) return;
 
@@ -162,8 +248,11 @@ export function useLearnPathController(props: {
         : [];
       const restoredInteraction = deriveRestoredInteraction(restoredMessages);
       const shouldRequestAi = options?.fresh ? true : restoredInteraction.requestAi;
+      const progressId =
+        progress?.id ?? buildLearnPathProgressId(props.topicId, position.requirement.id, mode);
 
       handledRequestNonceRef.current = shouldRequestAi ? 0 : stateRef.current.requestNonce;
+      completedProgressIdsRef.current.delete(progressId);
       setDraft('');
       dispatch({
         type: 'START_PATH',
@@ -174,7 +263,7 @@ export function useLearnPathController(props: {
         requirementName: position.requirement.name,
         requirementId: position.requirement.id,
         mode,
-        progressId: progress?.id ?? buildLearnPathProgressId(props.topicId, position.requirement.id, mode),
+        progressId,
         plan: restoredPlan,
         stepId: !options?.fresh ? progress?.lastStepId ?? null : null,
         messages: restoredMessages,
@@ -185,7 +274,7 @@ export function useLearnPathController(props: {
         requestAi: shouldRequestAi,
       });
     },
-    [props.topicId],
+    [ensureActiveTopicSession, props.topicId],
   );
 
   const resetToOverview = useCallback(() => {
@@ -231,7 +320,7 @@ export function useLearnPathController(props: {
         const nextStep = getActivePlanStep(responsePlan ?? null, nextStepId);
         const inputMode =
           response.exercise == null &&
-          (response.expectsInput === 'single_choice' ||
+          (response.expectsInput === 'quiz' ||
             response.expectsInput === 'matching' ||
             response.expectsInput === 'free_text')
             ? 'text'
@@ -268,6 +357,14 @@ export function useLearnPathController(props: {
         if (response.completeRequirement) {
           const completedAtMs = Date.now();
           const masteryDelta = clampMasteryDelta(response.masteryDelta ?? 0.12);
+          const progressId =
+            snapshot.activeProgressId ??
+            buildLearnPathProgressId(props.topicId, requirement.id, snapshot.mode);
+          const startedAtMs = getProgressStartedAt(
+            snapshot.activeProgressId,
+            progressRowsRef.current,
+            completedAtMs,
+          );
           const completedMessages = [
             ...snapshot.messages.filter(
               (message) =>
@@ -277,13 +374,13 @@ export function useLearnPathController(props: {
           ];
 
           await learnPathProgressRepo.upsert({
-            id: snapshot.activeProgressId ?? buildLearnPathProgressId(props.topicId, requirement.id, snapshot.mode),
+            id: progressId,
             topicId: props.topicId,
             chapterId: group.chapter.id,
             requirementId: requirement.id,
             mode: snapshot.mode,
             status: 'completed',
-            startedAtMs: getProgressStartedAt(snapshot.activeProgressId, progressRowsRef.current, completedAtMs),
+            startedAtMs,
             updatedAtMs: completedAtMs,
             completedAtMs,
             currentChapterIndex: snapshot.currentChapterIndex,
@@ -292,6 +389,44 @@ export function useLearnPathController(props: {
             lastPlanJson: serializeRequirementPlan(responsePlan ?? null),
             lastMessagesJson: serializeLearnPathMessages(completedMessages),
           });
+          const completedRow: LearnPathProgress = {
+            id: progressId,
+            topicId: props.topicId,
+            chapterId: group.chapter.id,
+            requirementId: requirement.id,
+            mode: snapshot.mode,
+            status: 'completed',
+            startedAtMs,
+            updatedAtMs: completedAtMs,
+            completedAtMs,
+            currentChapterIndex: snapshot.currentChapterIndex,
+            currentRequirementIndex: snapshot.currentRequirementIndex,
+            lastStepId: nextStepId ?? undefined,
+            lastPlanJson: serializeRequirementPlan(responsePlan ?? null),
+            lastMessagesJson: serializeLearnPathMessages(completedMessages),
+          };
+          completedProgressIdsRef.current.add(progressId);
+          if (mountedRef.current) {
+            setProgressRows((current) => upsertProgressRow(current, completedRow));
+          }
+          if (studySessionIdRef.current) {
+            await learnPathSessionRequirementRepo.upsert({
+              studySessionId: studySessionIdRef.current,
+              topicId: props.topicId,
+              chapterId: group.chapter.id,
+              chapterName: group.chapter.name,
+              requirementId: requirement.id,
+              requirementName: requirement.name,
+              mode: snapshot.mode,
+              status: 'completed',
+              startedAtMs,
+              completedAtMs,
+              durationMs: Math.max(0, completedAtMs - startedAtMs),
+              masteryDelta,
+              aiSummary: buildRequirementSessionSummary(completedMessages),
+              messageCount: completedMessages.length,
+            });
+          }
 
           await requirementRepo.update(requirement.id, {
             mastery: clampMastery(requirement.mastery + masteryDelta),
@@ -384,6 +519,9 @@ export function useLearnPathController(props: {
       (message) =>
         message.chapterId === currentChapter.id && message.requirementId === currentRequirement.id,
     );
+    if (state.activeProgressId && completedProgressIdsRef.current.has(state.activeProgressId)) {
+      return;
+    }
     const startedAtMs = getProgressStartedAt(state.activeProgressId, progressRowsRef.current, now);
 
     const nextRow: LearnPathProgress = {
@@ -419,6 +557,49 @@ export function useLearnPathController(props: {
     state.mode,
     state.pathCompleted,
     state.started,
+  ]);
+
+  useEffect(() => {
+    if (
+      !state.started ||
+      !state.mode ||
+      !studySessionId ||
+      !currentChapter ||
+      !currentRequirement ||
+      state.pathCompleted
+    ) {
+      return;
+    }
+    const startedAtMs = getProgressStartedAt(state.activeProgressId, progressRowsRef.current, Date.now());
+    const now = Date.now();
+    const requirementMessages = state.messages.filter(
+      (message) =>
+        message.chapterId === currentChapter.id && message.requirementId === currentRequirement.id,
+    );
+    void learnPathSessionRequirementRepo.upsert({
+      studySessionId,
+      topicId: props.topicId,
+      chapterId: currentChapter.id,
+      chapterName: currentChapter.name,
+      requirementId: currentRequirement.id,
+      requirementName: currentRequirement.name,
+      mode: state.mode,
+      status: 'in_progress',
+      startedAtMs,
+      completedAtMs: undefined,
+      durationMs: Math.max(0, now - startedAtMs),
+      messageCount: requirementMessages.length,
+    });
+  }, [
+    currentChapter,
+    currentRequirement,
+    props.topicId,
+    state.activeProgressId,
+    state.messages,
+    state.mode,
+    state.pathCompleted,
+    state.started,
+    studySessionId,
   ]);
 
   const appendUserResponse = useCallback(
@@ -461,6 +642,7 @@ export function useLearnPathController(props: {
     if (
       state.inputMode !== 'text' &&
       state.inputMode !== 'free_text' &&
+      state.inputMode !== 'quiz' &&
       !(state.waitingForUser && !state.pendingExercise)
     ) {
       return;
@@ -486,12 +668,12 @@ export function useLearnPathController(props: {
 
   const handleRestart = useCallback(() => {
     if (!currentRequirement || !state.mode) return;
-    startRequirement(currentRequirement.id, state.mode, { fresh: true });
+    void startRequirement(currentRequirement.id, state.mode, { fresh: true });
   }, [currentRequirement, startRequirement, state.mode]);
 
   const handleResumeLatest = useCallback(() => {
     if (!latestInProgress) return;
-    startRequirement(latestInProgress.requirementId, latestInProgress.mode, {
+    void startRequirement(latestInProgress.requirementId, latestInProgress.mode, {
       progress: latestInProgress,
     });
   }, [latestInProgress, startRequirement]);
@@ -504,10 +686,58 @@ export function useLearnPathController(props: {
           : mode === 'review' && item.reviewProgress?.status === 'in_progress'
             ? item.reviewProgress
             : undefined;
-      startRequirement(item.requirement.id, mode, { progress, fresh: !progress });
+      void startRequirement(item.requirement.id, mode, { progress, fresh: !progress });
     },
     [startRequirement],
   );
+
+  const setPanelOpen = useCallback((open: boolean) => {
+    dispatch({ type: 'SET_PANEL_OPEN', open });
+  }, []);
+
+  const setPanelView = useCallback((view: LearnPathPanelView) => {
+    dispatch({ type: 'SET_PANEL_VIEW', view });
+  }, []);
+
+  const handleBack = useCallback(() => {
+    setLeaveDialogOpen(true);
+  }, []);
+
+  const handleLeavePage = useCallback(() => {
+    setLeaveDialogOpen(false);
+    navigate(`/subjects/${props.subjectId}/topics/${props.topicId}`);
+  }, [navigate, props.subjectId, props.topicId]);
+
+  const handleEndSession = useCallback(async () => {
+    setLeaveDialogBusy(true);
+    try {
+      const active = useActiveSessionStore.getState().active;
+      const activeStudySessionId = useStudyStore.getState().studySessionId;
+      const endedAtMs = Date.now();
+      if (activeStudySessionId) {
+        await studySessionRepo.end(activeStudySessionId, endedAtMs);
+      }
+      endActiveSession();
+      resetStudyStore();
+      handledRequestNonceRef.current = 0;
+      setLeaveDialogOpen(false);
+      dispatch({ type: 'RESET_TO_OVERVIEW' });
+      navigate(`/subjects/${props.subjectId}/topics/${props.topicId}`, {
+        state: {
+          sessionSummary: {
+            studySessionId: activeStudySessionId ?? undefined,
+            subjectId: props.subjectId,
+            topicId: props.topicId,
+            startedAtMs: active?.startedAtMs ?? endedAtMs,
+            endedAtMs,
+            source: 'learnpath' as const,
+          },
+        },
+      });
+    } finally {
+      if (mountedRef.current) setLeaveDialogBusy(false);
+    }
+  }, [endActiveSession, navigate, props.subjectId, props.topicId, resetStudyStore]);
 
   return {
     curriculumLoading,
@@ -528,12 +758,20 @@ export function useLearnPathController(props: {
     activeStep,
     currentRequirementPosition,
     currentRequirementGoal,
+    leaveDialogOpen,
+    leaveDialogBusy,
+    setLeaveDialogOpen,
     handleExerciseSubmit,
     handleSend,
     handleContinue,
     handleRestart,
     handleResumeLatest,
     handleStartOverviewItem,
+    handleBack,
+    handleLeavePage,
+    handleEndSession,
+    setPanelOpen,
+    setPanelView,
     resetToOverview,
   };
 }
@@ -627,7 +865,7 @@ function deriveRestoredInteraction(messages: LearnPathState['messages']) {
   if (lastMessage.role === 'assistant') {
     const inputMode =
       !lastMessage.exercise &&
-      (lastMessage.inputMode === 'single_choice' ||
+      (lastMessage.inputMode === 'quiz' ||
         lastMessage.inputMode === 'matching' ||
         lastMessage.inputMode === 'free_text')
         ? 'text'
@@ -649,4 +887,13 @@ function deriveRestoredInteraction(messages: LearnPathState['messages']) {
     exercise: null,
     requestAi: true,
   };
+}
+
+function buildRequirementSessionSummary(messages: LearnPathState['messages']) {
+  const assistantMessages = messages
+    .filter((message) => message.role === 'assistant')
+    .map((message) => message.content.trim())
+    .filter(Boolean);
+  if (assistantMessages.length === 0) return undefined;
+  return assistantMessages.slice(-2).join('\n\n').slice(0, 1200);
 }

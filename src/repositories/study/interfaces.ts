@@ -1,6 +1,7 @@
 import type {
   Attempt,
   AttemptAiReview,
+  LearnPathSessionRequirement,
   AttemptRequirementLink,
   AttemptResult,
   AttemptReviewJob,
@@ -11,6 +12,7 @@ import type {
   ExerciseTaskDepth,
   Problem,
   StudySession,
+  StudySessionSource,
   Subproblem,
   Subsubproblem,
 } from '../../domain/models';
@@ -21,11 +23,33 @@ export interface StudySessionRepository {
     topicId: string;
     startedAtMs: number;
     plannedDurationMs?: number;
+    source?: StudySessionSource;
   }): Promise<StudySession>;
   end(id: string, endedAtMs: number): Promise<void>;
   get(id: string): Promise<StudySession | undefined>;
   listAll(): Promise<StudySession[]>;
   listByTopic(topicId: string): Promise<StudySession[]>;
+}
+
+export interface LearnPathSessionRequirementRepository {
+  upsert(
+    input: Omit<
+      LearnPathSessionRequirement,
+      'id' | 'updatedAtMs' | 'durationMs' | 'messageCount'
+    > & {
+      id?: string;
+      updatedAtMs?: number;
+      durationMs?: number;
+      messageCount?: number;
+    },
+  ): Promise<LearnPathSessionRequirement>;
+  listByStudySession(studySessionId: string): Promise<LearnPathSessionRequirement[]>;
+  getByStudySessionRequirement(
+    studySessionId: string,
+    requirementId: string,
+  ): Promise<LearnPathSessionRequirement | undefined>;
+  deleteByStudySession(studySessionId: string): Promise<void>;
+  deleteByTopic(topicId: string): Promise<void>;
 }
 
 export interface ExerciseRepository {

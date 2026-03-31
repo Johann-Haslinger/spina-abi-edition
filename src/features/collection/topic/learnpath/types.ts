@@ -7,12 +7,12 @@ export type LearnPathGroup = {
 
 export type LearnPathStepType = 'explain' | 'check' | 'exercise' | 'review' | 'complete';
 
-export type LearnPathExerciseType = 'single_choice' | 'matching' | 'free_text';
+export type LearnPathExerciseType = 'quiz' | 'matching' | 'free_text';
 
 export type LearnPathInputMode =
   | 'none'
   | 'text'
-  | 'single_choice'
+  | 'quiz'
   | 'matching'
   | 'free_text';
 
@@ -29,6 +29,12 @@ export type LearnPathOption = {
   text: string;
 };
 
+export type LearnPathQuizQuestion = {
+  id: string;
+  prompt: string;
+  options: LearnPathOption[];
+};
+
 export type LearnPathMatchingItem = {
   id: string;
   text: string;
@@ -39,10 +45,10 @@ export type LearnPathMatchingPair = {
   rightId: string;
 };
 
-export type SingleChoiceExercise = {
-  type: 'single_choice';
+export type QuizExercise = {
+  type: 'quiz';
   prompt: string;
-  options: LearnPathOption[];
+  questions: LearnPathQuizQuestion[];
 };
 
 export type MatchingExercise = {
@@ -59,7 +65,7 @@ export type FreeTextExercise = {
 };
 
 export type LearnPathExercise =
-  | SingleChoiceExercise
+  | QuizExercise
   | MatchingExercise
   | FreeTextExercise;
 
@@ -82,8 +88,11 @@ export type LearnPathTurnResponse =
       text: string;
     }
   | {
-      kind: 'single_choice';
-      selectedOptionId: string;
+      kind: 'quiz';
+      answers: {
+        questionId: string;
+        selectedOptionId: string;
+      }[];
     }
   | {
       kind: 'matching';
@@ -113,6 +122,8 @@ export type LearnPathRequirementOverviewItem = {
   reviewProgress?: LearnPathProgress;
 };
 
+export type LearnPathPanelView = 'current_requirement' | 'all_requirements';
+
 export type LearnPathMessage = {
   id: string;
   role: 'system' | 'user' | 'assistant';
@@ -138,6 +149,8 @@ export type LearnPathState = {
   canContinue: boolean;
   mode: LearnPathMode | null;
   activeProgressId: string | null;
+  panelOpen: boolean;
+  panelView: LearnPathPanelView;
   currentChapterIndex: number;
   currentRequirementIndex: number;
   activePlan: RequirementPlan | null;
@@ -175,6 +188,14 @@ export type LearnPathAction =
   | {
       type: 'SET_PROGRESS_LOADING';
       loading: boolean;
+    }
+  | {
+      type: 'SET_PANEL_OPEN';
+      open: boolean;
+    }
+  | {
+      type: 'SET_PANEL_VIEW';
+      view: LearnPathPanelView;
     }
   | {
       type: 'SET_ERROR';
@@ -237,6 +258,8 @@ export const initialLearnPathState: LearnPathState = {
   canContinue: false,
   mode: null,
   activeProgressId: null,
+  panelOpen: false,
+  panelView: 'current_requirement',
   currentChapterIndex: 0,
   currentRequirementIndex: 0,
   activePlan: null,

@@ -61,6 +61,15 @@ export function DashboardPage() {
     () => buildRecentSessionDayStats({ dayCount: 7, totalsByDay: sessionMsByDay }),
     [sessionMsByDay],
   );
+  const sessionSourceStats = useMemo(() => {
+    const learnPathSessions = completedSessions.filter((session) => session.source === 'learnpath').length;
+    const exerciseSessions = completedSessions.filter((session) => session.source !== 'learnpath').length;
+    return {
+      total: completedSessions.length,
+      learnPathSessions,
+      exerciseSessions,
+    };
+  }, [completedSessions]);
 
   function openCreate() {
     setEditing(null);
@@ -138,9 +147,16 @@ export function DashboardPage() {
           Lade Session-Statistiken…
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <SessionTimeHeatmap90 days={heatmapDays} />
-          <SessionTimeBarChart7 days={barChartDays} />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <StatCard label="Sessions gesamt" value={String(sessionSourceStats.total)} />
+            <StatCard label="Learn Path" value={String(sessionSourceStats.learnPathSessions)} />
+            <StatCard label="Übungen" value={String(sessionSourceStats.exerciseSessions)} />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <SessionTimeHeatmap90 days={heatmapDays} />
+            <SessionTimeBarChart7 days={barChartDays} />
+          </div>
         </div>
       )}
 
@@ -173,6 +189,15 @@ export function DashboardPage() {
             : undefined
         }
       />
+    </div>
+  );
+}
+
+function StatCard(props: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4">
+      <div className="text-xs text-slate-400">{props.label}</div>
+      <div className="mt-2 text-2xl font-semibold text-white">{props.value}</div>
     </div>
   );
 }

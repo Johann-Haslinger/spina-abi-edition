@@ -71,7 +71,7 @@ function buildSurfaceTheme(accent: string, effectiveTheme: EffectiveTheme): AppS
   const floatingSolidBackground = mixHex(
     pageBackground,
     effectiveTheme === 'dark' ? '#FFFFFF' : accent,
-    effectiveTheme === 'dark' ? 0.08 : 0.12,
+    effectiveTheme === 'dark' ? 0.06 : 0.1,
   );
   const modalSolidBackground = mixHex(floatingSolidBackground, '#111827', 0.24);
   const themeColor =
@@ -82,7 +82,7 @@ function buildSurfaceTheme(accent: string, effectiveTheme: EffectiveTheme): AppS
   return {
     accent,
     pageBackground,
-    floatingBackground: rgba(floatingSolidBackground, effectiveTheme === 'dark' ? 0.76 : 0.74),
+    floatingBackground: rgba(floatingSolidBackground, effectiveTheme === 'dark' ? 0.82 : 0.8),
     floatingSolidBackground,
     modalBackground: rgba(modalSolidBackground, 0.92),
     modalThemeColor: mixHex(modalSolidBackground, '#000000', 0.1),

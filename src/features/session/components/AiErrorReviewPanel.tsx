@@ -48,7 +48,10 @@ export function AiErrorReviewPanel(props: { attemptId: string | null; onClose: (
         : 'border-rose-500/15 bg-rose-950/40 text-rose-100';
 
   return (
-    <aside className="fixed h-96 overflow-y-auto right-6 top-4  z-10000000001 w-120 max-w-[calc(100vw-2rem)] rounded-4xl border border-white/10  bg-[#243957]/70 p-5 text-white shadow-lg backdrop-blur">
+    <aside
+      className="fixed top-4 right-6 z-10000000001 h-96 w-120 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-4xl border border-white/10 p-5 text-white shadow-lg backdrop-blur"
+      style={{ backgroundColor: 'var(--app-floating-bg)' }}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-white/50">KI-Bewertung</div>

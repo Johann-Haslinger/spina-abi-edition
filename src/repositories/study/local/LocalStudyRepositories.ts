@@ -6,6 +6,7 @@ import type {
   AttemptReviewJob,
   Exercise,
   ExerciseDifficulty,
+  LearnPathSessionRequirement,
   Problem,
   StudySession,
   Subproblem,
@@ -18,6 +19,7 @@ import type {
   AttemptRequirementLinkRepository,
   AttemptReviewJobRepository,
   ExerciseRepository,
+  LearnPathSessionRequirementRepository,
   ProblemRepository,
   StudySessionRepository,
   SubproblemRepository,
@@ -30,6 +32,7 @@ export class LocalStudySessionRepository implements StudySessionRepository {
     topicId: string;
     startedAtMs: number;
     plannedDurationMs?: number;
+    source?: StudySession['source'];
   }): Promise<StudySession> {
     const row: StudySession = {
       id: newId(),
@@ -37,6 +40,7 @@ export class LocalStudySessionRepository implements StudySessionRepository {
       topicId: input.topicId,
       startedAtMs: input.startedAtMs,
       plannedDurationMs: input.plannedDurationMs,
+      source: input.source ?? 'exercise',
     };
     await db.studySessions.add(row);
     return row;
@@ -56,6 +60,68 @@ export class LocalStudySessionRepository implements StudySessionRepository {
 
   async listByTopic(topicId: string): Promise<StudySession[]> {
     return db.studySessions.where('topicId').equals(topicId).toArray();
+  }
+}
+
+export class LocalLearnPathSessionRequirementRepository
+  implements LearnPathSessionRequirementRepository
+{
+  async upsert(
+    input: Omit<
+      LearnPathSessionRequirement,
+      'id' | 'updatedAtMs' | 'durationMs' | 'messageCount'
+    > & {
+      id?: string;
+      updatedAtMs?: number;
+      durationMs?: number;
+      messageCount?: number;
+    },
+  ): Promise<LearnPathSessionRequirement> {
+    const now = input.updatedAtMs ?? Date.now();
+    const current = await db.learnPathSessionRequirements
+      .where('[studySessionId+requirementId]')
+      .equals([input.studySessionId, input.requirementId])
+      .first();
+    const row: LearnPathSessionRequirement = {
+      ...(current ?? {}),
+      ...input,
+      id: current?.id ?? input.id ?? newId(),
+      updatedAtMs: now,
+      durationMs:
+        input.durationMs ??
+        Math.max(
+          0,
+          ((input.completedAtMs ?? now) - input.startedAtMs),
+        ),
+      messageCount: input.messageCount ?? current?.messageCount ?? 0,
+    };
+    await db.learnPathSessionRequirements.put(row);
+    return row;
+  }
+
+  async listByStudySession(studySessionId: string): Promise<LearnPathSessionRequirement[]> {
+    return db.learnPathSessionRequirements
+      .where('studySessionId')
+      .equals(studySessionId)
+      .sortBy('updatedAtMs');
+  }
+
+  async getByStudySessionRequirement(
+    studySessionId: string,
+    requirementId: string,
+  ): Promise<LearnPathSessionRequirement | undefined> {
+    return db.learnPathSessionRequirements
+      .where('[studySessionId+requirementId]')
+      .equals([studySessionId, requirementId])
+      .first();
+  }
+
+  async deleteByStudySession(studySessionId: string): Promise<void> {
+    await db.learnPathSessionRequirements.where('studySessionId').equals(studySessionId).delete();
+  }
+
+  async deleteByTopic(topicId: string): Promise<void> {
+    await db.learnPathSessionRequirements.where('topicId').equals(topicId).delete();
   }
 }
 

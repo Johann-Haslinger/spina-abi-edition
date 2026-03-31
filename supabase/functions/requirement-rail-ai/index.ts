@@ -15,7 +15,7 @@ const corsHeaders: Record<string, string> = {
 };
 
 const STEP_TYPES = ['explain', 'check', 'exercise', 'review', 'complete'] as const;
-const EXERCISE_TYPES = ['single_choice', 'matching', 'free_text'] as const;
+const EXERCISE_TYPES = ['quiz', 'matching', 'free_text'] as const;
 const MESSAGE_KINDS = [
   'plan',
   'explanation',
@@ -24,7 +24,7 @@ const MESSAGE_KINDS = [
   'feedback',
   'completion',
 ] as const;
-const INPUT_MODES = ['none', 'text', 'single_choice', 'matching', 'free_text'] as const;
+const INPUT_MODES = ['none', 'text', 'quiz', 'matching', 'free_text'] as const;
 
 type StepType = (typeof STEP_TYPES)[number];
 type ExerciseType = (typeof EXERCISE_TYPES)[number];
@@ -33,7 +33,7 @@ type InputMode = (typeof INPUT_MODES)[number];
 
 type UserResponse =
   | { kind: 'text' | 'free_text'; text: string }
-  | { kind: 'single_choice'; selectedOptionId: string }
+  | { kind: 'quiz'; answers: { questionId: string; selectedOptionId: string }[] }
   | { kind: 'matching'; pairs: { leftId: string; rightId: string }[] };
 
 type RequirementPlanStep = {
@@ -89,7 +89,7 @@ serve(async (req) => {
         ? body.currentStepId.trim()
         : undefined;
     const currentStep =
-      plan && currentStepId ? plan.steps.find((step) => step.id === currentStepId) ?? null : null;
+      plan && currentStepId ? (plan.steps.find((step) => step.id === currentStepId) ?? null) : null;
 
     if (mode === 'turn' && (!plan || !currentStep)) {
       return json(400, { error: 'turn mode braucht plan und currentStepId' });
@@ -186,7 +186,8 @@ serve(async (req) => {
     const message = asNonEmptyString(parsed.message);
     if (!message) {
       return json(200, {
-        message: 'Es ist ein kleines Formatproblem aufgetreten. Bitte antworte nochmal kurz auf die letzte Frage.',
+        message:
+          'Es ist ein kleines Formatproblem aufgetreten. Bitte antworte nochmal kurz auf die letzte Frage.',
         message_kind: 'feedback',
         expects_input: 'text',
         await_user_reply: true,
@@ -199,9 +200,12 @@ serve(async (req) => {
     const messageKind = isMessageKind(parsed.message_kind)
       ? (parsed.message_kind as MessageKind)
       : 'explanation';
-    const expectsInput = isInputMode(parsed.expects_input)
-      ? (parsed.expects_input as InputMode)
-      : 'none';
+    const expectsInput =
+      parsed.expects_input === 'single_choice'
+        ? 'quiz'
+        : isInputMode(parsed.expects_input)
+          ? (parsed.expects_input as InputMode)
+          : 'none';
     const exercise = normalizeExercise(parsed.exercise);
     const completeRequirement = parsed.complete_requirement === true;
     const masteryDelta = completeRequirement
@@ -249,7 +253,7 @@ function buildPrompt(input: {
   const base = [
     'Du steuerst den Wissenspfad einer Abi-Lern-App fuer lehrplanbasiertes Lernen.',
     'Antworte NUR als JSON mit genau diesem Schema:',
-    '{ "plan"?: { "id": string, "steps": [{ "id": string, "title": string, "type": "explain"|"check"|"exercise"|"review"|"complete", "exerciseType"?: "single_choice"|"matching"|"free_text", "description"?: string }] }, "current_step_id"?: string, "message": string, "message_kind": "plan"|"explanation"|"question"|"exercise"|"feedback"|"completion", "expects_input": "none"|"text"|"single_choice"|"matching"|"free_text", "exercise"?: object, "await_user_reply"?: boolean, "complete_requirement"?: boolean, "mastery_delta"?: number }',
+    '{ "plan"?: { "id": string, "steps": [{ "id": string, "title": string, "type": "explain"|"check"|"exercise"|"review"|"complete", "exerciseType"?: "quiz"|"matching"|"free_text", "description"?: string }] }, "current_step_id"?: string, "message": string, "message_kind": "plan"|"explanation"|"question"|"exercise"|"feedback"|"completion", "expects_input": "none"|"text"|"quiz"|"matching"|"free_text", "exercise"?: object, "await_user_reply"?: boolean, "complete_requirement"?: boolean, "mastery_delta"?: number }',
     '',
     'Allgemeine Regeln:',
     '- Schreibe auf Deutsch, klar, freundlich, substanziell und lernorientiert.',
@@ -257,11 +261,13 @@ function buildPrompt(input: {
     '- Wenn du fachlich etwas erklaerst, endet die Nachricht mit genau EINER kurzen Verstaendnisfrage, die sich direkt auf den gerade erklaerten Inhalt bezieht.',
     '- Die Verstaendnisfrage soll kurz sein und eher an den erklaerten Inhalt anschliessen als neue Themen aufmachen.',
     '- Wechsle Schritt oder Interaktionsform, sobald es didaktisch sinnvoll ist. Bleibe nicht kuenstlich zu lange im selben Schritt.',
-    '- Uebungen duerfen nur die Typen single_choice, matching oder free_text verwenden.',
+    '- Uebungen duerfen nur die Typen quiz, matching oder free_text verwenden.',
     '- Bei exercise-Schritten setze expects_input passend zum exercise type und liefere ein exercise-Objekt.',
     '- Wenn du auf eine Nutzerantwort wartest, setze await_user_reply=true.',
     '- mastery_delta darf nur gesetzt werden, wenn complete_requirement=true.',
     '- Keine Markdown-Tabellen, kein JSON ausserhalb des geforderten Schemas.',
+    '- Wenn der Nutzer sagt, dass etwas schon erledigt wurde oder er direkt weitergehen will, pruefe den Verlauf aktiv und gehe bei ausreichender Antwort zum naechsten Schritt.',
+    '- Wiederhole nicht dieselbe Rueckfrage, wenn sie im Verlauf bereits beantwortet oder korrigiert wurde.',
     '',
     `Requirement-Ziel: ${input.requirementGoal}`,
     `Lernmodus: ${input.learningMode}`,
@@ -299,14 +305,16 @@ function buildPrompt(input: {
     '- Arbeite immer entlang des bestehenden Plans.',
     '- Im Lernmodus darfst du zuerst kurz erklaeren und dann abfragen.',
     '- Im Wiederholmodus sollst du knapper sein, frueher in Fragen/Uebungen wechseln und eher abrufen als neu aufbauen.',
+    '- Nutze den vorhandenen Verlauf aktiv, um Fortschritt, Korrekturen und bereits gegebene Antworten zu erkennen.',
     '- Wenn die letzte Nutzerantwort fuer den aktuellen Schritt ausreichend ist, gehe zuegig zum naechsten sinnvollen Schritt weiter.',
     '- Wenn sie nicht ausreicht, bleibe im aktuellen Schritt und gib gezieltes, kurzes Feedback.',
+    '- Wenn der Nutzer explizit schreibt, dass er etwas schon gemacht hat, es schon verstanden hat oder zum naechsten Schritt will, entscheide anhand des Verlaufs, ob du den Schritt direkt abschliessen kannst.',
     '- Bei explain/check/review: erklaere oder reagiere knapp und ende mit genau einer kurzen Verstaendnisfrage. Setze expects_input="text" und await_user_reply=true.',
     '- Bei exercise: wenn fuer den aktuellen Schritt noch keine Nutzerantwort vorliegt, liefere SOFORT die eigentliche Uebung als exercise-Objekt.',
     '- Frage vor einer Uebung NICHT, ob der Nutzer bereit ist, und stelle keine Meta-Zwischenfrage vor dem exercise-Objekt.',
-    '- Wenn expects_input auf single_choice, matching oder free_text steht, MUSS im selben Turn auch ein passendes exercise-Objekt geliefert werden.',
+    '- Wenn expects_input auf quiz, matching oder free_text steht, MUSS im selben Turn auch ein passendes exercise-Objekt geliefert werden.',
     '- Wenn bereits eine Antwort auf die Uebung vorliegt, bewerte sie knapp und gehe dann weiter oder lasse gezielt wiederholen.',
-    '- Bei single_choice liefere 3 bis 5 Optionen.',
+    '- Bei quiz liefere einen kompletten Exercise-Block mit 2 bis 4 Fragen in exercise.questions; jede Frage hat 3 bis 5 Optionen.',
     '- Bei matching liefere 3 bis 5 linke und rechte Eintraege.',
     '- Bei free_text liefere eine klare, kurze Aufgabenstellung und optional placeholder.',
     '- Wenn du in den complete-Schritt wechselst, gib eine kurze Abschlussnachricht und setze complete_requirement=true, expects_input="none", await_user_reply=false und mastery_delta auf 0.08 bis 0.15.',
@@ -358,7 +366,12 @@ function normalizePlanStep(input: unknown): RequirementPlanStep | null {
     id,
     title,
     type: row.type,
-    exerciseType: isExerciseType(row.exerciseType) ? row.exerciseType : undefined,
+    exerciseType:
+      row.exerciseType === 'single_choice'
+        ? 'quiz'
+        : isExerciseType(row.exerciseType)
+          ? row.exerciseType
+          : undefined,
     description: asNonEmptyString(row.description),
   };
 }
@@ -367,7 +380,36 @@ function normalizeExercise(input: unknown) {
   const row = (input ?? null) as Record<string, unknown> | null;
   if (!row) return null;
   const prompt = asNonEmptyString(row.prompt);
-  if (!prompt || !isExerciseType(row.type)) return null;
+  if (!prompt || typeof row.type !== 'string') return null;
+
+  if (row.type === 'quiz' && Array.isArray(row.questions)) {
+    const questions = row.questions
+      .map((question) => {
+        const item = (question ?? null) as Record<string, unknown> | null;
+        const id = asNonEmptyString(item?.id);
+        const questionPrompt = asNonEmptyString(item?.prompt);
+        if (!id || !questionPrompt || !Array.isArray(item?.options)) return null;
+        const options = item.options
+          .map((option) => {
+            const entry = (option ?? null) as Record<string, unknown> | null;
+            const optionId = asNonEmptyString(entry?.id);
+            const text = asNonEmptyString(entry?.text);
+            return optionId && text ? { id: optionId, text } : null;
+          })
+          .filter((option): option is { id: string; text: string } => option != null);
+        return options.length >= 2 ? { id, prompt: questionPrompt, options } : null;
+      })
+      .filter(
+        (
+          question,
+        ): question is {
+          id: string;
+          prompt: string;
+          options: { id: string; text: string }[];
+        } => question != null,
+      );
+    if (questions.length >= 1) return { type: 'quiz', prompt, questions };
+  }
 
   if (row.type === 'single_choice' && Array.isArray(row.options)) {
     const options = row.options
@@ -378,7 +420,13 @@ function normalizeExercise(input: unknown) {
         return id && text ? { id, text } : null;
       })
       .filter((option): option is { id: string; text: string } => option != null);
-    if (options.length >= 2) return { type: row.type, prompt, options };
+    if (options.length >= 2) {
+      return {
+        type: 'quiz',
+        prompt,
+        questions: [{ id: 'q1', prompt, options }],
+      };
+    }
   }
 
   if (row.type === 'matching' && Array.isArray(row.leftItems) && Array.isArray(row.rightItems)) {
@@ -422,8 +470,30 @@ function normalizeUserResponse(input: unknown): UserResponse | undefined {
     return { kind: row.kind, text: safeSnippet(row.text, 320) };
   }
 
+  if (row.kind === 'quiz' && Array.isArray(row.answers)) {
+    const answers = row.answers
+      .map((answer) => {
+        const entry = (answer ?? null) as Record<string, unknown> | null;
+        const questionId = asNonEmptyString(entry?.questionId);
+        const selectedOptionId = asNonEmptyString(entry?.selectedOptionId);
+        return questionId && selectedOptionId ? { questionId, selectedOptionId } : null;
+      })
+      .filter(
+        (
+          answer,
+        ): answer is {
+          questionId: string;
+          selectedOptionId: string;
+        } => answer != null,
+      );
+    return answers.length > 0 ? { kind: 'quiz', answers } : undefined;
+  }
+
   if (row.kind === 'single_choice' && typeof row.selectedOptionId === 'string') {
-    return { kind: row.kind, selectedOptionId: row.selectedOptionId };
+    return {
+      kind: 'quiz',
+      answers: [{ questionId: 'q1', selectedOptionId: row.selectedOptionId }],
+    };
   }
 
   if (row.kind === 'matching' && Array.isArray(row.pairs)) {

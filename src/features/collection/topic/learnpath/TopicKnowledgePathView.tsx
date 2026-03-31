@@ -1,9 +1,10 @@
+import { ActionDialog } from '../../../../components/ActionDialog';
 import { LearnPathChatPanel } from './components/LearnPathChatPanel';
 import { LearnPathOverview } from './components/LearnPathOverview';
-import { LearnPathSidebar } from './components/LearnPathSidebar';
 import { useLearnPathController } from './useLearnPathController';
 
 export function TopicKnowledgePathView(props: {
+  subjectId: string;
   topicId: string;
   topicName?: string;
   subjectName?: string;
@@ -56,37 +57,57 @@ export function TopicKnowledgePathView(props: {
 
   return (
     <section className="pt-10">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <LearnPathChatPanel
-          state={controller.state}
-          mode={controller.state.mode}
-          draft={controller.draft}
-          totalChapters={controller.groupedRequirements.length}
-          totalRequirements={controller.totalRequirements}
-          currentRequirementPosition={controller.currentRequirementPosition}
-          currentChapterName={controller.currentChapter?.name}
-          currentRequirementName={controller.currentRequirement?.name}
-          activePlan={controller.state.activePlan}
-          activeStep={controller.activeStep}
-          onDraftChange={controller.setDraft}
-          onBack={controller.resetToOverview}
-          onRestart={controller.handleRestart}
-          onContinue={controller.handleContinue}
-          onSend={controller.handleSend}
-          onExerciseSubmit={controller.handleExerciseSubmit}
-        />
-        <LearnPathSidebar
-          mode={controller.state.mode}
-          activePlan={controller.state.activePlan}
-          activeStep={controller.activeStep}
-          currentRequirement={controller.currentRequirement}
-          requirementGoal={controller.currentRequirementGoal}
-          subjectName={props.subjectName}
-          topicName={props.topicName}
-          currentChapterName={controller.currentChapter?.name}
-          currentRequirementName={controller.currentRequirement?.name}
-        />
-      </div>
+      <ActionDialog
+        open={controller.leaveDialogOpen}
+        onClose={() => controller.setLeaveDialogOpen(false)}
+        busy={controller.leaveDialogBusy}
+        title="Lernpfad verlassen?"
+        message="Du kannst die Seite einfach verlassen und spaeter weitermachen oder die aktuelle Session beenden und direkt auswerten."
+        actions={[
+          {
+            key: 'leave',
+            label: 'Seite verlassen',
+            tone: 'neutral',
+            onClick: controller.handleLeavePage,
+          },
+          {
+            key: 'end',
+            label: 'Session beenden',
+            tone: 'primary',
+            onClick: controller.handleEndSession,
+          },
+          {
+            key: 'cancel',
+            label: 'Abbrechen',
+            tone: 'neutral',
+            onClick: () => controller.setLeaveDialogOpen(false),
+          },
+        ]}
+      />
+      <LearnPathChatPanel
+        state={controller.state}
+        mode={controller.state.mode}
+        draft={controller.draft}
+        totalChapters={controller.groupedRequirements.length}
+        totalRequirements={controller.totalRequirements}
+        currentRequirementPosition={controller.currentRequirementPosition}
+        subjectName={props.subjectName}
+        topicName={props.topicName}
+        currentChapterName={controller.currentChapter?.name}
+        currentRequirementName={controller.currentRequirement?.name}
+        activePlan={controller.state.activePlan}
+        activeStep={controller.activeStep}
+        overviewItems={controller.overviewItems}
+        onDraftChange={controller.setDraft}
+        onBack={controller.handleBack}
+        onRestart={controller.handleRestart}
+        onContinue={controller.handleContinue}
+        onSend={controller.handleSend}
+        onExerciseSubmit={controller.handleExerciseSubmit}
+        onStartRequirement={controller.handleStartOverviewItem}
+        onPanelOpenChange={controller.setPanelOpen}
+        onPanelViewChange={controller.setPanelView}
+      />
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { Subject } from '../../domain/models';
 import { useSubjectsStore } from '../../stores/subjectsStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -11,6 +11,15 @@ import {
 
 export function useSubjectFromParam(subjectOrId?: Subject | string): Subject | undefined {
   const subjects = useSubjectsStore((s) => s.subjects);
+  const loading = useSubjectsStore((s) => s.loading);
+  const refresh = useSubjectsStore((s) => s.refresh);
+
+  useEffect(() => {
+    if (typeof subjectOrId !== 'string') return;
+    if (subjects.length > 0 || loading) return;
+    void refresh();
+  }, [loading, refresh, subjectOrId, subjects.length]);
+
   if (!subjectOrId) return undefined;
   if (typeof subjectOrId === 'string') return subjects.find((s) => s.id === subjectOrId);
   return subjectOrId;

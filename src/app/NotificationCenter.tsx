@@ -101,11 +101,12 @@ export function NotificationCenter() {
                   }
                   dismiss(notification.id);
                 }}
-                className={`pointer-events-auto flex rounded-3xl border border-white/10 bg-[#243957]/80 text-left shadow-lg backdrop-blur ${
+                className={`pointer-events-auto flex rounded-3xl border border-white/10 text-left shadow-lg backdrop-blur ${
                   isExpanded
                     ? 'w-120 max-w-[calc(100vw-1rem)] items-start gap-3 px-5 py-5'
                     : 'w-104 max-w-[calc(100vw-1rem)] items-center'
                 }`}
+                style={{ backgroundColor: 'var(--app-floating-bg)' }}
               >
                 <div className={isExpanded ? 'min-w-0 flex-1' : 'px-3 py-3 pr-4'}>
                   <div className="flex items-start justify-between gap-3">

@@ -121,12 +121,16 @@ export function getPlanStepPosition(plan: RequirementPlan | null, stepId: string
 export function describeResponse(response: LearnPathTurnResponse, exercise?: LearnPathExercise | null) {
   if (response.kind === 'text' || response.kind === 'free_text') return response.text;
 
-  if (response.kind === 'single_choice') {
-    const option =
-      exercise?.type === 'single_choice'
-        ? exercise.options.find((item) => item.id === response.selectedOptionId)
-        : undefined;
-    return option ? option.text : 'Auswahl gesendet';
+  if (response.kind === 'quiz') {
+    if (exercise?.type !== 'quiz') return 'Quiz-Antwort gesendet';
+    const questionLookup = new Map(exercise.questions.map((question) => [question.id, question]));
+    return response.answers
+      .map((answer, index) => {
+        const question = questionLookup.get(answer.questionId);
+        const option = question?.options.find((item) => item.id === answer.selectedOptionId);
+        return `${index + 1}. ${question?.prompt ?? answer.questionId}: ${option?.text ?? answer.selectedOptionId}`;
+      })
+      .join('\n');
   }
 
   const leftLookup =
@@ -165,7 +169,7 @@ export function parseLearnPathMessagesJson(value?: string) {
   if (!value) return [];
   try {
     const parsed = JSON.parse(value) as LearnPathMessage[];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeLegacyMessage).filter(Boolean) : [];
   } catch {
     return [];
   }
@@ -175,16 +179,8 @@ export function buildRequirementOverviewItems(
   groups: LearnPathGroup[],
   progressRows: LearnPathProgress[],
 ): LearnPathRequirementOverviewItem[] {
-  const learnProgressByRequirementId = new Map(
-    progressRows
-      .filter((row) => row.mode === 'learn')
-      .map((row) => [row.requirementId, row] as const),
-  );
-  const reviewProgressByRequirementId = new Map(
-    progressRows
-      .filter((row) => row.mode === 'review')
-      .map((row) => [row.requirementId, row] as const),
-  );
+  const learnProgressByRequirementId = pickLatestProgressByRequirement(progressRows, 'learn');
+  const reviewProgressByRequirementId = pickLatestProgressByRequirement(progressRows, 'review');
 
   return groups.flatMap((group) =>
     group.requirements.map((requirement) => {
@@ -217,4 +213,75 @@ export function getFirstOpenRequirement(
   overviewItems: LearnPathRequirementOverviewItem[],
 ): LearnPathRequirementOverviewItem | undefined {
   return overviewItems.find((item) => !item.learnProgress || item.learnProgress.status !== 'completed');
+}
+
+function pickLatestProgressByRequirement(
+  progressRows: LearnPathProgress[],
+  mode: LearnPathProgress['mode'],
+) {
+  const map = new Map<string, LearnPathProgress>();
+  for (const row of progressRows) {
+    if (row.mode !== mode) continue;
+    const current = map.get(row.requirementId);
+    if (!current || shouldPreferProgressRow(current, row)) {
+      map.set(row.requirementId, row);
+    }
+  }
+  return map;
+}
+
+function shouldPreferProgressRow(current: LearnPathProgress, next: LearnPathProgress) {
+  if (current.status !== next.status) {
+    if (next.status === 'completed') return true;
+    if (current.status === 'completed') return false;
+  }
+  return next.updatedAtMs >= current.updatedAtMs;
+}
+
+function normalizeLegacyMessage(message: LearnPathMessage) {
+  const rawMessage = message as {
+    inputMode?: string;
+    exercise?: {
+      type?: string;
+      prompt?: string;
+      options?: { id: string; text: string }[];
+    };
+    response?: {
+      kind?: string;
+      selectedOptionId?: string;
+    };
+  };
+  const inputMode = rawMessage.inputMode === 'single_choice' ? 'quiz' : message.inputMode;
+  const exercise =
+    rawMessage.exercise?.type === 'single_choice'
+      ? {
+          type: 'quiz' as const,
+          prompt: rawMessage.exercise.prompt ?? '',
+          questions: [
+            {
+              id: 'q1',
+              prompt: rawMessage.exercise.prompt ?? '',
+              options: rawMessage.exercise.options ?? [],
+            },
+          ],
+        }
+      : message.exercise;
+  const response =
+    rawMessage.response?.kind === 'single_choice'
+      ? {
+          kind: 'quiz' as const,
+          answers: [
+            {
+              questionId: 'q1',
+              selectedOptionId: rawMessage.response.selectedOptionId ?? '',
+            },
+          ].filter((answer) => answer.selectedOptionId),
+        }
+      : message.response;
+  return {
+    ...message,
+    inputMode,
+    exercise,
+    response: response && response.kind === 'quiz' && response.answers.length === 0 ? undefined : response,
+  };
 }

@@ -37,6 +37,7 @@ function resolveThemeColor(color: string) {
 }
 
 function applySurfaceTheme(surfaceTheme: AppSurfaceTheme) {
+  if (typeof document === 'undefined') return
   const root = document.documentElement;
   root.style.setProperty('--app-page-bg', surfaceTheme.pageBackground);
   root.style.setProperty('--app-floating-bg', surfaceTheme.floatingBackground);
@@ -72,6 +73,25 @@ export function useAppSurfaceTheme(surfaceTheme: AppSurfaceTheme | null | undefi
       if (!meta) return;
       if (previousThemeColor === null) meta.removeAttribute('content');
       else meta.setAttribute('content', previousThemeColor);
+    };
+  }, [surfaceTheme]);
+
+  useEffect(() => {
+    if (!surfaceTheme || typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    const reapplySurfaceTheme = () => applySurfaceTheme(surfaceTheme);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') reapplySurfaceTheme();
+    };
+
+    window.addEventListener('focus', reapplySurfaceTheme);
+    window.addEventListener('pageshow', reapplySurfaceTheme);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', reapplySurfaceTheme);
+      window.removeEventListener('pageshow', reapplySurfaceTheme);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [surfaceTheme]);
 }

@@ -105,10 +105,12 @@ function parseInputMode(value: unknown): LearnPathInputMode {
   switch (value) {
     case 'none':
     case 'text':
-    case 'single_choice':
+    case 'quiz':
     case 'matching':
     case 'free_text':
       return value;
+    case 'single_choice':
+      return 'quiz';
     default:
       return 'none';
   }
@@ -143,7 +145,12 @@ function parseRequirementPlanStep(value: unknown): RequirementPlan['steps'][numb
     id: row.id,
     title: row.title,
     type: row.type,
-    exerciseType: isExerciseType(row.exerciseType) ? row.exerciseType : undefined,
+    exerciseType:
+      row.exerciseType === 'single_choice'
+        ? 'quiz'
+        : isExerciseType(row.exerciseType)
+          ? row.exerciseType
+          : undefined,
     description: typeof row.description === 'string' ? row.description : undefined,
   };
 }
@@ -151,6 +158,41 @@ function parseRequirementPlanStep(value: unknown): RequirementPlan['steps'][numb
 function parseExercise(value: unknown): LearnPathExercise | undefined {
   const row = (value ?? null) as Record<string, unknown> | null;
   if (!row || typeof row.type !== 'string' || typeof row.prompt !== 'string') return undefined;
+
+  if (row.type === 'quiz' && Array.isArray(row.questions)) {
+    const questions = row.questions
+      .map((question) => {
+        const item = (question ?? null) as {
+          id?: unknown;
+          prompt?: unknown;
+          options?: unknown;
+        } | null;
+        if (
+          !item ||
+          typeof item.id !== 'string' ||
+          typeof item.prompt !== 'string' ||
+          !Array.isArray(item.options)
+        ) {
+          return null;
+        }
+        const options = item.options
+          .map((option) => {
+            const entry = (option ?? null) as { id?: unknown; text?: unknown } | null;
+            if (!entry || typeof entry.id !== 'string' || typeof entry.text !== 'string') return null;
+            return { id: entry.id, text: entry.text };
+          })
+          .filter((option): option is { id: string; text: string } => option != null);
+        return options.length > 1 ? { id: item.id, prompt: item.prompt, options } : null;
+      })
+      .filter(
+        (question): question is {
+          id: string;
+          prompt: string;
+          options: { id: string; text: string }[];
+        } => question != null,
+      );
+    if (questions.length > 0) return { type: 'quiz', prompt: row.prompt, questions };
+  }
 
   if (row.type === 'single_choice' && Array.isArray(row.options)) {
     const options = row.options
@@ -160,7 +202,13 @@ function parseExercise(value: unknown): LearnPathExercise | undefined {
         return { id: item.id, text: item.text };
       })
       .filter((option): option is { id: string; text: string } => option != null);
-    if (options.length > 1) return { type: 'single_choice', prompt: row.prompt, options };
+    if (options.length > 1) {
+      return {
+        type: 'quiz',
+        prompt: row.prompt,
+        questions: [{ id: 'q1', prompt: row.prompt, options }],
+      };
+    }
   }
 
   if (row.type === 'matching' && Array.isArray(row.leftItems) && Array.isArray(row.rightItems)) {
@@ -205,7 +253,7 @@ function isStepType(value: unknown): value is RequirementPlan['steps'][number]['
 }
 
 function isExerciseType(value: unknown): value is NonNullable<RequirementPlan['steps'][number]['exerciseType']> {
-  return value === 'single_choice' || value === 'matching' || value === 'free_text';
+  return value === 'quiz' || value === 'matching' || value === 'free_text';
 }
 
 async function unwrapFunctionResponse(data: unknown, error: unknown) {

@@ -80,6 +80,7 @@ export class LocalSubjectRepository implements SubjectRepository {
         db.chapters,
         db.requirements,
         db.learnPathProgress,
+        db.learnPathSessionRequirements,
         db.scheduledReviews,
       ],
       async () => {
@@ -134,6 +135,7 @@ export class LocalSubjectRepository implements SubjectRepository {
         }
         if (topicIds.length) {
           await db.learnPathProgress.where('topicId').anyOf(topicIds as string[]).delete();
+          await db.learnPathSessionRequirements.where('topicId').anyOf(topicIds as string[]).delete();
         }
         if (chapterIds.length) await db.chapters.bulkDelete(chapterIds as string[]);
         await db.assetFiles.bulkDelete(assetIds as string[]);
@@ -206,6 +208,7 @@ export class LocalTopicRepository implements TopicRepository {
         db.chapters,
         db.requirements,
         db.learnPathProgress,
+        db.learnPathSessionRequirements,
         db.scheduledReviews,
       ],
       async () => {
@@ -251,6 +254,7 @@ export class LocalTopicRepository implements TopicRepository {
       if (assetIds.length) await db.inkStrokes.where('assetId').anyOf(assetIds as string[]).delete();
       await db.assets.where('topicId').equals(id).delete();
       await db.learnPathProgress.where('topicId').equals(id).delete();
+      await db.learnPathSessionRequirements.where('topicId').equals(id).delete();
       await db.scheduledReviews.where('topicId').equals(id).delete();
       if (requirementIds.length) {
         await db.requirements.bulkDelete(requirementIds as string[]);

@@ -21,6 +21,7 @@ import {
   LocalAttemptRequirementLinkRepository,
   LocalAttemptReviewJobRepository,
   LocalExerciseRepository,
+  LocalLearnPathSessionRequirementRepository,
   LocalProblemRepository,
   LocalStudySessionRepository,
   LocalSubproblemRepository,
@@ -38,6 +39,7 @@ export const requirementRepo = new LocalRequirementRepository();
 export const learnPathProgressRepo = new LocalLearnPathProgressRepository();
 
 export const studySessionRepo = new LocalStudySessionRepository();
+export const learnPathSessionRequirementRepo = new LocalLearnPathSessionRequirementRepository();
 export const exerciseRepo = new LocalExerciseRepository();
 export const problemRepo = new LocalProblemRepository();
 export const subproblemRepo = new LocalSubproblemRepository();

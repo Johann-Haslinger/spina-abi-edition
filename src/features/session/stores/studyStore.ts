@@ -1,7 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { db } from '../../../db/db';
-import type { AttemptResult, ExercisePageStatus, ExerciseTaskDepth } from '../../../domain/models';
+import type {
+  AttemptResult,
+  ExercisePageStatus,
+  ExerciseTaskDepth,
+  StudySessionSource,
+} from '../../../domain/models';
 import { appendAttemptAiHelpNote } from '../review/attemptAiHelp';
 import { newId } from '../../../lib/id';
 import {
@@ -44,6 +49,7 @@ type StudyState = {
     topicId: string;
     startedAtMs: number;
     plannedDurationMs?: number;
+    source?: StudySessionSource;
   }) => Promise<string>;
 
   setProblemIdx: (idx: number) => void;
@@ -127,7 +133,7 @@ export const useStudyStore = create<StudyState>()(
           };
         }),
 
-      ensureStudySession: async ({ subjectId, topicId, startedAtMs, plannedDurationMs }) => {
+      ensureStudySession: async ({ subjectId, topicId, startedAtMs, plannedDurationMs, source }) => {
         const key = getSessionKey({ subjectId, topicId, startedAtMs });
         const current = get();
         if (current.boundSessionKey !== key) {
@@ -141,6 +147,7 @@ export const useStudyStore = create<StudyState>()(
           topicId,
           startedAtMs,
           plannedDurationMs,
+          source,
         });
         set({ studySessionId: created.id });
         return created.id;
