@@ -69,12 +69,6 @@ export function LearnPathChatPanel(props: {
 
   return (
     <section className="relative min-h-dvh">
-      <div className="absolute inset-0 backdrop-blur" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.1),transparent_34%)]" />
-
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-28 bg-linear-to-b from-black/35 via-black/15 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-36 bg-linear-to-t from-black/40 via-black/20 to-transparent" />
-
       <div className="relative h-dvh">
         <div className="fixed  top-0 z-30 left-0 flex justify-center px-4 pt-5">
           <div className="flex w-full max-w-5xl items-start gap-3">
