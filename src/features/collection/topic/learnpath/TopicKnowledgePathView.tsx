@@ -1,3 +1,5 @@
+import { IoChevronBack } from 'react-icons/io5';
+import { ViewerIconButton } from '../../../../components/ViewerIconButton';
 import { LearnPathChatPanel } from './components/LearnPathChatPanel';
 import { LearnPathOverview } from './components/LearnPathOverview';
 import { useLearnPathController } from './useLearnPathController';
@@ -7,6 +9,7 @@ export function TopicKnowledgePathView(props: {
   topicId: string;
   topicName?: string;
   subjectName?: string;
+  onBackToTopic: () => void;
 }) {
   const controller = useLearnPathController(props);
 
@@ -44,13 +47,24 @@ export function TopicKnowledgePathView(props: {
     }
 
     return (
-      <LearnPathOverview
-        items={controller.overviewItems}
-        latestInProgress={controller.latestInProgress}
-        firstOpenRequirement={controller.firstOpenRequirement}
-        onResumeLatest={controller.handleResumeLatest}
-        onStartRequirement={controller.handleStartOverviewItem}
-      />
+      <>
+        <ViewerIconButton
+          ariaLabel="Zurück zum Thema"
+          onClick={props.onBackToTopic}
+          className="fixed left-6 top-6 z-[60]"
+        >
+          <IoChevronBack />
+        </ViewerIconButton>
+        <div className="px-6">
+          <LearnPathOverview
+            items={controller.overviewItems}
+            latestInProgress={controller.latestInProgress}
+            firstOpenRequirement={controller.firstOpenRequirement}
+            onResumeLatest={controller.handleResumeLatest}
+            onStartRequirement={controller.handleStartOverviewItem}
+          />
+        </div>
+      </>
     );
   }
 

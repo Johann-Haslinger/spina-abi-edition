@@ -1,14 +1,18 @@
 import { useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useParams } from 'react-router-dom';
 import { useSubjectsStore } from '../../../stores/subjectsStore';
 import { useTopicsStore } from '../../../stores/topicsStore';
+import { useStudyHudStore } from '../../session/stores/studyHudStore';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { TopicKnowledgePathView } from './learnpath/TopicKnowledgePathView';
 
 export function TopicLearnPathPage() {
   const { subjectId, topicId } = useParams();
+  const navigate = useNavigate();
   const { subjects, refresh: refreshSubjects } = useSubjectsStore();
   const { topicsBySubject, refreshBySubject } = useTopicsStore();
+  const setStudyAiConversationKey = useStudyHudStore((s) => s.setStudyAiConversationKey);
 
   useEffect(() => {
     void refreshSubjects();
@@ -17,6 +21,10 @@ export function TopicLearnPathPage() {
   useEffect(() => {
     if (subjectId) void refreshBySubject(subjectId);
   }, [refreshBySubject, subjectId]);
+
+  useEffect(() => {
+    setStudyAiConversationKey(null);
+  }, [setStudyAiConversationKey]);
 
   const subject = useMemo(
     () => subjects.find((item) => item.id === subjectId),
@@ -37,6 +45,7 @@ export function TopicLearnPathPage() {
       topicId={topicId}
       topicName={topic?.name}
       subjectName={subject?.name}
+      onBackToTopic={() => navigate(`/subjects/${subjectId}/topics/${topicId}`)}
     />
   );
 }

@@ -11,6 +11,10 @@ import { SessionWidget } from '../features/session';
 
 function useIsExerciseOpen() {
   const { pathname } = useLocation();
+  const isLearnPathRoute =
+    matchPath({ path: '/subjects/:subjectId/topics/:topicId/learnpath', end: true }, pathname) !==
+    null;
+  if (isLearnPathRoute) return false;
   return (
     matchPath({ path: '/assets/:assetId', end: false }, pathname) !== null ||
     matchPath({ path: '/subjects/:subjectId/topics/:topicId/:assetId', end: false }, pathname) !==
