@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import type { InkStroke } from '../domain/models';
 import { pdfjs } from '../features/session/viewer/pdfjs';
 import { inkRepo } from '../repositories';
 import { bboxExpand, bboxUnion } from './geometry';
@@ -73,7 +74,14 @@ export async function renderAttemptCompositePngDataUrl(input: {
     return cached.dataUrl;
   }
 
-  const blob = await renderAttemptCompositePngBlobFromStrokes(input, strokes);
+  const blob = await renderAttemptCompositePngBlobFromStrokes(
+    {
+      pdfData: input.pdfData,
+      maxPdfBytes: input.maxPdfBytes,
+      maxOutputPixels: input.maxOutputPixels,
+    },
+    strokes,
+  );
   const dataUrl = await blobToDataUrl(blob);
   attemptImageDataUrlCache.set(input.attemptId, {
     revisionKey,
@@ -92,17 +100,40 @@ export async function renderAttemptCompositePngBlob(input: {
 }) {
   const strokes = await inkRepo.listByAttempt(input.attemptId);
   if (strokes.length === 0) throw new Error('Keine Ink-Daten für diesen Attempt');
-  return await renderAttemptCompositePngBlobFromStrokes(input, strokes);
+  return await renderAttemptCompositePngBlobFromStrokes(
+    {
+      pdfData: input.pdfData,
+      maxPdfBytes: input.maxPdfBytes,
+      maxOutputPixels: input.maxOutputPixels,
+    },
+    strokes,
+  );
+}
+
+export async function renderStrokesCompositePngBlob(input: {
+  pdfData: Uint8Array;
+  strokes: InkStroke[];
+  maxPdfBytes: number;
+  maxOutputPixels: number;
+}): Promise<Blob> {
+  if (input.strokes.length === 0) throw new Error('Keine Ink-Daten für den Export');
+  return renderAttemptCompositePngBlobFromStrokes(
+    {
+      pdfData: input.pdfData,
+      maxPdfBytes: input.maxPdfBytes,
+      maxOutputPixels: input.maxOutputPixels,
+    },
+    input.strokes,
+  );
 }
 
 async function renderAttemptCompositePngBlobFromStrokes(
   input: {
-    attemptId: string;
     pdfData: Uint8Array;
     maxPdfBytes: number;
     maxOutputPixels: number;
   },
-  strokes: Awaited<ReturnType<typeof inkRepo.listByAttempt>>,
+  strokes: InkStroke[],
 ) {
   const bbox = strokes.map((s) => s.bbox).reduce((acc, b) => bboxUnion(acc, b)) as InkBBox;
   const pad = 24;
@@ -223,28 +254,30 @@ async function renderPdfCropToCanvas(input: {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas context missing');
 
-  // White background so the crop looks like paper.
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const baseVp = input.page.getViewport({ scale: RENDER_SCALE * input.outputScale });
-  const offsetX = -input.crop.x * input.outputScale;
-  const offsetY = -input.crop.y * input.outputScale;
-  const cropVp = (baseVp as unknown as { clone: (o: unknown) => unknown }).clone({
-    offsetX,
-    offsetY,
-    // width/height are accepted by pdfjs viewport clone in recent versions; fallback is harmless.
-    width: input.crop.w * input.outputScale,
-    height: input.crop.h * input.outputScale,
-  }) as unknown;
+  const scale = RENDER_SCALE * input.outputScale;
+  const fullVp = input.page.getViewport({ scale });
+  const temp = document.createElement('canvas');
+  temp.width = Math.max(1, Math.floor(fullVp.width));
+  temp.height = Math.max(1, Math.floor(fullVp.height));
+  const tctx = temp.getContext('2d');
+  if (!tctx) throw new Error('Canvas context missing');
 
-  const renderTask = input.page.render({
-    canvasContext: ctx,
-    viewport: cropVp as never,
-    canvas,
-  });
-  await renderTask.promise;
+  await input.page.render({
+    canvasContext: tctx,
+    viewport: fullVp,
+    canvas: temp,
+  }).promise;
+
+  const sx = input.crop.x * input.outputScale;
+  const sy = input.crop.y * input.outputScale;
+  const sw = input.crop.w * input.outputScale;
+  const sh = input.crop.h * input.outputScale;
+
+  ctx.drawImage(temp, sx, sy, sw, sh, 0, 0, input.canvasW, input.canvasH);
   return canvas;
 }
 

@@ -7,12 +7,12 @@ import { useNotificationsStore } from '../../../../stores/notificationsStore';
 import { sendStudyAiMessage } from '../../ai/aiClient';
 import { appendAttemptAiHelpNote, hasAttemptUsedAiHelp } from '../../review/attemptAiHelp';
 import { useFloatingQuickLogPanelStore } from '../../stores/floatingQuickLogPanelStore';
-import { useStudyStore } from '../../stores/studyStore';
 import {
   useStudyAiChatStore,
   type StudyAiMessage,
   type StudyAiUiMode,
 } from '../../stores/studyAiChatStore';
+import { useStudyStore } from '../../stores/studyStore';
 import { StudyAiFullscreenOverlay } from './components/StudyAiFullscreenOverlay';
 import { StudyAiMorphShell } from './components/StudyAiMorphShell';
 
@@ -187,8 +187,8 @@ export function StudyAiWidget(props: {
       const attemptIdForAiImage = shouldRequireAttemptImage
         ? props.currentAttemptId
         : selectedInkAttemptId && selectedInkAttemptId !== props.currentAttemptId
-        ? selectedInkAttemptId
-        : null;
+          ? selectedInkAttemptId
+          : null;
       let attemptImageDataUrl: string | null = null;
       if (attemptIdForAiImage && props.pdfData) {
         try {
@@ -230,7 +230,9 @@ export function StudyAiWidget(props: {
     setSendError(null);
     failedRequestRef.current = null;
     const latestConversation = getConversation(conversationKey);
-    const lastUser = [...latestConversation.messages].reverse().find((message) => message.role === 'user');
+    const lastUser = [...latestConversation.messages]
+      .reverse()
+      .find((message) => message.role === 'user');
     if (lastUser) setEditingMessageId(lastUser.id);
   };
 

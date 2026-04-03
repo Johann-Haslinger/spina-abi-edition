@@ -27,6 +27,13 @@ export type AppNotification = {
         assetId: string;
         attemptId: string;
       }
+    | {
+        kind: 'retryAttemptReview';
+        subjectId: string;
+        topicId: string;
+        assetId: string;
+        attemptId: string;
+      }
     | undefined;
   createdAtMs: number;
 };

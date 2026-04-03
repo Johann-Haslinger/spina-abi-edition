@@ -1,42 +1,78 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ActionDialog } from '../../../components/ActionDialog';
 import { FullscreenViewerFrame } from '../../../components/FullscreenViewerFrame';
 import { Modal } from '../../../components/Modal';
 import { ViewerIconButton } from '../../../components/ViewerIconButton';
 import type { Asset, AssetFile } from '../../../domain/models';
-import { attemptRepo, assetFileStore, assetRepo, studySessionRepo } from '../../../repositories';
+import { formatAssetFileLabel } from '../../../lib/assetFileLabel';
+import {
+  assetFileStore,
+  assetRepo,
+  attemptRepo,
+  inkRepo,
+  studySessionRepo,
+} from '../../../repositories';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
+import { useAssetsStore } from '../../../stores/assetsStore';
 import { useNotificationsStore } from '../../../stores/notificationsStore';
 import { usePageSurfaceTheme, useSubjectAccentColor } from '../../../ui/hooks/useSubjectColors';
+import { useSubjectTopicLabels } from '../../../ui/hooks/useSubjectTopicLabels';
 import { ErrorPage } from '../../common/ErrorPage';
 import { NotFoundPage } from '../../common/NotFoundPage';
 import { AiErrorReviewPanel } from '../components/AiErrorReviewPanel';
+import { ExerciseAssetHeaderMorph } from '../components/ExerciseAssetHeaderMorph';
 import { FloatingQuickLogPanel } from '../components/FloatingQuickLogPanel';
 import { StudyAiWidget } from '../components/studyAi/StudyAiWidget';
 import { ExerciseReviewModal } from '../modals/ExerciseReviewModal';
 import type { SessionSummaryState } from '../modals/SessionReviewModal';
 import { useStudyHudStore } from '../stores/studyHudStore';
 import { useStudyStore } from '../stores/studyStore';
+import { clearAttemptHistoryForAsset, getAttemptHistoryForAsset } from '../utils/attemptHistory';
 import { AssetViewer } from '../viewer/AssetViewer';
 
 export function StudyPage() {
-  const { assetId } = useParams();
+  const { subjectId: routeSubjectId, assetId } = useParams<{
+    subjectId?: string;
+    assetId: string;
+  }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { active, start, end } = useActiveSessionStore();
   const activeAttemptReview = useNotificationsStore((state) => state.activeAttemptReview);
   const closeAttemptReview = useNotificationsStore((state) => state.closeAttemptReview);
 
-  const { asset, file, pdfData, loading, error } = useStudyAssetData(assetId);
+  const updateAsset = useAssetsStore((s) => s.updateAsset);
+  const deleteAsset = useAssetsStore((s) => s.deleteAsset);
+  const getFile = useAssetsStore((s) => s.getFile);
+  const { asset, file, pdfData, loading, error, refreshAsset } = useStudyAssetData(assetId);
   const [pageNumber, setPageNumber] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [backDialogOpen, setBackDialogOpen] = useState(false);
   const [backDialogBusy, setBackDialogBusy] = useState(false);
-  const [hadAttemptWhileOpen, setHadAttemptWhileOpen] = useState(false);
   const [endedAttemptCountOnOpen, setEndedAttemptCountOnOpen] = useState<number | null>(null);
-  const subjectAccent = useSubjectAccentColor(asset?.subjectId);
-  const pageSurfaceTheme = usePageSurfaceTheme(asset?.subjectId);
+  const [partialResumeDialogOpen, setPartialResumeDialogOpen] = useState(false);
+  const [partialResumeBusy, setPartialResumeBusy] = useState(false);
+  const [partialResumeResolved, setPartialResumeResolved] = useState(false);
+  const [resumeWithHistory, setResumeWithHistory] = useState(false);
+  const [supersededAttemptIds, setSupersededAttemptIds] = useState<ReadonlySet<string> | null>(
+    null,
+  );
+  const [assetHeaderBusy, setAssetHeaderBusy] = useState<'rename' | 'delete' | null>(null);
+  const themeSubjectId = useMemo(
+    () => asset?.subjectId ?? routeSubjectId,
+    [asset?.subjectId, routeSubjectId],
+  );
+  const subjectAccent = useSubjectAccentColor(themeSubjectId);
+  const pageSurfaceTheme = usePageSurfaceTheme(themeSubjectId);
+
+  useEffect(() => {
+    if (!asset?.subjectId) return;
+    const canonical = `/study/${asset.subjectId}/${asset.id}`;
+    if (location.pathname === canonical) return;
+    navigate(`${canonical}${location.search}${location.hash}`, { replace: true });
+  }, [asset, location.hash, location.pathname, location.search, navigate]);
 
   const {
     boundSessionKey,
@@ -45,10 +81,14 @@ export function StudyPage() {
     ensureStudySession,
     loadExerciseStatus,
     setExerciseStatus,
+    setProblemIdx,
+    setSubproblemLabel,
+    setSubsubproblemLabel,
     reset,
     currentAttempt,
     cancelAttempt,
   } = useStudyStore();
+  const exerciseStatusByAssetId = useStudyStore((s) => s.exerciseStatusByAssetId);
 
   const setStudyAiConversationKey = useStudyHudStore((s) => s.setStudyAiConversationKey);
 
@@ -105,18 +145,37 @@ export function StudyPage() {
   }, [guardState.kind, guardState.asset, loadExerciseStatus]);
 
   useEffect(() => {
-    setHadAttemptWhileOpen(false);
     setEndedAttemptCountOnOpen(null);
+    setPartialResumeDialogOpen(false);
+    setPartialResumeBusy(false);
+    setPartialResumeResolved(false);
+    setResumeWithHistory(false);
+    setSupersededAttemptIds(null);
   }, [assetId, boundSessionKey]);
-
-  useEffect(() => {
-    if (currentAttempt?.assetId === assetId) setHadAttemptWhileOpen(true);
-  }, [assetId, currentAttempt]);
 
   const assetForNav =
     guardState.kind === 'ok' || guardState.kind === 'needStart' || guardState.kind === 'needSwitch'
       ? guardState.asset
       : null;
+
+  const { subtitle: assetTopicSubtitle } = useSubjectTopicLabels(
+    assetForNav?.subjectId,
+    assetForNav?.topicId,
+  );
+
+  const getExportStrokes = useCallback(async () => {
+    if (!assetForNav) return [];
+    const history = await getAttemptHistoryForAsset(assetForNav.id);
+    const superseded = history.supersededAttemptIds;
+    if (guardState.kind === 'ok' && studySessionId) {
+      const all = await inkRepo.listBySessionAsset({ studySessionId, assetId: assetForNav.id });
+      return all.filter((s) => !superseded.has(s.attemptId));
+    }
+    const all = await inkRepo.listByAssetId(assetForNav.id);
+    return all.filter((s) => !superseded.has(s.attemptId));
+  }, [assetForNav, guardState.kind, studySessionId]);
+
+  const fileLabel = formatAssetFileLabel(file);
 
   const goToAssetTopic = () => {
     if (!assetForNav) {
@@ -179,6 +238,66 @@ export function StudyPage() {
     };
   }, [guardState.kind, studySessionId, getEndedAttemptCountForExercise]);
 
+  const exerciseStatus =
+    guardState.kind === 'ok'
+      ? (exerciseStatusByAssetId[guardState.asset.id] ?? 'unknown')
+      : 'unknown';
+
+  useEffect(() => {
+    if (guardState.kind !== 'ok') return;
+    if (!studySessionId) return;
+    if (exerciseStatus !== 'partial') return;
+    if (partialResumeResolved) return;
+    if (currentAttempt?.assetId === guardState.asset.id) return;
+    setPartialResumeDialogOpen(true);
+  }, [guardState, studySessionId, exerciseStatus, partialResumeResolved, currentAttempt]);
+
+  useEffect(() => {
+    if (guardState.kind !== 'ok') return;
+    if (!resumeWithHistory) return;
+    let cancelled = false;
+    void (async () => {
+      const history = await getAttemptHistoryForAsset(guardState.asset.id);
+      if (!cancelled) setSupersededAttemptIds(history.supersededAttemptIds);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [guardState, resumeWithHistory, currentAttempt]);
+
+  const onContinuePartialExercise = async () => {
+    if (guardState.kind !== 'ok') return;
+    setPartialResumeBusy(true);
+    try {
+      const history = await getAttemptHistoryForAsset(guardState.asset.id);
+      setSupersededAttemptIds(history.supersededAttemptIds);
+      setResumeWithHistory(true);
+      setPartialResumeResolved(true);
+      setPartialResumeDialogOpen(false);
+    } finally {
+      setPartialResumeBusy(false);
+    }
+  };
+
+  const onRestartPartialExercise = async () => {
+    if (guardState.kind !== 'ok') return;
+    setPartialResumeBusy(true);
+    try {
+      if (currentAttempt?.assetId === guardState.asset.id) cancelAttempt();
+      await clearAttemptHistoryForAsset(guardState.asset.id);
+      await setExerciseStatus(guardState.asset.id, 'unknown');
+      setProblemIdx(1);
+      setSubproblemLabel('a');
+      setSubsubproblemLabel('1');
+      setSupersededAttemptIds(null);
+      setResumeWithHistory(false);
+      setPartialResumeResolved(true);
+      setPartialResumeDialogOpen(false);
+    } finally {
+      setPartialResumeBusy(false);
+    }
+  };
+
   const onPauseAndLeave = async () => {
     if (currentAttempt) cancelAttempt();
     setBackDialogOpen(false);
@@ -226,7 +345,8 @@ export function StudyPage() {
         endedAttemptCountNow > (endedAttemptCountOnOpen ?? endedAttemptCountNow);
       const hasRunningAttemptForAsset = currentAttempt?.assetId === guardState.asset.id;
 
-      if (!hasEndedAttemptWhileOpen && !hasRunningAttemptForAsset && !hadAttemptWhileOpen) {
+      if (!hasEndedAttemptWhileOpen) {
+        if (hasRunningAttemptForAsset) cancelAttempt();
         goToAssetTopic();
         return;
       }
@@ -254,13 +374,48 @@ export function StudyPage() {
     <FullscreenViewerFrame
       surfaceTheme={pageSurfaceTheme}
       overlayLeft={
-        <ViewerIconButton
-          ariaLabel="Zurück"
-          onClick={onBackClick}
-          className="border-white/10 bg-(--app-floating-bg) text-white hover:bg-(--app-floating-solid-bg) active:bg-(--app-floating-solid-bg)"
-        >
-          <IoChevronBack />
-        </ViewerIconButton>
+        <div className="flex max-w-[calc(100vw-3rem)] items-start gap-2">
+          <ViewerIconButton
+            ariaLabel="Zurück"
+            onClick={onBackClick}
+            className="border-white/10 bg-(--app-floating-bg) text-white hover:bg-(--app-floating-solid-bg) active:bg-(--app-floating-solid-bg)"
+          >
+            <IoChevronBack />
+          </ViewerIconButton>
+          {assetForNav ? (
+            <ExerciseAssetHeaderMorph
+              title={assetForNav.title}
+              subtitle={assetTopicSubtitle}
+              fileLabel={fileLabel}
+              assetId={assetForNav.id}
+              assetType={assetForNav.type}
+              loadFile={getFile}
+              getExportStrokes={getExportStrokes}
+              renameBusy={assetHeaderBusy === 'rename'}
+              deleteBusy={assetHeaderBusy === 'delete'}
+              onRename={async (nextTitle) => {
+                setAssetHeaderBusy('rename');
+                try {
+                  await updateAsset(assetForNav.id, assetForNav.topicId, { title: nextTitle });
+                  await refreshAsset();
+                } finally {
+                  setAssetHeaderBusy(null);
+                }
+              }}
+              onDelete={async () => {
+                setAssetHeaderBusy('delete');
+                try {
+                  if (currentAttempt?.assetId === assetForNav.id) cancelAttempt();
+                  await deleteAsset(assetForNav.id, assetForNav.topicId);
+                  reset();
+                  navigate(`/subjects/${assetForNav.subjectId}/topics/${assetForNav.topicId}`);
+                } finally {
+                  setAssetHeaderBusy(null);
+                }
+              }}
+            />
+          ) : null}
+        </div>
       }
     >
       <ActionDialog
@@ -291,6 +446,34 @@ export function StudyPage() {
             label: 'Übung abschließen',
             tone: 'primary',
             onClick: () => void onFinishAndLeave(),
+          },
+        ]}
+      />
+
+      <ActionDialog
+        open={partialResumeDialogOpen}
+        onClose={goToAssetTopic}
+        busy={partialResumeBusy}
+        title="Teilweise bearbeitete Übung"
+        message="Möchtest du an deinem bisherigen Stand weitermachen oder die Übung neu anfangen?"
+        actions={[
+          {
+            key: 'cancel',
+            label: 'Abbrechen',
+            tone: 'neutral',
+            onClick: goToAssetTopic,
+          },
+          {
+            key: 'restart',
+            label: 'Neu anfangen',
+            tone: 'danger',
+            onClick: () => void onRestartPartialExercise(),
+          },
+          {
+            key: 'continue',
+            label: 'Weitermachen',
+            tone: 'primary',
+            onClick: () => void onContinuePartialExercise(),
           },
         ]}
       />
@@ -368,14 +551,23 @@ export function StudyPage() {
               accentColor={subjectAccent}
               ink={
                 studySessionId
-                  ? {
-                      studySessionId,
-                      assetId: guardState.asset.id,
-                      activeAttemptId: currentAttempt?.attemptId ?? null,
-                      studyAiConversationKey: boundSessionKey
-                        ? `${boundSessionKey}:${guardState.asset.id}`
-                        : null,
-                    }
+                  ? resumeWithHistory
+                    ? {
+                        kind: 'asset',
+                        studySessionId,
+                        assetId: guardState.asset.id,
+                        activeAttemptId: currentAttempt?.attemptId ?? null,
+                        readonly: false,
+                        supersededAttemptIds,
+                        studyAiConversationKey,
+                      }
+                    : {
+                        kind: 'session',
+                        studySessionId,
+                        assetId: guardState.asset.id,
+                        activeAttemptId: currentAttempt?.attemptId ?? null,
+                        studyAiConversationKey,
+                      }
                   : null
               }
             />
@@ -441,17 +633,19 @@ function useStudyAssetData(assetId: string | undefined) {
 
   useEffect(() => {
     let cancelled = false;
-    async function run() {
+    void (async () => {
       if (!assetId) return;
       setLoading(true);
       setError(null);
       try {
         const a = await assetRepo.get(assetId);
-        if (!cancelled) setAsset(a ?? null);
+        if (cancelled) return;
+        setAsset(a ?? null);
 
         if (a) {
           const f = await assetFileStore.get(a.id);
-          if (!cancelled && f) {
+          if (cancelled) return;
+          if (f) {
             setFile(f);
             const isPdf =
               f.mimeType === 'application/pdf' || f.originalName.toLowerCase().endsWith('.pdf');
@@ -461,11 +655,11 @@ function useStudyAssetData(assetId: string | undefined) {
             } else {
               setPdfData(null);
             }
-          } else if (!cancelled) {
+          } else {
             setFile(null);
             setPdfData(null);
           }
-        } else if (!cancelled) {
+        } else {
           setFile(null);
           setPdfData(null);
         }
@@ -474,12 +668,41 @@ function useStudyAssetData(assetId: string | undefined) {
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }
-    void run();
+    })();
     return () => {
       cancelled = true;
     };
   }, [assetId]);
 
-  return { asset, file, pdfData, loading, error };
+  const refreshAsset = useCallback(async () => {
+    if (!assetId) return;
+    try {
+      const a = await assetRepo.get(assetId);
+      setAsset(a ?? null);
+      if (a) {
+        const f = await assetFileStore.get(a.id);
+        if (f) {
+          setFile(f);
+          const isPdf =
+            f.mimeType === 'application/pdf' || f.originalName.toLowerCase().endsWith('.pdf');
+          if (isPdf) {
+            const buf = await f.blob.arrayBuffer();
+            setPdfData(new Uint8Array(buf).slice(0));
+          } else {
+            setPdfData(null);
+          }
+        } else {
+          setFile(null);
+          setPdfData(null);
+        }
+      } else {
+        setFile(null);
+        setPdfData(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler');
+    }
+  }, [assetId]);
+
+  return { asset, file, pdfData, loading, error, refreshAsset };
 }

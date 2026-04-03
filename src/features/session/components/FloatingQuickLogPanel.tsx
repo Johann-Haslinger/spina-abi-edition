@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useDragControls, useMotionValue } from 'framer-motion';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActionDialog } from '../../../components/ActionDialog';
 import { renderAttemptCompositePngDataUrl } from '../../../ink/attemptComposite';
 import { useActiveSessionStore } from '../../../stores/activeSessionStore';
 import { startAttemptAutoReview } from '../review/processAttemptReview';
@@ -70,6 +71,7 @@ export function FloatingQuickLogPanel(props: {
   const dragControls = useDragControls();
   const x = useMotionValue(storedX);
   const y = useMotionValue(storedY);
+  const [finishExerciseDialogOpen, setFinishExerciseDialogOpen] = useState(false);
 
   const { viewHeightPx, viewWidthPx } = usePanelDimensions();
 
@@ -154,6 +156,31 @@ export function FloatingQuickLogPanel(props: {
 
   return (
     <div className="fixed inset-0 z-9999 pointer-events-none">
+      <ActionDialog
+        open={finishExerciseDialogOpen}
+        onClose={() => setFinishExerciseDialogOpen(false)}
+        title="Übung beenden?"
+        message="Möchtest du die Übung jetzt beenden oder lieber weiter üben?"
+        actions={[
+          {
+            key: 'continue',
+            label: 'Weiter üben',
+            tone: 'neutral',
+            onClick: () => setFinishExerciseDialogOpen(false),
+          },
+          {
+            key: 'finish',
+            label: 'Beenden',
+            tone: 'primary',
+            onClick: async () => {
+              await setExerciseStatus(props.assetId, 'covered');
+              props.onOpenExerciseReview();
+              setFinishExerciseDialogOpen(false);
+              setView('start');
+            },
+          },
+        ]}
+      />
       <motion.div
         className="absolute bottom-6 right-6 pointer-events-auto touch-none"
         variants={HUD_VARIANTS_BOTTOM_RIGHT}
@@ -289,11 +316,7 @@ export function FloatingQuickLogPanel(props: {
                         props.onOpenExerciseReview();
                         setView('start');
                       }}
-                      onFinishExercise={async () => {
-                        await setExerciseStatus(props.assetId, 'covered');
-                        props.onOpenExerciseReview();
-                        setView('start');
-                      }}
+                      onFinishExercise={() => setFinishExerciseDialogOpen(true)}
                     />
                   ) : null}
                 </div>
@@ -339,25 +362,23 @@ function useResetPanelViewOnAttemptEnd(input: {
   view: PanelView;
   setView: (v: PanelView) => void;
 }) {
+  const { currentAttempt, view, setView } = input;
   useEffect(() => {
-    if (!input.currentAttempt) {
-      if (
-        input.view === 'progress' ||
-        input.view === 'progressDetails' ||
-        input.view === 'review'
-      ) {
-        input.setView('start');
+    if (!currentAttempt) {
+      if (view === 'progress' || view === 'progressDetails' || view === 'review') {
+        setView('start');
       }
     }
-  }, [input.currentAttempt, input.setView, input.view]);
+  }, [currentAttempt, setView, view]);
 }
 
 function useLoadAssetTaskDepth(input: {
   assetId: string;
   loadTaskDepth: (assetId: string) => Promise<void>;
 }) {
+  const { assetId, loadTaskDepth } = input;
   useEffect(() => {
-    if (!input.assetId) return;
-    void input.loadTaskDepth(input.assetId);
-  }, [input.assetId, input.loadTaskDepth]);
+    if (!assetId) return;
+    void loadTaskDepth(assetId);
+  }, [assetId, loadTaskDepth]);
 }

@@ -1,24 +1,54 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoChevronBack, IoInformationCircle, IoPlay } from 'react-icons/io5';
 import { useNavigate } from 'react-router-dom';
 import { FullscreenViewerFrame } from '../../../../components/FullscreenViewerFrame';
 import { ViewerIconButton } from '../../../../components/ViewerIconButton';
 import type { Asset, AssetFile } from '../../../../domain/models';
-import { assetFileStore, assetRepo } from '../../../../repositories';
+import { useInkStore } from '../../../../ink/inkStore';
+import { formatAssetFileLabel } from '../../../../lib/assetFileLabel';
+import { assetFileStore, assetRepo, inkRepo } from '../../../../repositories';
 import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
+import { useAssetsStore } from '../../../../stores/assetsStore';
 import { usePageSurfaceTheme, useSubjectAccentColor } from '../../../../ui/hooks/useSubjectColors';
+import { useSubjectTopicLabels } from '../../../../ui/hooks/useSubjectTopicLabels';
 import { ErrorPage } from '../../../common/ErrorPage';
 import { NotFoundPage } from '../../../common/NotFoundPage';
+import { ExerciseAssetHeaderMorph } from '../../../session/components/ExerciseAssetHeaderMorph';
+import { getAttemptHistoryForAsset } from '../../../session/utils/attemptHistory';
 import { AssetViewer } from '../../../session/viewer/AssetViewer';
 
 export function ExerciseAssetView(props: { assetId: string }) {
   const navigate = useNavigate();
   const { active, start, end } = useActiveSessionStore();
 
-  const { asset, file, pdfData, loading, error } = useExerciseAssetData(props.assetId);
+  const updateAsset = useAssetsStore((s) => s.updateAsset);
+  const deleteAsset = useAssetsStore((s) => s.deleteAsset);
+  const getFile = useAssetsStore((s) => s.getFile);
+  const { asset, file, pdfData, loading, error, refreshAsset } = useExerciseAssetData(
+    props.assetId,
+  );
+  const [assetHeaderBusy, setAssetHeaderBusy] = useState<'rename' | 'delete' | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
+  const [supersededAttemptIds, setSupersededAttemptIds] = useState<ReadonlySet<string> | null>(
+    null,
+  );
   const subjectAccent = useSubjectAccentColor(asset?.subjectId);
   const pageSurfaceTheme = usePageSurfaceTheme(asset?.subjectId);
+  const clearInkContext = useInkStore((s) => s.setContext);
+  const hydrateInk = useInkStore((s) => s.hydrate);
+
+  const { subtitle: assetTopicSubtitle } = useSubjectTopicLabels(asset?.subjectId, asset?.topicId);
+
+  const getExportStrokes = useCallback(async () => {
+    if (!asset || asset.type !== 'exercise') return [];
+    let superseded = supersededAttemptIds;
+    if (!superseded) {
+      const h = await getAttemptHistoryForAsset(asset.id);
+      superseded = h.supersededAttemptIds;
+    }
+    const all = await inkRepo.listByAssetId(asset.id);
+    return all.filter((s) => !superseded.has(s.attemptId));
+  }, [asset, supersededAttemptIds]);
 
   const state = useMemo(() => {
     if (loading) return { kind: 'loading' as const };
@@ -28,6 +58,24 @@ export function ExerciseAssetView(props: { assetId: string }) {
 
     return { kind: 'ready' as const, asset };
   }, [loading, error, asset]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const history = await getAttemptHistoryForAsset(props.assetId);
+      if (!cancelled) setSupersededAttemptIds(history.supersededAttemptIds);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.assetId]);
+
+  useEffect(() => {
+    return () => {
+      clearInkContext(null);
+      hydrateInk([]);
+    };
+  }, [clearInkContext, hydrateInk]);
 
   if (state.kind === 'notfound') return <NotFoundPage />;
   if (state.kind === 'loading')
@@ -46,6 +94,8 @@ export function ExerciseAssetView(props: { assetId: string }) {
 
   const a = state.asset;
 
+  const fileLabel = formatAssetFileLabel(file);
+
   function startSession() {
     if (!a) return;
     if (active && (active.subjectId !== a.subjectId || active.topicId !== a.topicId)) {
@@ -54,16 +104,47 @@ export function ExerciseAssetView(props: { assetId: string }) {
     if (!active || active.subjectId !== a.subjectId || active.topicId !== a.topicId) {
       start({ subjectId: a.subjectId, topicId: a.topicId });
     }
-    navigate(`/study/${a.id}`);
+    navigate(`/study/${a.subjectId}/${a.id}`);
   }
 
   return (
     <FullscreenViewerFrame
       surfaceTheme={pageSurfaceTheme}
       overlayLeft={
-        <ViewerIconButton ariaLabel="Zurück" onClick={() => navigate(-1)}>
-          <IoChevronBack />
-        </ViewerIconButton>
+        <div className="flex max-w-[calc(100vw-3rem)] items-start gap-2">
+          <ViewerIconButton ariaLabel="Zurück" onClick={() => navigate(-1)}>
+            <IoChevronBack />
+          </ViewerIconButton>
+          <ExerciseAssetHeaderMorph
+            title={a.title}
+            subtitle={assetTopicSubtitle}
+            fileLabel={fileLabel}
+            assetId={a.id}
+            assetType={a.type}
+            loadFile={getFile}
+            getExportStrokes={getExportStrokes}
+            renameBusy={assetHeaderBusy === 'rename'}
+            deleteBusy={assetHeaderBusy === 'delete'}
+            onRename={async (nextTitle) => {
+              setAssetHeaderBusy('rename');
+              try {
+                await updateAsset(a.id, a.topicId, { title: nextTitle });
+                await refreshAsset();
+              } finally {
+                setAssetHeaderBusy(null);
+              }
+            }}
+            onDelete={async () => {
+              setAssetHeaderBusy('delete');
+              try {
+                await deleteAsset(a.id, a.topicId);
+                navigate(`/subjects/${a.subjectId}/topics/${a.topicId}`);
+              } finally {
+                setAssetHeaderBusy(null);
+              }
+            }}
+          />
+        </div>
       }
       overlayRight={
         <>
@@ -84,6 +165,13 @@ export function ExerciseAssetView(props: { assetId: string }) {
           pageNumber={pageNumber}
           onPageNumberChange={setPageNumber}
           accentColor={subjectAccent}
+          ink={{
+            kind: 'asset',
+            assetId: a.id,
+            readonly: true,
+            activeAttemptId: null,
+            supersededAttemptIds,
+          }}
         />
       ) : (
         <div className="absolute inset-0 grid place-items-center p-4">
@@ -144,5 +232,34 @@ function useExerciseAssetData(assetId: string) {
     };
   }, [assetId]);
 
-  return { asset, file, pdfData, loading, error };
+  const refreshAsset = useCallback(async () => {
+    try {
+      const row = await assetRepo.get(assetId);
+      setAsset(row ?? null);
+      if (row) {
+        const f = await assetFileStore.get(row.id);
+        if (f) {
+          setFile(f);
+          const isPdf =
+            f.mimeType === 'application/pdf' || f.originalName.toLowerCase().endsWith('.pdf');
+          if (isPdf) {
+            const buf = await f.blob.arrayBuffer();
+            setPdfData(new Uint8Array(buf).slice(0));
+          } else {
+            setPdfData(null);
+          }
+        } else {
+          setFile(null);
+          setPdfData(null);
+        }
+      } else {
+        setFile(null);
+        setPdfData(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Fehler');
+    }
+  }, [assetId]);
+
+  return { asset, file, pdfData, loading, error, refreshAsset };
 }

@@ -1,18 +1,22 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Subject } from '../../domain/models';
+import { subjectRepo } from '../../repositories';
 import { useSubjectsStore } from '../../stores/subjectsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { resolveSubjectHex } from '../subjectColorResolvers';
 import { DEFAULT_SUBJECT_COLOR } from '../subjectColors';
-import {
-  resolveNeutralSurfaceTheme,
-  resolveSubjectSurfaceTheme,
-} from '../subjectThemeSurfaces';
+import { readCachedSubject, writeCachedSubject } from '../subjectThemeCache';
+import { resolveNeutralSurfaceTheme, resolveSubjectSurfaceTheme } from '../subjectThemeSurfaces';
 
 export function useSubjectFromParam(subjectOrId?: Subject | string): Subject | undefined {
   const subjects = useSubjectsStore((s) => s.subjects);
   const loading = useSubjectsStore((s) => s.loading);
   const refresh = useSubjectsStore((s) => s.refresh);
+  const [fetchedSubject, setFetchedSubject] = useState<Subject | undefined>(undefined);
+  const cachedSubject = useMemo(
+    () => (typeof subjectOrId === 'string' ? readCachedSubject(subjectOrId) : undefined),
+    [subjectOrId],
+  );
 
   useEffect(() => {
     if (typeof subjectOrId !== 'string') return;
@@ -20,8 +24,42 @@ export function useSubjectFromParam(subjectOrId?: Subject | string): Subject | u
     void refresh();
   }, [loading, refresh, subjectOrId, subjects.length]);
 
+  useEffect(() => {
+    if (typeof subjectOrId !== 'string') {
+      setFetchedSubject(undefined);
+      return;
+    }
+    if (subjects.some((s) => s.id === subjectOrId)) {
+      setFetchedSubject(undefined);
+      return;
+    }
+
+    let cancelled = false;
+    void subjectRepo.get(subjectOrId).then((row) => {
+      if (cancelled) return;
+      const inStore = useSubjectsStore.getState().subjects.some((s) => s.id === subjectOrId);
+      if (inStore) return;
+      setFetchedSubject(row);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [subjectOrId, subjects]);
+
+  useEffect(() => {
+    if (!subjectOrId) return;
+    if (typeof subjectOrId !== 'string') {
+      writeCachedSubject(subjectOrId);
+      return;
+    }
+    const subject = subjects.find((s) => s.id === subjectOrId) ?? fetchedSubject ?? cachedSubject;
+    writeCachedSubject(subject);
+  }, [cachedSubject, fetchedSubject, subjectOrId, subjects]);
+
   if (!subjectOrId) return undefined;
-  if (typeof subjectOrId === 'string') return subjects.find((s) => s.id === subjectOrId);
+  if (typeof subjectOrId === 'string') {
+    return subjects.find((s) => s.id === subjectOrId) ?? fetchedSubject ?? cachedSubject;
+  }
   return subjectOrId;
 }
 

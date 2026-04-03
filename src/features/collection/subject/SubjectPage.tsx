@@ -122,7 +122,7 @@ export function SubjectPage() {
                   return;
                 }
                 start({ subjectId, topicId: next.topicId });
-                navigate(`/study/${next.assetId}`);
+                navigate(`/study/${subjectId}/${next.assetId}`);
               }}
               className="text-sm"
             >

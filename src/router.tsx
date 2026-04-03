@@ -11,8 +11,8 @@ import {
 } from './features/collection';
 import { NotFoundPage } from './features/common';
 import { DashboardPage } from './features/dashboard';
-import { StudyPage } from './features/session';
 import { PlanningPage } from './features/planning';
+import { StudyPage } from './features/session';
 
 export const router = createBrowserRouter([
   {
@@ -44,6 +44,11 @@ export const router = createBrowserRouter([
         handle: { crumb: 'asset' },
       },
       { path: '/assets/:assetId', element: <AssetPage />, handle: { crumb: 'asset' } },
+      {
+        path: '/study/:subjectId/:assetId',
+        element: <StudyPage />,
+        handle: { crumb: 'study' },
+      },
       { path: '/study/:assetId', element: <StudyPage />, handle: { crumb: 'study' } },
       { path: '*', element: <NotFoundPage /> },
     ],

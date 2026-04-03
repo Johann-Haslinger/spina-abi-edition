@@ -170,7 +170,7 @@ export function TopicPage() {
         subjectId,
         topicId,
       };
-      if (active) navigate(`/study/${asset.id}`, { state: navState });
+      if (active) navigate(`/study/${subjectId}/${asset.id}`, { state: navState });
       else navigate(`${location.pathname.replace(/\/$/, '')}/${asset.id}`, { state: navState });
       return;
     }

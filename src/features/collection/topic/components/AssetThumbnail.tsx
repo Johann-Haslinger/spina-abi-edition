@@ -151,8 +151,9 @@ export function AssetThumbnail(props: {
   assetType: AssetType;
   title: string;
   loadFile: (assetId: string) => Promise<AssetFile | undefined>;
+  className?: string;
 }) {
-  const { assetId, title, loadFile } = props;
+  const { assetId, title, loadFile, className } = props;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(() => thumbnailCache.has(assetId));
   const [loading, setLoading] = useState(() => shouldLoad && !thumbnailCache.has(assetId));
@@ -214,7 +215,10 @@ export function AssetThumbnail(props: {
   return (
     <div
       ref={containerRef}
-      className="relative shadow-lg group-hover:scale-105 active:scale-95 transition-all duration-300 h-24 w-16 overflow-hidden rounded-md"
+      className={`
+        relative shadow-lg group-hover:scale-105 active:scale-95 transition-all duration-300 h-24 w-16 overflow-hidden rounded-md
+        ${className}
+      `}
     >
       {thumbnail?.src ? (
         <img

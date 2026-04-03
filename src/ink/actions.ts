@@ -5,15 +5,25 @@ import type { InkStroke } from './types';
 
 export function useInkActions() {
   const exec = useInkStore((s) => s.exec);
+  const hydrate = useInkStore((s) => s.hydrate);
   const undo = useInkStore((s) => s.undo);
   const redo = useInkStore((s) => s.redo);
 
   const commitStroke = useCallback(
     async (stroke: InkStroke) => {
-      await inkRepo.upsert(stroke);
       exec({ kind: 'add', stroke });
+      try {
+        await inkRepo.upsert(stroke);
+      } catch (error) {
+        const context = useInkStore.getState().context;
+        if (context) {
+          const persistedStrokes = await inkRepo.listBySessionAsset(context);
+          hydrate(persistedStrokes);
+        }
+        throw error;
+      }
     },
-    [exec],
+    [exec, hydrate],
   );
 
   const deleteStrokes = useCallback(

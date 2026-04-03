@@ -1,8 +1,22 @@
 import { useEffect, useMemo } from 'react';
 import type { AssetFile } from '../../../domain/models';
+import type { InkHydrateInput } from '../../../ink/persist';
 import { ErrorPage } from '../../common/ErrorPage';
 import { ImagePanZoomViewer } from './ImagePanZoomViewer';
 import { PdfCanvasViewer } from './PdfCanvasViewer';
+
+export type AssetViewerInk =
+  | ({
+      kind: 'session';
+      activeAttemptId: string | null;
+      studyAiConversationKey?: string | null;
+    } & Extract<InkHydrateInput, { kind: 'session' }>)
+  | ({
+      kind: 'asset';
+      activeAttemptId?: string | null;
+      readonly: boolean;
+      studyAiConversationKey?: string | null;
+    } & Extract<InkHydrateInput, { kind: 'asset' }>);
 
 export function AssetViewer(props: {
   title: string;
@@ -11,12 +25,7 @@ export function AssetViewer(props: {
   pageNumber: number;
   onPageNumberChange: (n: number) => void;
   accentColor?: string;
-  ink?: {
-    studySessionId: string;
-    assetId: string;
-    activeAttemptId: string | null;
-    studyAiConversationKey?: string | null;
-  } | null;
+  ink?: AssetViewerInk | null;
 }) {
   const mime = props.file.mimeType || '';
   const isPdf =

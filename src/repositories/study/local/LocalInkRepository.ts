@@ -12,6 +12,10 @@ export class LocalInkRepository {
       .toArray();
   }
 
+  async listByAssetId(assetId: string): Promise<InkStroke[]> {
+    return db.inkStrokes.where('assetId').equals(assetId).toArray();
+  }
+
   async upsert(stroke: InkStroke): Promise<void> {
     await db.inkStrokes.put(stroke);
   }
@@ -28,6 +32,11 @@ export class LocalInkRepository {
 
   async deleteByAttempt(attemptId: string): Promise<void> {
     await db.inkStrokes.where('attemptId').equals(attemptId).delete();
+  }
+
+  async deleteByAttemptIds(attemptIds: string[]): Promise<void> {
+    if (attemptIds.length === 0) return;
+    await db.inkStrokes.where('attemptId').anyOf(attemptIds).delete();
   }
 
   async listByAttempt(attemptId: string): Promise<InkStroke[]> {

@@ -1,6 +1,8 @@
 import { db } from '../../../db/db';
 import type { Requirement } from '../../../domain/models';
+import { renderAttemptCompositePngDataUrl } from '../../../ink/attemptComposite';
 import {
+  assetFileStore,
   attemptAiReviewRepo,
   attemptRepo,
   attemptRequirementLinkRepo,
@@ -27,6 +29,50 @@ export function startAttemptAutoReview(input: {
   void runAttemptAutoReview(input);
 }
 
+export async function retryAttemptReviewFromNotification(input: {
+  attemptId: string;
+  assetId: string;
+  subjectId: string;
+  topicId: string;
+}) {
+  const attempt = await attemptRepo.get(input.attemptId);
+  if (!attempt) throw new Error('Versuch nicht gefunden.');
+
+  const file = await assetFileStore.get(input.assetId);
+  if (!file) throw new Error('Aufgabendatei nicht gefunden.');
+  const isPdf =
+    file.mimeType === 'application/pdf' || file.originalName.toLowerCase().endsWith('.pdf');
+  if (!isPdf) throw new Error('Erneut versuchen wird aktuell nur für PDF-Aufgaben unterstützt.');
+
+  const row = (
+    await attemptRepo.listForSessionAsset({
+      studySessionId: attempt.studySessionId,
+      assetId: input.assetId,
+    })
+  ).find((entry) => entry.attempt.id === input.attemptId);
+  if (!row) throw new Error('Aufgabenkontext für den Versuch konnte nicht geladen werden.');
+
+  const pdfData = new Uint8Array(await file.blob.arrayBuffer());
+  const attemptImageDataUrl = await renderAttemptCompositePngDataUrl({
+    attemptId: input.attemptId,
+    pdfData,
+    maxPdfBytes: 12 * 1024 * 1024,
+    maxOutputPixels: 12_000_000,
+  });
+
+  startAttemptAutoReview({
+    attemptId: input.attemptId,
+    assetId: input.assetId,
+    subjectId: input.subjectId,
+    topicId: input.topicId,
+    pdfData,
+    attemptImageDataUrl,
+    problemIdx: row.problemIdx,
+    subproblemLabel: row.subproblemLabel,
+    subsubproblemLabel: row.subsubproblemLabel,
+  });
+}
+
 async function runAttemptAutoReview(input: {
   attemptId: string;
   assetId: string;
@@ -41,14 +87,28 @@ async function runAttemptAutoReview(input: {
   const notifications = useNotificationsStore.getState();
   const requestedAtMs = Date.now();
 
-  await attemptReviewJobRepo.create({
-    attemptId: input.attemptId,
-    assetId: input.assetId,
-    subjectId: input.subjectId,
-    topicId: input.topicId,
-    status: 'queued',
-    requestedAtMs,
-  });
+  const existingJob = await attemptReviewJobRepo.getByAttempt(input.attemptId);
+  if (existingJob) {
+    await attemptReviewJobRepo.update(existingJob.id, {
+      assetId: input.assetId,
+      subjectId: input.subjectId,
+      topicId: input.topicId,
+      status: 'queued',
+      requestedAtMs,
+      completedAtMs: undefined,
+      error: undefined,
+      manualFallbackReason: undefined,
+    });
+  } else {
+    await attemptReviewJobRepo.create({
+      attemptId: input.attemptId,
+      assetId: input.assetId,
+      subjectId: input.subjectId,
+      topicId: input.topicId,
+      status: 'queued',
+      requestedAtMs,
+    });
+  }
   await attemptRepo.update(input.attemptId, { reviewStatus: 'queued' });
 
   try {
@@ -199,6 +259,13 @@ async function runAttemptAutoReview(input: {
       tone: 'error',
       title: 'KI-Bewertung fehlgeschlagen',
       message: 'Bitte bewerte diese Aufgabe manuell im Review.',
+      action: {
+        kind: 'retryAttemptReview',
+        attemptId: input.attemptId,
+        assetId: input.assetId,
+        subjectId: input.subjectId,
+        topicId: input.topicId,
+      },
     });
   }
 }
@@ -233,13 +300,14 @@ function resolveRequirements(
         : null;
     })
     .filter(
-      (entry): entry is {
+      (
+        entry,
+      ): entry is {
         requirement: Requirement;
         confidence: number;
         masteryDelta: number;
         percent: number;
-      } =>
-        Boolean(entry),
+      } => Boolean(entry),
     );
 }
 

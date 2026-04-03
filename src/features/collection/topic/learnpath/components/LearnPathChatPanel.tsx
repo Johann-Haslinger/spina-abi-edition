@@ -17,6 +17,10 @@ import type {
   RequirementPlanStep,
 } from '../types';
 import { LearnPathExerciseRenderer } from './LearnPathExerciseRenderer';
+import {
+  LearnPathFlashcardPreview,
+  type LearnPathFlashcardPreviewItem,
+} from './LearnPathFlashcardPreview';
 import { LearnPathOverviewPanel } from './LearnPathOverviewPanel';
 
 export function LearnPathChatPanel(props: {
@@ -36,13 +40,7 @@ export function LearnPathChatPanel(props: {
   activePlan: RequirementPlan | null;
   activeStep?: RequirementPlanStep;
   overviewItems: LearnPathRequirementOverviewItem[];
-  generatedFlashcards: Array<{
-    id: string;
-    front: string;
-    back: string;
-    chapterId?: string;
-    requirementId?: string;
-  }>;
+  generatedFlashcards: LearnPathFlashcardPreviewItem[];
   completionBusy: boolean;
   completionError: string | null;
   nextRequirementAvailable: boolean;
@@ -125,45 +123,10 @@ export function LearnPathChatPanel(props: {
             {state.messages.map((message) => (
               <LearnPathChatMessage key={message.id} message={message} />
             ))}
-            {props.generatedFlashcards.length > 0 ? (
-              <div className="space-y-3 rounded-4xl border border-white/8 bg-white/4 p-4">
-                <div className="text-sm font-medium text-white">Generierte Karteikarten</div>
-                <div className="text-sm -mt-1 pb-2 text-white/65">
-                  Du kannst die Karten vor dem Speichern noch anpassen.
-                </div>
-                {props.generatedFlashcards.map((flashcard) => {
-                  return (
-                    <div
-                      key={flashcard.id}
-                      className="space-y-3 divide-y divide-white/10 rounded-3xl border border-white/8 bg-black/15 p-4"
-                    >
-                      <textarea
-                        value={flashcard.front}
-                        rows={3}
-                        onChange={(event) =>
-                          props.onUpdateGeneratedFlashcard(flashcard.id, {
-                            front: event.currentTarget.value,
-                          })
-                        }
-                        className="w-full text-sm text-white outline-none"
-                        placeholder="Vorderseite"
-                      />
-                      <textarea
-                        value={flashcard.back}
-                        rows={4}
-                        onChange={(event) =>
-                          props.onUpdateGeneratedFlashcard(flashcard.id, {
-                            back: event.currentTarget.value,
-                          })
-                        }
-                        className="w-full text-sm text-white outline-none"
-                        placeholder="Rueckseite"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
+            <LearnPathFlashcardPreview
+              flashcards={props.generatedFlashcards}
+              onUpdate={props.onUpdateGeneratedFlashcard}
+            />
             {state.interactionSurface === 'exercise' && state.exerciseState.exercise ? (
               <div className="pt-2">
                 <LearnPathExerciseRenderer

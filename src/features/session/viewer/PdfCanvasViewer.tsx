@@ -6,6 +6,7 @@ import { InkOverlay } from '../../../ink/InkOverlay';
 import { InkToolbar } from '../components/ink/InkToolbar';
 import { HUD_VARIANTS_DOWN } from '../components/studyHud/hudMotion';
 import { useStudyHudVisibility } from '../stores/studyHudStore';
+import type { AssetViewerInk } from './AssetViewer';
 import { pdfjs } from './pdfjs';
 import { clamp, INITIAL_TOP_MARGIN } from './viewerUtils';
 
@@ -14,12 +15,7 @@ type PdfCanvasViewerProps = {
   pageNumber: number;
   onPageNumberChange: (next: number) => void;
   accentColor?: string;
-  ink?: {
-    studySessionId: string;
-    assetId: string;
-    activeAttemptId: string | null;
-    studyAiConversationKey?: string | null;
-  } | null;
+  ink?: AssetViewerInk | null;
 };
 
 type Point = { x: number; y: number };
@@ -611,16 +607,34 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
         {!showLoadingOverlay && props.ink ? (
           <InkOverlay
             containerRef={containerRef}
-            studySessionId={props.ink.studySessionId}
-            assetId={props.ink.assetId}
-            activeAttemptId={props.ink.activeAttemptId}
+            hydrateInput={
+              props.ink.kind === 'session'
+                ? {
+                    kind: 'session',
+                    studySessionId: props.ink.studySessionId,
+                    assetId: props.ink.assetId,
+                    supersededAttemptIds: props.ink.supersededAttemptIds,
+                  }
+                : {
+                    kind: 'asset',
+                    assetId: props.ink.assetId,
+                    studySessionId: props.ink.studySessionId,
+                    supersededAttemptIds: props.ink.supersededAttemptIds,
+                  }
+            }
+            activeAttemptId={
+              props.ink.kind === 'session'
+                ? props.ink.activeAttemptId
+                : (props.ink.activeAttemptId ?? null)
+            }
+            readonly={props.ink.kind === 'asset' ? props.ink.readonly : false}
             pan={pan}
             ratio={ratio}
           />
         ) : null}
 
         <AnimatePresence initial={false}>
-          {props.ink ? (
+          {props.ink && (props.ink.kind === 'session' || !props.ink.readonly) ? (
             <motion.div
               key="ink-toolbar"
               className="fixed inset-0 z-50 pointer-events-none"
@@ -635,7 +649,7 @@ export function PdfCanvasViewer(props: PdfCanvasViewerProps) {
                 style={{ pointerEvents: suppressNonStudyAi ? 'none' : 'auto' }}
               >
                 <InkToolbar
-                  activeAttemptId={props.ink.activeAttemptId}
+                  activeAttemptId={props.ink.activeAttemptId ?? null}
                   studyAiConversationKey={props.ink.studyAiConversationKey ?? null}
                 />
               </div>

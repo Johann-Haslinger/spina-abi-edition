@@ -1,4 +1,4 @@
-import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useStudyStore } from '../features/session/stores/studyStore';
 import { formatTaskPath } from '../features/session/utils/formatTaskPath';
 import { newId } from '../lib/id';
@@ -6,7 +6,7 @@ import { attemptRepo, inkRepo } from '../repositories';
 import { useInkActions } from './actions';
 import { bboxContains, bboxExpand, bboxFromPoints, bboxUnion, dist2 } from './geometry';
 import { inkMinDistWorld, toWorldPoint, useInkStore } from './inkStore';
-import { useInkHydrate } from './persist';
+import { useInkHydrate, type InkHydrateInput } from './persist';
 import { drawStrokeFill } from './stroke';
 import type { InkBrush, InkPoint, InkStroke } from './types';
 
@@ -21,16 +21,13 @@ function isProbablyIpad() {
 
 export function InkOverlay(props: {
   containerRef: RefObject<HTMLDivElement | null>;
-  studySessionId: string;
-  assetId: string;
+  hydrateInput: InkHydrateInput;
   activeAttemptId: string | null;
+  readonly?: boolean;
   pan: Point;
   ratio: number;
 }) {
-  const hydrateCtx = useMemo(
-    () => ({ studySessionId: props.studySessionId, assetId: props.assetId }),
-    [props.studySessionId, props.assetId],
-  );
+  const hydrateCtx = useMemo(() => props.hydrateInput, [props.hydrateInput]);
   useInkHydrate(hydrateCtx);
 
   const setActiveAttemptId = useInkStore((s) => s.setActiveAttemptId);
@@ -55,11 +52,13 @@ export function InkOverlay(props: {
   const loadTaskDepth = useStudyStore((s) => s.loadTaskDepth);
 
   const { commitStroke, deleteStrokes } = useInkActions();
+  const assetId = props.hydrateInput.assetId;
+  const isReadonly = props.readonly === true;
 
   useEffect(() => {
-    setActiveAttemptId(props.activeAttemptId);
-    if (!props.activeAttemptId) clearSelection();
-  }, [props.activeAttemptId, setActiveAttemptId, clearSelection]);
+    setActiveAttemptId(isReadonly ? null : props.activeAttemptId);
+    if (isReadonly || !props.activeAttemptId) clearSelection();
+  }, [props.activeAttemptId, setActiveAttemptId, clearSelection, isReadonly]);
 
   const prevStrokesLenRef = useRef(0);
   useEffect(() => {
@@ -100,10 +99,10 @@ export function InkOverlay(props: {
   }, [size.w, size.h, dpr]);
 
   useEffect(() => {
-    if (!props.assetId) return;
-    if (taskDepthByAssetId[props.assetId] !== undefined) return;
-    void loadTaskDepth(props.assetId);
-  }, [props.assetId, taskDepthByAssetId, loadTaskDepth]);
+    if (!assetId) return;
+    if (taskDepthByAssetId[assetId] !== undefined) return;
+    void loadTaskDepth(assetId);
+  }, [assetId, taskDepthByAssetId, loadTaskDepth]);
 
   const viewport = { pan: props.pan, ratio: props.ratio };
 
@@ -128,12 +127,15 @@ export function InkOverlay(props: {
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      if (!props.studySessionId || !props.assetId) return;
-      const depth = taskDepthByAssetId[props.assetId];
-      const rows = await attemptRepo.listForSessionAsset({
-        studySessionId: props.studySessionId,
-        assetId: props.assetId,
-      });
+      if (!assetId) return;
+      const depth = taskDepthByAssetId[assetId];
+      const rows =
+        props.hydrateInput.kind === 'session'
+          ? await attemptRepo.listForSessionAsset({
+              studySessionId: props.hydrateInput.studySessionId,
+              assetId,
+            })
+          : await attemptRepo.listDetailsForAsset(assetId);
       if (cancelled) return;
       const next: Record<string, string> = {};
       for (const r of rows) {
@@ -152,9 +154,10 @@ export function InkOverlay(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.studySessionId, props.assetId, props.activeAttemptId, taskDepthByAssetId]);
+  }, [assetId, props.hydrateInput, taskDepthByAssetId]);
 
   const otherAttemptBoxes = useMemo(() => {
+    if (isReadonly) return [];
     const active = props.activeAttemptId;
     const byAttempt = new Map<string, { bbox: InkStroke['bbox']; lastCreatedAtMs: number }>();
     for (const s of strokes) {
@@ -175,7 +178,7 @@ export function InkOverlay(props: {
     }));
     out.sort((a, b) => a.lastCreatedAtMs - b.lastCreatedAtMs);
     return out;
-  }, [strokes, props.activeAttemptId, props.ratio]);
+  }, [strokes, props.activeAttemptId, props.ratio, isReadonly]);
 
   const attemptDominantColorById = useMemo(() => {
     const perAttempt = new Map<string, Map<string, number>>();
@@ -809,12 +812,17 @@ export function InkOverlay(props: {
         redrawOverlay.current = requestAnimationFrame(() => drawOverlay());
         return;
       }
+      const studySessionId =
+        props.hydrateInput.kind === 'session'
+          ? props.hydrateInput.studySessionId
+          : props.hydrateInput.studySessionId;
+      if (!studySessionId) return;
 
       const now = Date.now();
       const stroke: InkStroke = {
         id: newId(),
-        studySessionId: props.studySessionId,
-        assetId: props.assetId,
+        studySessionId,
+        assetId,
         attemptId,
         createdAtMs: now,
         updatedAtMs: now,
@@ -952,16 +960,18 @@ export function InkOverlay(props: {
       ref={wrapRef}
       className="absolute inset-0"
       style={{
-        touchAction: 'none',
+        touchAction: isReadonly ? 'auto' : 'none',
         userSelect: 'none',
-        pointerEvents: 'auto',
-        cursor: isProbablyIpad()
+        pointerEvents: isReadonly ? 'none' : 'auto',
+        cursor: isReadonly
           ? 'default'
-          : brush === 'select'
-          ? 'grab'
-          : brush === 'eraser'
-          ? 'crosshair'
-          : 'crosshair',
+          : isProbablyIpad()
+            ? 'default'
+            : brush === 'select'
+              ? 'grab'
+              : brush === 'eraser'
+                ? 'crosshair'
+                : 'crosshair',
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

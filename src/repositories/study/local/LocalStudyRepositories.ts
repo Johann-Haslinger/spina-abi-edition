@@ -282,6 +282,67 @@ export class LocalSubsubproblemRepository implements SubsubproblemRepository {
   }
 }
 
+type AttemptDetailRow = {
+  attempt: Attempt;
+  assetId: string;
+  problemIdx: number;
+  subproblemLabel: string;
+  subsubproblemLabel?: string;
+};
+
+async function listAttemptDetails(input: {
+  attempts: Attempt[];
+  assetId?: string;
+}): Promise<AttemptDetailRow[]> {
+  if (input.attempts.length === 0) return [];
+
+  const subproblemIds = Array.from(new Set(input.attempts.map((attempt) => attempt.subproblemId)));
+  const subproblems = await db.subproblems.where('id').anyOf(subproblemIds).toArray();
+  if (subproblems.length === 0) return [];
+
+  const subsubproblemIds = Array.from(
+    new Set(
+      input.attempts
+        .map((attempt) => attempt.subsubproblemId)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+  const subsubproblems =
+    subsubproblemIds.length > 0
+      ? await db.subsubproblems.where('id').anyOf(subsubproblemIds).toArray()
+      : [];
+  const subsubproblemById = new Map(subsubproblems.map((subsubproblem) => [subsubproblem.id, subsubproblem]));
+
+  const subproblemById = new Map(subproblems.map((subproblem) => [subproblem.id, subproblem]));
+  const problemIds = Array.from(new Set(subproblems.map((subproblem) => subproblem.problemId)));
+  const problems = await db.problems.where('id').anyOf(problemIds).toArray();
+  const problemById = new Map(problems.map((problem) => [problem.id, problem]));
+
+  const exerciseIds = Array.from(new Set(problems.map((problem) => problem.exerciseId)));
+  const exercises = await db.exercises.where('id').anyOf(exerciseIds).toArray();
+  const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+
+  return input.attempts
+    .map((attempt) => {
+      const subproblem = subproblemById.get(attempt.subproblemId);
+      const subsubproblem = attempt.subsubproblemId
+        ? subsubproblemById.get(attempt.subsubproblemId)
+        : undefined;
+      const problem = subproblem ? problemById.get(subproblem.problemId) : undefined;
+      const exercise = problem ? exerciseById.get(problem.exerciseId) : undefined;
+      return {
+        attempt,
+        assetId: exercise?.assetId ?? 'unknown',
+        problemIdx: problem?.idx ?? 0,
+        subproblemLabel: subproblem?.label ?? '?',
+        subsubproblemLabel: subsubproblem?.label,
+      };
+    })
+    .filter((row) => row.assetId !== 'unknown')
+    .filter((row) => (input.assetId ? row.assetId === input.assetId : true))
+    .sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
+}
+
 export class LocalAttemptRepository implements AttemptRepository {
   async create(input: {
     id?: string;
@@ -358,46 +419,7 @@ export class LocalAttemptRepository implements AttemptRepository {
     }>
   > {
     const attempts = await db.attempts.where('studySessionId').equals(studySessionId).toArray();
-    if (attempts.length === 0) return [];
-
-    const subproblemIds = Array.from(new Set(attempts.map((a) => a.subproblemId)));
-    const subproblems = await db.subproblems.where('id').anyOf(subproblemIds).toArray();
-    if (subproblems.length === 0) return [];
-
-    const subsubproblemIds = Array.from(
-      new Set(attempts.map((a) => a.subsubproblemId).filter((x): x is string => Boolean(x))),
-    );
-    const subsubproblems =
-      subsubproblemIds.length > 0
-        ? await db.subsubproblems.where('id').anyOf(subsubproblemIds).toArray()
-        : [];
-    const subsubproblemById = new Map(subsubproblems.map((ssp) => [ssp.id, ssp]));
-
-    const subproblemById = new Map(subproblems.map((sp) => [sp.id, sp]));
-    const problemIds = Array.from(new Set(subproblems.map((sp) => sp.problemId)));
-    const problems = await db.problems.where('id').anyOf(problemIds).toArray();
-    const problemById = new Map(problems.map((p) => [p.id, p]));
-
-    const exerciseIds = Array.from(new Set(problems.map((p) => p.exerciseId)));
-    const exercises = await db.exercises.where('id').anyOf(exerciseIds).toArray();
-    const exerciseById = new Map(exercises.map((e) => [e.id, e]));
-
-    return attempts
-      .map((a) => {
-        const sp = subproblemById.get(a.subproblemId);
-        const ssp = a.subsubproblemId ? subsubproblemById.get(a.subsubproblemId) : undefined;
-        const p = sp ? problemById.get(sp.problemId) : undefined;
-        const ex = p ? exerciseById.get(p.exerciseId) : undefined;
-        return {
-          attempt: a,
-          assetId: ex?.assetId ?? 'unknown',
-          problemIdx: p?.idx ?? 0,
-          subproblemLabel: sp?.label ?? '?',
-          subsubproblemLabel: ssp?.label,
-        };
-      })
-      .filter((r) => r.assetId !== 'unknown')
-      .sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
+    return listAttemptDetails({ attempts });
   }
 
   async listForSessionAsset(input: { studySessionId: string; assetId: string }): Promise<
@@ -408,55 +430,32 @@ export class LocalAttemptRepository implements AttemptRepository {
       subsubproblemLabel?: string;
     }>
   > {
-    const exercise = await db.exercises.where('assetId').equals(input.assetId).first();
-    if (!exercise) return [];
-
-    const problems = await db.problems.where('exerciseId').equals(exercise.id).toArray();
-    if (problems.length === 0) return [];
-
-    const problemIdxById = new Map(problems.map((p) => [p.id, p.idx]));
-    const subproblems = await db.subproblems
-      .where('problemId')
-      .anyOf(problems.map((p) => p.id))
-      .toArray();
-    if (subproblems.length === 0) return [];
-
-    const subproblemMetaById = new Map(
-      subproblems.map((sp) => [
-        sp.id,
-        { problemIdx: problemIdxById.get(sp.problemId) ?? 0, subproblemLabel: sp.label },
-      ]),
-    );
-    const subproblemIds = new Set(subproblems.map((sp) => sp.id));
-
     const attempts = await db.attempts
       .where('studySessionId')
       .equals(input.studySessionId)
       .toArray();
+    const rows = await listAttemptDetails({ attempts, assetId: input.assetId });
+    return rows.map(({ attempt, problemIdx, subproblemLabel, subsubproblemLabel }) => ({
+      attempt,
+      problemIdx,
+      subproblemLabel,
+      subsubproblemLabel,
+    }));
+  }
 
-    const subsubproblemIds = Array.from(
-      new Set(attempts.map((a) => a.subsubproblemId).filter((x): x is string => Boolean(x))),
-    );
-    const subsubproblems =
-      subsubproblemIds.length > 0
-        ? await db.subsubproblems.where('id').anyOf(subsubproblemIds).toArray()
-        : [];
-    const subsubproblemLabelById = new Map(subsubproblems.map((ssp) => [ssp.id, ssp.label]));
-
-    return attempts
-      .filter((a) => subproblemIds.has(a.subproblemId))
-      .map((a) => {
-        const meta = subproblemMetaById.get(a.subproblemId);
-        return {
-          attempt: a,
-          problemIdx: meta?.problemIdx ?? 0,
-          subproblemLabel: meta?.subproblemLabel ?? '?',
-          subsubproblemLabel: a.subsubproblemId
-            ? subsubproblemLabelById.get(a.subsubproblemId)
-            : undefined,
-        };
-      })
-      .sort((a, b) => a.attempt.endedAtMs - b.attempt.endedAtMs);
+  async listDetailsForAsset(assetId: string): Promise<
+    Array<{
+      attempt: Attempt;
+      assetId: string;
+      problemIdx: number;
+      subproblemLabel: string;
+      subsubproblemLabel?: string;
+    }>
+  > {
+    const exercise = await db.exercises.where('assetId').equals(assetId).first();
+    if (!exercise) return [];
+    const attempts = await db.attempts.toArray();
+    return listAttemptDetails({ attempts, assetId });
   }
 }
 

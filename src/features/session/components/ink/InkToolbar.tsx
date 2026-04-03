@@ -21,6 +21,13 @@ const MORPH_TRANSITION = {
   mass: 0.85,
 } as const;
 
+const TOOLBAR_PRESENCE_TRANSITION = {
+  type: 'spring',
+  stiffness: 400,
+  damping: 36,
+  mass: 0.88,
+} as const;
+
 function ToolPreview(props: {
   baseSrc: string;
   overlaySrc?: string;
@@ -96,188 +103,212 @@ export function InkToolbar(props: {
   const canEdit = props.activeAttemptId ?? selectedAttemptId;
 
   if (!isProbablyIpad()) return null;
-  if (!canEdit) return null;
 
-  const activeTool = toolButtons.find((t) => t.id === brush) ?? toolButtons[0]!;
+  const activeTool = canEdit
+    ? (toolButtons.find((t) => t.id === brush) ?? toolButtons[0]!)
+    : toolButtons[0]!;
   const activeTintColor =
     brush === 'pencil' ? pencilColor : brush === 'marker' ? markerColor : null;
   const activeTintOpacity = brush === 'marker' ? 0.9 : 1;
 
   return (
-    <LayoutGroup id="ink-toolbar">
-      <AnimatePresence initial={false} mode="popLayout">
-        {open ? (
-          <div
-            key="open"
-            className="fixed bottom-6 z-50 pointer-events-auto"
-            style={{
-              left: '50%',
-              transform: `translateX(calc(-50% + ${layout.openCenterShiftPx}px))`,
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <motion.div
-              layoutId="ink-toolbar-surface"
-              transition={MORPH_TRANSITION}
-              className="w-fit overflow-hidden rounded-full border px-6 shadow-lg backdrop-blur-xs dark:border-white/5"
-              style={{ backgroundColor: 'var(--app-floating-bg)' }}
-            >
-              <motion.div
-                key="content"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 6 }}
-                transition={{ duration: 0.16, ease: 'easeOut' }}
-                className="flex items-stretch gap-6"
-              >
-                <div className="flex items-center py-4">
-                  <GhostButton
-                    icon={<Minimize2 className="size-5" />}
-                    onClick={() => setOpen(false)}
-                    className="text-slate-100"
-                  />
-                </div>
+    <AnimatePresence initial={false}>
+      {canEdit ? (
+        <motion.div
+          key="ink-toolbar-presence"
+          className="pointer-events-none fixed bottom-6 left-0 right-0 z-50"
+          initial={{ y: 140, scale: 0.7 }}
+          animate={{ y: 0, scale: 1 }}
+          exit={{ y: 140, scale: 0.7 }}
+          transition={TOOLBAR_PRESENCE_TRANSITION}
+        >
+          <LayoutGroup id="ink-toolbar">
+            <AnimatePresence initial={false} mode="popLayout">
+              {open ? (
+                <div
+                  key="open"
+                  className="pointer-events-auto absolute bottom-0 z-50"
+                  style={{
+                    left: '50%',
+                    transform: `translateX(calc(-50% + ${layout.openCenterShiftPx}px))`,
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                >
+                  <motion.div
+                    layoutId="ink-toolbar-surface"
+                    transition={MORPH_TRANSITION}
+                    className="w-fit overflow-hidden rounded-full border px-6 shadow-lg backdrop-blur-xs dark:border-white/5"
+                    style={{ backgroundColor: 'var(--app-floating-bg)' }}
+                  >
+                    <motion.div
+                      key="content"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 6 }}
+                      transition={{ duration: 0.16, ease: 'easeOut' }}
+                      className="flex items-stretch gap-6"
+                    >
+                      <div className="flex items-center py-4">
+                        <GhostButton
+                          icon={<Minimize2 className="size-5" />}
+                          onClick={() => setOpen(false)}
+                          className="text-slate-100"
+                        />
+                      </div>
 
-                <div className="grid grid-cols-3 gap-2 py-4">
-                  {COLORS.map((c) => {
-                    const activeColor =
-                      brush === 'pencil' ? pencilColor : brush === 'marker' ? markerColor : null;
-                    const isSelected = activeColor !== null && activeColor === c;
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        aria-label={`Farbe ${c}`}
-                        onClick={() => {
-                          if (brush === 'pencil') setColorForBrush('pencil', c);
-                          else if (brush === 'marker') setColorForBrush('marker', c);
-                        }}
-                        className={`rounded-full outline-offset-1 ${
-                          isSelected ? 'outline-2 size-6 m-0.5' : 'size-7'
-                        }`}
-                        style={{ background: c, outlineColor: c }}
-                      />
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-end gap-2">
-                  {toolButtons.map((t) => {
-                    const isActive = brush === t.id;
-                    const tintColor =
-                      t.id === 'pencil' ? pencilColor : t.id === 'marker' ? markerColor : null;
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        aria-label={t.label}
-                        onClick={() => setBrush(t.id)}
-                        className="relative flex h-22 w-10 shrink-0 items-center justify-center overflow-hidden transition-all duration-200"
-                      >
-                        {tintColor ? (
-                          <div
-                            className={`absolute inset-0 transition-transform duration-200 ${
-                              isActive ? 'translate-y-[2.5%]' : 'translate-y-[20%]'
-                            }`}
-                          >
-                            <div
-                              className="absolute inset-0 h-full backdrop-blur-xl w-full"
-                              style={
-                                {
-                                  backgroundColor: tintColor,
-                                  opacity: t.id === 'marker' ? 0.6 : 1,
-                                  WebkitMaskImage: `url(${t.src})`,
-                                  maskImage: `url(${t.src})`,
-                                  WebkitMaskMode: 'luminance',
-                                  maskMode: 'luminance',
-                                  WebkitMaskSize: 'contain',
-                                  maskSize: 'contain',
-                                  WebkitMaskPosition: 'bottom center',
-                                  maskPosition: 'bottom center',
-                                  WebkitMaskRepeat: 'no-repeat',
-                                  maskRepeat: 'no-repeat',
-                                } as React.CSSProperties
-                              }
+                      <div className="grid grid-cols-3 gap-2 py-4">
+                        {COLORS.map((c) => {
+                          const activeColor =
+                            brush === 'pencil'
+                              ? pencilColor
+                              : brush === 'marker'
+                                ? markerColor
+                                : null;
+                          const isSelected = activeColor !== null && activeColor === c;
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              aria-label={`Farbe ${c}`}
+                              onClick={() => {
+                                if (brush === 'pencil') setColorForBrush('pencil', c);
+                                else if (brush === 'marker') setColorForBrush('marker', c);
+                              }}
+                              className={`rounded-full outline-offset-1 ${
+                                isSelected ? 'outline-2 size-6 m-0.5' : 'size-7'
+                              }`}
+                              style={{ background: c, outlineColor: c }}
                             />
-                            <img
-                              src={t.id === 'pencil' || t.id === 'marker' ? t.overlaySrc : t.src}
-                              alt=""
-                              className="absolute inset-0 h-full w-full object-contain object-bottom"
-                              aria-hidden
-                            />
-                          </div>
-                        ) : (
-                          <img
-                            src={t.src}
-                            alt=""
-                            className={`h-22 w-12 object-contain object-bottom transition-transform duration-200 ${
-                              isActive ? 'translate-y-[2.5%]' : 'translate-y-[20%]'
-                            }`}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                          );
+                        })}
+                      </div>
 
-                <div className="ml-auto flex items-center gap-1 py-4">
-                  <GhostButton
-                    icon={<Undo2 className="size-5" />}
-                    onClick={() => void undoWithPersist()}
-                    disabled={undoStackLen === 0}
-                    className="text-slate-100"
-                  />
-                  <GhostButton
-                    icon={<Redo2 className="size-5" />}
-                    onClick={() => void redoWithPersist()}
-                    disabled={redoStackLen === 0}
-                    className="text-slate-100"
-                  />
+                      <div className="flex items-end gap-2">
+                        {toolButtons.map((t) => {
+                          const isActive = brush === t.id;
+                          const tintColor =
+                            t.id === 'pencil'
+                              ? pencilColor
+                              : t.id === 'marker'
+                                ? markerColor
+                                : null;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              aria-label={t.label}
+                              onClick={() => setBrush(t.id)}
+                              className="relative flex h-22 w-10 shrink-0 items-center justify-center overflow-hidden transition-all duration-200"
+                            >
+                              {tintColor ? (
+                                <div
+                                  className={`absolute inset-0 transition-transform duration-200 ${
+                                    isActive ? 'translate-y-[2.5%]' : 'translate-y-[20%]'
+                                  }`}
+                                >
+                                  <div
+                                    className="absolute inset-0 h-full backdrop-blur-xl w-full"
+                                    style={
+                                      {
+                                        backgroundColor: tintColor,
+                                        opacity: t.id === 'marker' ? 0.6 : 1,
+                                        WebkitMaskImage: `url(${t.src})`,
+                                        maskImage: `url(${t.src})`,
+                                        WebkitMaskMode: 'luminance',
+                                        maskMode: 'luminance',
+                                        WebkitMaskSize: 'contain',
+                                        maskSize: 'contain',
+                                        WebkitMaskPosition: 'bottom center',
+                                        maskPosition: 'bottom center',
+                                        WebkitMaskRepeat: 'no-repeat',
+                                        maskRepeat: 'no-repeat',
+                                      } as React.CSSProperties
+                                    }
+                                  />
+                                  <img
+                                    src={
+                                      t.id === 'pencil' || t.id === 'marker' ? t.overlaySrc : t.src
+                                    }
+                                    alt=""
+                                    className="absolute inset-0 h-full w-full object-contain object-bottom"
+                                    aria-hidden
+                                  />
+                                </div>
+                              ) : (
+                                <img
+                                  src={t.src}
+                                  alt=""
+                                  className={`h-22 w-12 object-contain object-bottom transition-transform duration-200 ${
+                                    isActive ? 'translate-y-[2.5%]' : 'translate-y-[20%]'
+                                  }`}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="ml-auto flex items-center gap-1 py-4">
+                        <GhostButton
+                          icon={<Undo2 className="size-5" />}
+                          onClick={() => void undoWithPersist()}
+                          disabled={undoStackLen === 0}
+                          className="text-slate-100"
+                        />
+                        <GhostButton
+                          icon={<Redo2 className="size-5" />}
+                          onClick={() => void redoWithPersist()}
+                          disabled={redoStackLen === 0}
+                          className="text-slate-100"
+                        />
+                      </div>
+                    </motion.div>
+                  </motion.div>
                 </div>
-              </motion.div>
-            </motion.div>
-          </div>
-        ) : (
-          <div
-            key="closed"
-            className="fixed bottom-6 z-50 pointer-events-auto"
-            style={{ left: layout.closedLeftPx }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <motion.div
-              layoutId="ink-toolbar-surface"
-              transition={MORPH_TRANSITION}
-              role="button"
-              tabIndex={0}
-              aria-label="Ink Toolbar öffnen"
-              onClick={() => setOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setOpen(true);
-                }
-              }}
-              className="flex size-18 items-center justify-center overflow-hidden rounded-full border border-white/5 shadow-xl backdrop-blur active:scale-[0.98]"
-              style={{ backgroundColor: 'var(--app-floating-bg)' }}
-            >
-              <ToolPreview
-                baseSrc={activeTool.src}
-                overlaySrc={
-                  activeTool.id === 'pencil' || activeTool.id === 'marker'
-                    ? activeTool.overlaySrc
-                    : undefined
-                }
-                tintColor={activeTintColor}
-                tintOpacity={activeTintOpacity}
-                sizeClassName="size-16 translate-y-2"
-              />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </LayoutGroup>
+              ) : (
+                <div
+                  key="closed"
+                  className="pointer-events-auto absolute bottom-0 z-50"
+                  style={{ left: layout.closedLeftPx }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                >
+                  <motion.div
+                    layoutId="ink-toolbar-surface"
+                    transition={MORPH_TRANSITION}
+                    role="button"
+                    tabIndex={0}
+                    aria-label="Ink Toolbar öffnen"
+                    onClick={() => setOpen(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setOpen(true);
+                      }
+                    }}
+                    className="flex size-18 items-center justify-center overflow-hidden rounded-full border border-white/5 shadow-xl backdrop-blur active:scale-[0.98]"
+                    style={{ backgroundColor: 'var(--app-floating-bg)' }}
+                  >
+                    <ToolPreview
+                      baseSrc={activeTool.src}
+                      overlaySrc={
+                        activeTool.id === 'pencil' || activeTool.id === 'marker'
+                          ? activeTool.overlaySrc
+                          : undefined
+                      }
+                      tintColor={activeTintColor}
+                      tintOpacity={activeTintOpacity}
+                      sizeClassName="size-16 translate-y-2"
+                    />
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+          </LayoutGroup>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   );
 }
 

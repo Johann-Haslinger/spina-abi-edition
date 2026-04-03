@@ -1,7 +1,6 @@
 import type {
   Attempt,
   AttemptAiReview,
-  LearnPathSessionRequirement,
   AttemptRequirementLink,
   AttemptResult,
   AttemptReviewJob,
@@ -10,6 +9,7 @@ import type {
   ExerciseDifficulty,
   ExercisePageStatus,
   ExerciseTaskDepth,
+  LearnPathSessionRequirement,
   Problem,
   StudySession,
   StudySessionSource,
@@ -107,6 +107,15 @@ export interface AttemptRepository {
   listForSessionAsset(input: { studySessionId: string; assetId: string }): Promise<
     Array<{
       attempt: Attempt;
+      problemIdx: number;
+      subproblemLabel: string;
+      subsubproblemLabel?: string;
+    }>
+  >;
+  listDetailsForAsset(assetId: string): Promise<
+    Array<{
+      attempt: Attempt;
+      assetId: string;
       problemIdx: number;
       subproblemLabel: string;
       subsubproblemLabel?: string;

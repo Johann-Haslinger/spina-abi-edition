@@ -10,7 +10,7 @@ export type FullscreenViewerFrameProps = {
 };
 
 export function FullscreenViewerFrame(props: FullscreenViewerFrameProps) {
-  useAppSurfaceTheme(props.surfaceTheme);
+  useAppSurfaceTheme(props.surfaceTheme, 1);
 
   return (
     <div
