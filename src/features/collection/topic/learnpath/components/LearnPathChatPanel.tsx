@@ -251,6 +251,18 @@ export function LearnPathChatPanel(props: {
                     </div>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
+                    <SecondaryButton
+                      onClick={props.onGenerateFlashcards}
+                      disabled={props.completionBusy}
+                    >
+                      Karteikarten generieren
+                    </SecondaryButton>
+                    <SecondaryButton
+                      onClick={props.onGenerateCheatsheet}
+                      disabled={props.completionBusy}
+                    >
+                      Merkblatt generieren
+                    </SecondaryButton>
                     <PrimaryButton
                       onClick={props.onSaveGeneratedFlashcards}
                       disabled={props.completionBusy || props.generatedFlashcards.length === 0}
