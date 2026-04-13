@@ -41,6 +41,7 @@ export function LearnPathChatPanel(props: {
   activeStep?: RequirementPlanStep;
   overviewItems: LearnPathRequirementOverviewItem[];
   generatedFlashcards: LearnPathFlashcardPreviewItem[];
+  generatedCheatsheet: string | null;
   completionBusy: boolean;
   completionError: string | null;
   nextRequirementAvailable: boolean;
@@ -54,11 +55,13 @@ export function LearnPathChatPanel(props: {
   ) => void;
   onStartRequirement: (item: LearnPathRequirementOverviewItem, mode: LearnPathMode) => void;
   onGenerateFlashcards: () => void;
+  onGenerateCheatsheet: () => void;
   onUpdateGeneratedFlashcard: (
     flashcardId: string,
     patch: { front?: string; back?: string; chapterId?: string; requirementId?: string },
   ) => void;
   onSaveGeneratedFlashcards: () => void;
+  onSaveGeneratedCheatsheet: () => void;
   onCompletionContinue: () => void;
   onCompletionLeave: () => void;
   onPanelOpenChange: (open: boolean) => void;
@@ -127,6 +130,14 @@ export function LearnPathChatPanel(props: {
               flashcards={props.generatedFlashcards}
               onUpdate={props.onUpdateGeneratedFlashcard}
             />
+            {props.generatedCheatsheet ? (
+              <div className="space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="text-xs uppercase tracking-wide text-white/60">Merkblatt Vorschau</div>
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/90 whitespace-pre-wrap">
+                  {props.generatedCheatsheet}
+                </div>
+              </div>
+            ) : null}
             {state.interactionSurface === 'exercise' && state.exerciseState.exercise ? (
               <div className="pt-2">
                 <LearnPathExerciseRenderer
@@ -208,6 +219,12 @@ export function LearnPathChatPanel(props: {
                     >
                       Karteikarten generieren
                     </PrimaryButton>
+                    <PrimaryButton
+                      onClick={props.onGenerateCheatsheet}
+                      disabled={props.completionBusy}
+                    >
+                      Merkblatt generieren
+                    </PrimaryButton>
                     <SecondaryButton
                       onClick={props.onCompletionContinue}
                       disabled={props.completionBusy}
@@ -222,11 +239,11 @@ export function LearnPathChatPanel(props: {
                     </SecondaryButton>
                   </div>
                 </div>
-              ) : state.completionPrompt === 'after_flashcards' ? (
+              ) : state.completionPrompt === 'after_generation' ? (
                 <div className="space-y-3 rounded-4xl border border-white/8 bg-white/5 backdrop-blur-2xl p-4">
                   <div className="text-sm text-white/80">
-                    Die Karteikarten sind bereit. Du kannst sie speichern oder direkt entscheiden,
-                    ob du weiterlernen oder den Chat verlassen willst.
+                    Inhalte sind bereit. Du kannst Karteikarten oder ein Merkblatt speichern und dann
+                    direkt weiterlernen oder den Chat verlassen.
                   </div>
                   {props.completionError ? (
                     <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
@@ -239,6 +256,12 @@ export function LearnPathChatPanel(props: {
                       disabled={props.completionBusy || props.generatedFlashcards.length === 0}
                     >
                       Karteikarten speichern
+                    </PrimaryButton>
+                    <PrimaryButton
+                      onClick={props.onSaveGeneratedCheatsheet}
+                      disabled={props.completionBusy || !props.generatedCheatsheet}
+                    >
+                      Merkblatt speichern
                     </PrimaryButton>
                     <SecondaryButton
                       onClick={props.onCompletionContinue}

@@ -92,6 +92,7 @@ export function TopicKnowledgePathView(props: {
         activeStep={controller.activeStep}
         overviewItems={controller.overviewItems}
         generatedFlashcards={controller.generatedFlashcards}
+        generatedCheatsheet={controller.generatedCheatsheet?.content ?? null}
         completionBusy={controller.completionBusy}
         completionError={controller.completionError}
         nextRequirementAvailable={controller.nextRequirementAvailable}
@@ -102,8 +103,10 @@ export function TopicKnowledgePathView(props: {
         onExerciseSubmit={controller.handleExerciseSubmit}
         onStartRequirement={controller.handleStartOverviewItem}
         onGenerateFlashcards={controller.handleGenerateFlashcards}
+        onGenerateCheatsheet={controller.handleGenerateCheatsheet}
         onUpdateGeneratedFlashcard={controller.updateGeneratedFlashcard}
         onSaveGeneratedFlashcards={controller.handleSaveGeneratedFlashcards}
+        onSaveGeneratedCheatsheet={controller.handleSaveGeneratedCheatsheet}
         onCompletionContinue={controller.handleCompletionContinue}
         onCompletionLeave={controller.handleEndSession}
         onPanelOpenChange={controller.setPanelOpen}

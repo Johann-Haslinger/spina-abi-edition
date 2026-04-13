@@ -143,7 +143,7 @@ export type LearnPathRequirementOverviewItem = {
 
 export type LearnPathPanelView = 'current_requirement' | 'all_requirements';
 
-export type LearnPathCompletionPrompt = 'next_action' | 'after_flashcards';
+export type LearnPathCompletionPrompt = 'next_action' | 'after_generation';
 
 export type LearnPathMessage = {
   id: string;

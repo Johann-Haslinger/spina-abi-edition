@@ -20,6 +20,7 @@ import { useNotificationsStore } from '../../../../stores/notificationsStore';
 import { useAssetsStore } from '../../../../stores/assetsStore';
 import { useStudyStore } from '../../../session/stores/studyStore';
 import { createInitialFlashcardSchedule } from '../flashcards/flashcardSrs';
+import { generateRequirementCheatsheet } from './ai/requirementCheatsheetAiClient';
 import { generateRequirementFlashcards } from './ai/requirementFlashcardAiClient';
 import { scanRequirementMaterial } from './ai/requirementMaterialScanAiClient';
 import { requestRequirementPlanTurn } from './ai/requirementRailAiClient';
@@ -72,6 +73,13 @@ type MaterialScanResult = {
   sourceName?: string;
 };
 
+type GeneratedRequirementCheatsheet = {
+  title: string;
+  content: string;
+  chapterId?: string;
+  requirementId?: string;
+};
+
 export function useLearnPathController(props: {
   subjectId: string;
   topicId: string;
@@ -100,6 +108,9 @@ export function useLearnPathController(props: {
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [leaveDialogBusy, setLeaveDialogBusy] = useState(false);
   const [generatedFlashcards, setGeneratedFlashcards] = useState<GeneratedRequirementFlashcard[]>([]);
+  const [generatedCheatsheet, setGeneratedCheatsheet] = useState<GeneratedRequirementCheatsheet | null>(
+    null,
+  );
   const [completionBusy, setCompletionBusy] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [materialLastMatches, setMaterialLastMatches] = useState<MaterialScanResult[]>([]);
@@ -156,6 +167,7 @@ export function useLearnPathController(props: {
     setDraft('');
     setProgressRows([]);
     setGeneratedFlashcards([]);
+    setGeneratedCheatsheet(null);
     setCompletionBusy(false);
     setCompletionError(null);
     setMaterialLastMatches([]);
@@ -315,6 +327,7 @@ export function useLearnPathController(props: {
       completedProgressIdsRef.current.delete(progressId);
       setDraft('');
       setGeneratedFlashcards([]);
+      setGeneratedCheatsheet(null);
       setCompletionBusy(false);
       setCompletionError(null);
       dispatch({
@@ -345,6 +358,7 @@ export function useLearnPathController(props: {
     handledRequestNonceRef.current = 0;
     setDraft('');
     setGeneratedFlashcards([]);
+    setGeneratedCheatsheet(null);
     setCompletionBusy(false);
     setCompletionError(null);
     setMaterialLastMatches([]);
@@ -526,6 +540,7 @@ export function useLearnPathController(props: {
             return;
           }
           setGeneratedFlashcards([]);
+          setGeneratedCheatsheet(null);
           setCompletionError(null);
           setCompletionBusy(false);
           dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'next_action' });
@@ -817,7 +832,7 @@ export function useLearnPathController(props: {
           requirementId: currentRequirement.id,
         })),
       );
-      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_flashcards' });
+      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_generation' });
     } catch (generationError) {
       setCompletionError(
         generationError instanceof Error
@@ -864,6 +879,44 @@ export function useLearnPathController(props: {
     [requirements],
   );
 
+  const handleGenerateCheatsheet = useCallback(async () => {
+    if (!currentChapter || !currentRequirement) return;
+    setCompletionBusy(true);
+    setCompletionError(null);
+    try {
+      const snapshot = stateRef.current;
+      const draft = await generateRequirementCheatsheet({
+        requirementGoal: buildRequirementGoal(currentRequirement),
+        requirementContext: {
+          materialContext: currentRequirement.materialContext?.trim() || undefined,
+        },
+        history: buildRequirementHistory(snapshot.messages, currentChapter.id, currentRequirement.id),
+        chapterContext: {
+          subjectName: props.subjectName,
+          topicName: props.topicName,
+          chapterName: currentChapter.name,
+          requirementName: currentRequirement.name,
+        },
+      });
+      const fallbackTitle = `Merkblatt: ${currentRequirement.name}`;
+      setGeneratedCheatsheet({
+        title: draft.title?.trim() || fallbackTitle,
+        content: draft.content,
+        chapterId: currentChapter.id,
+        requirementId: currentRequirement.id,
+      });
+      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_generation' });
+    } catch (generationError) {
+      setCompletionError(
+        generationError instanceof Error
+          ? generationError.message
+          : 'Merkblatt konnte nicht erzeugt werden',
+      );
+    } finally {
+      if (mountedRef.current) setCompletionBusy(false);
+    }
+  }, [currentChapter, currentRequirement, props.subjectName, props.topicName]);
+
   const handleSaveGeneratedFlashcards = useCallback(async () => {
     if (generatedFlashcards.length === 0) return;
     setCompletionBusy(true);
@@ -886,7 +939,7 @@ export function useLearnPathController(props: {
           })),
       );
       setGeneratedFlashcards([]);
-      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_flashcards' });
+      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_generation' });
       pushNotification({
         tone: 'success',
         title: 'Karteikarten gespeichert',
@@ -900,6 +953,43 @@ export function useLearnPathController(props: {
       if (mountedRef.current) setCompletionBusy(false);
     }
   }, [generatedFlashcards, props.subjectId, props.topicId, pushNotification]);
+
+  const handleSaveGeneratedCheatsheet = useCallback(async () => {
+    if (!generatedCheatsheet) return;
+    const content = generatedCheatsheet.content.trim();
+    if (!content) return;
+    setCompletionBusy(true);
+    setCompletionError(null);
+    try {
+      const safeBase = (generatedCheatsheet.title || 'merkblatt')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64);
+      const fileName = `${safeBase || 'merkblatt'}.md`;
+      const file = new File([content], fileName, { type: 'text/markdown;charset=utf-8' });
+      await uploadAssetWithFile({
+        subjectId: props.subjectId,
+        topicId: props.topicId,
+        type: 'cheatsheet',
+        title: generatedCheatsheet.title,
+        file,
+      });
+      setGeneratedCheatsheet(null);
+      dispatch({ type: 'SHOW_COMPLETION_PROMPT', prompt: 'after_generation' });
+      pushNotification({
+        tone: 'success',
+        title: 'Merkblatt gespeichert',
+        message: 'Das Merkblatt ist jetzt in den Topic-Assets verfuegbar.',
+      });
+    } catch (saveError) {
+      setCompletionError(
+        saveError instanceof Error ? saveError.message : 'Merkblatt konnte nicht gespeichert werden',
+      );
+    } finally {
+      if (mountedRef.current) setCompletionBusy(false);
+    }
+  }, [generatedCheatsheet, props.subjectId, props.topicId, pushNotification, uploadAssetWithFile]);
 
   const handleScanMaterialFiles = useCallback(
     async (files: File[]) => {
@@ -1025,6 +1115,7 @@ export function useLearnPathController(props: {
   const handleCompletionContinue = useCallback(() => {
     if (!currentRequirement || !state.mode) return;
     setGeneratedFlashcards([]);
+    setGeneratedCheatsheet(null);
     setCompletionBusy(false);
     setCompletionError(null);
     dispatch({ type: 'CLEAR_COMPLETION_PROMPT' });
@@ -1081,6 +1172,7 @@ export function useLearnPathController(props: {
     currentRequirementGoal,
     nextRequirementAvailable,
     generatedFlashcards,
+    generatedCheatsheet,
     materialLastMatches,
     materialBusy,
     materialError,
@@ -1096,9 +1188,11 @@ export function useLearnPathController(props: {
     handleResumeLatest,
     handleStartOverviewItem,
     handleGenerateFlashcards,
+    handleGenerateCheatsheet,
     handleScanMaterialFiles,
     updateGeneratedFlashcard,
     handleSaveGeneratedFlashcards,
+    handleSaveGeneratedCheatsheet,
     handleCompletionContinue,
     handleBack,
     handleLeavePage,
