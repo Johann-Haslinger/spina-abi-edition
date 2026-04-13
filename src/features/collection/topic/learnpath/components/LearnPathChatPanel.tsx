@@ -325,10 +325,10 @@ function LearnPathChatMessage(props: { message: LearnPathMessage }) {
   return (
     <ChatMessage
       align={isUser ? 'end' : 'start'}
-      bubbleClassName={`min-w-0 max-w-full rounded-3xl px-4 py-2.5 ${
+      bubbleClassName={`rounded-3xl px-4 py-2.5 ${
         isUser
-          ? 'bg-white/5 text-white max-w-[60%] shadow-[0_8px_30px_rgba(15,23,42,0.16)]'
-          : 'bg-transparent text-white shadow-none break-words [overflow-wrap:anywhere] [&_*]:max-w-full'
+          ? 'max-w-[60%] bg-white/5 text-white shadow-[0_8px_30px_rgba(15,23,42,0.16)]'
+          : 'min-w-0 max-w-full bg-transparent text-white shadow-none break-words [overflow-wrap:anywhere] [&_*]:max-w-full'
       }`}
     >
       {isUser ? (
