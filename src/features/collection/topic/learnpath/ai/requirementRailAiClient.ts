@@ -21,6 +21,9 @@ export type RequirementPlanAiRequest = {
     chapterName: string;
     requirementName: string;
   };
+  requirementContext?: {
+    materialContext?: string;
+  };
   plan?: RequirementPlan | null;
   currentStepId?: string | null;
 };
@@ -49,6 +52,7 @@ export async function requestRequirementPlanTurn(
       requirementGoal: input.requirementGoal,
       history: input.history,
       chapterContext: input.chapterContext,
+      requirementContext: input.requirementContext,
       plan: input.plan,
       currentStepId: input.currentStepId,
     },

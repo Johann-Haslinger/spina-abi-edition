@@ -16,7 +16,11 @@ import type {
 
 export function buildRequirementGoal(requirement: Requirement): string {
   const description = requirement.description?.trim();
-  return description ? `${requirement.name}. ${description}` : requirement.name;
+  const materialContext = requirement.materialContext?.trim();
+  const materialText = materialContext
+    ? ` Unterrichtsmaterial-Kontext: ${materialContext.slice(0, 2400)}`
+    : '';
+  return `${description ? `${requirement.name}. ${description}` : requirement.name}${materialText}`;
 }
 
 export function getNextRequirementPosition(

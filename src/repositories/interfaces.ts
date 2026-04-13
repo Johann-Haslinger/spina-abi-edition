@@ -94,12 +94,17 @@ export type RequirementCreateInput = {
   chapterId: string;
   name: string;
   description?: string;
+  materialContext?: Requirement['materialContext'];
+  materialContextSources?: Requirement['materialContextSources'];
   difficulty: Requirement['difficulty'];
   mastery?: number;
 };
 
 export type RequirementUpdateInput = Partial<
-  Pick<Requirement, 'name' | 'description' | 'difficulty' | 'mastery'>
+  Pick<
+    Requirement,
+    'name' | 'description' | 'materialContext' | 'materialContextSources' | 'difficulty' | 'mastery'
+  >
 >;
 
 export type LearnPathProgressUpsertInput = Omit<
@@ -192,6 +197,7 @@ export interface LearnPathProgressRepository {
 export interface FlashcardRepository {
   get(id: string): Promise<Flashcard | undefined>;
   listByTopic(topicId: string): Promise<Flashcard[]>;
+  listBySubject(subjectId: string): Promise<Flashcard[]>;
   listDueByTopic(topicId: string, nowMs: number): Promise<Flashcard[]>;
   upsert(input: FlashcardUpsertInput): Promise<Flashcard>;
   bulkUpsert(inputs: FlashcardUpsertInput[]): Promise<Flashcard[]>;

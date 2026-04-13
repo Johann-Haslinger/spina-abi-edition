@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IoChevronBack } from 'react-icons/io5';
+import { Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { GhostButton, PrimaryButton, SecondaryButton } from '../../../../components/Button';
 import { PageHeader } from '../../../../components/PageHeader';
-import { PrimaryButton, SecondaryButton } from '../../../../components/Button';
+import { Modal } from '../../../../components/Modal';
 import { ViewerIconButton } from '../../../../components/ViewerIconButton';
 import type { Chapter, Flashcard, Requirement } from '../../../../domain/models';
 import { flashcardRepo } from '../../../../repositories';
 import { useCurriculumStore } from '../../../../stores/curriculumStore';
-import {
-  applyFlashcardReview,
-  formatFlashcardDueLabel,
-} from './flashcardSrs';
+import { createInitialFlashcardSchedule, formatFlashcardDueLabel } from './flashcardSrs';
+import { buildFlashcardSections, FlashcardStat } from './flashcardSections';
 
 const EMPTY_CHAPTERS: Chapter[] = [];
 const EMPTY_REQUIREMENTS: Requirement[] = [];
@@ -23,6 +24,7 @@ export function TopicFlashcardsView(props: {
   topicName?: string;
   onBackToTopic: () => void;
 }) {
+  const navigate = useNavigate();
   const refreshTopicCurriculum = useCurriculumStore((s) => s.refreshTopicCurriculum);
   const chapters = useCurriculumStore((s) => s.chaptersByTopic[props.topicId] ?? EMPTY_CHAPTERS);
   const requirements = useCurriculumStore(
@@ -35,16 +37,19 @@ export function TopicFlashcardsView(props: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FlashcardFilter>('all');
-  const [viewMode, setViewMode] = useState<'library' | 'review'>('library');
-  const [reviewQueue, setReviewQueue] = useState<Flashcard[]>([]);
-  const [reviewIndex, setReviewIndex] = useState(0);
-  const [revealAnswer, setRevealAnswer] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFront, setEditFront] = useState('');
   const [editBack, setEditBack] = useState('');
   const [editChapterId, setEditChapterId] = useState('');
   const [editRequirementId, setEditRequirementId] = useState('');
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createSaving, setCreateSaving] = useState(false);
+  const [newFront, setNewFront] = useState('');
+  const [newBack, setNewBack] = useState('');
+  const [newChapterId, setNewChapterId] = useState('');
+  const [newRequirementId, setNewRequirementId] = useState('');
 
   useEffect(() => {
     const store = useCurriculumStore.getState();
@@ -102,45 +107,46 @@ export function TopicFlashcardsView(props: {
     [visibleCards, chapters, chapterById, requirementById],
   );
 
-  const currentReviewCard = reviewQueue[reviewIndex];
+  const resetCreate = useCallback(() => {
+    setNewFront('');
+    setNewBack('');
+    setNewChapterId('');
+    setNewRequirementId('');
+  }, []);
 
-  const startReview = useCallback(
-    (scope: 'due' | 'all') => {
-      const cards = flashcards
-        .filter((card) => card.state === 'active' && (scope === 'all' || card.dueAtMs <= Date.now()))
-        .sort((a, b) => a.dueAtMs - b.dueAtMs || a.updatedAtMs - b.updatedAtMs);
-      if (cards.length === 0) return;
-      setReviewQueue(cards);
-      setReviewIndex(0);
-      setRevealAnswer(false);
-      setViewMode('review');
-    },
-    [flashcards],
-  );
-
-  const handleReview = useCallback(
-    async (rating: 'known' | 'unknown') => {
-      if (!currentReviewCard) return;
-      setSavingId(currentReviewCard.id);
+  const handleCreateSave = useCallback(async () => {
+    if (!newFront.trim() || !newBack.trim()) return;
+    setCreateSaving(true);
+    try {
       const now = Date.now();
-      try {
-        const next = applyFlashcardReview(currentReviewCard, rating, now);
-        const saved = await flashcardRepo.upsert({
-          ...next,
-          id: next.id,
-          createdAtMs: next.createdAtMs,
-          updatedAtMs: next.updatedAtMs,
-        });
-        setFlashcards((current) => current.map((card) => (card.id === saved.id ? saved : card)));
-        setReviewQueue((current) => current.map((card) => (card.id === saved.id ? saved : card)));
-        setReviewIndex((current) => current + 1);
-        setRevealAnswer(false);
-      } finally {
-        setSavingId(null);
-      }
-    },
-    [currentReviewCard],
-  );
+      await flashcardRepo.upsert({
+        subjectId: props.subjectId,
+        topicId: props.topicId,
+        front: newFront.trim(),
+        back: newBack.trim(),
+        chapterId: newChapterId || undefined,
+        requirementId: newRequirementId || undefined,
+        source: 'manual',
+        state: 'active',
+        ...createInitialFlashcardSchedule(now),
+        createdAtMs: now,
+      });
+      await loadFlashcards();
+      setCreateOpen(false);
+      resetCreate();
+    } finally {
+      setCreateSaving(false);
+    }
+  }, [
+    loadFlashcards,
+    newBack,
+    newChapterId,
+    newFront,
+    newRequirementId,
+    props.subjectId,
+    props.topicId,
+    resetCreate,
+  ]);
 
   const startEditing = useCallback((card: Flashcard) => {
     setEditingId(card.id);
@@ -192,6 +198,9 @@ export function TopicFlashcardsView(props: {
   }, [cancelEditing, editingId]);
 
   const requirementOptions = editChapterId ? (requirementsByChapterId.get(editChapterId) ?? []) : [];
+  const newRequirementOptions = newChapterId ? (requirementsByChapterId.get(newChapterId) ?? []) : [];
+
+  const reviewBase = `/subjects/${props.subjectId}/topics/${props.topicId}/flashcards/review`;
 
   return (
     <div className="pb-16">
@@ -202,12 +211,24 @@ export function TopicFlashcardsView(props: {
         <PageHeader
           title={`${props.topicName ? `${props.topicName} · ` : ''}Karteikarten`}
           actions={
-            <div className="flex flex-wrap gap-2">
-              <SecondaryButton onClick={() => setViewMode('library')}>Sammlung</SecondaryButton>
-              <SecondaryButton onClick={() => startReview('due')} disabled={dueCards.length === 0}>
+            <div className="flex flex-wrap items-center gap-2">
+              <GhostButton
+                aria-label="Neue Karteikarte"
+                onClick={() => setCreateOpen(true)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 p-0 text-white hover:bg-white/10"
+              >
+                <Plus className="h-5 w-5" strokeWidth={2} />
+              </GhostButton>
+              <SecondaryButton
+                onClick={() => navigate(`${reviewBase}/due`)}
+                disabled={dueCards.length === 0}
+              >
                 Faellige Karten
               </SecondaryButton>
-              <PrimaryButton onClick={() => startReview('all')} disabled={flashcards.length === 0}>
+              <PrimaryButton
+                onClick={() => navigate(`${reviewBase}/all`)}
+                disabled={flashcards.length === 0}
+              >
                 Alle abfragen
               </PrimaryButton>
             </div>
@@ -215,297 +236,265 @@ export function TopicFlashcardsView(props: {
         />
       </div>
 
-      {viewMode === 'review' ? (
-        <section className="px-6 pt-6">
-          {!currentReviewCard ? (
-            <div className="mx-auto max-w-3xl rounded-4xl border border-white/8 bg-white/4 p-8">
-              <div className="text-sm text-white/60">Review abgeschlossen</div>
-              <div className="mt-2 text-2xl font-semibold text-white">
-                {reviewQueue.length > 0 ? `${reviewQueue.length} Karten bearbeitet` : 'Keine Karten offen'}
-              </div>
-              <div className="mt-4 flex gap-3">
-                <PrimaryButton onClick={() => setViewMode('library')}>Zur Sammlung</PrimaryButton>
-                <SecondaryButton onClick={() => startReview('due')} disabled={dueCards.length === 0}>
-                  Noch faellige wiederholen
-                </SecondaryButton>
-              </div>
-            </div>
-          ) : (
-            <div className="mx-auto max-w-3xl space-y-4">
-              <div className="rounded-full border border-white/8 bg-white/4 px-4 py-2 text-sm text-white/70">
-                Karte {reviewIndex + 1} von {reviewQueue.length}
-              </div>
-              <div className="rounded-4xl border border-white/8 bg-white/4 p-8">
-                <div className="text-xs uppercase tracking-wide text-white/45">Vorderseite</div>
-                <div className="mt-3 whitespace-pre-wrap text-2xl font-semibold text-white">
-                  {currentReviewCard.front}
-                </div>
-                <div className="mt-6 flex flex-wrap gap-2 text-xs text-white/60">
-                  <span className="rounded-full border border-white/10 px-3 py-1">
-                    {chapterById.get(currentReviewCard.chapterId ?? '')?.name ?? 'Ohne Kapitel'}
-                  </span>
-                  <span className="rounded-full border border-white/10 px-3 py-1">
-                    {requirementById.get(currentReviewCard.requirementId ?? '')?.name ?? 'Ohne Requirement'}
-                  </span>
-                  <span className="rounded-full border border-white/10 px-3 py-1">
-                    {formatFlashcardDueLabel(currentReviewCard.dueAtMs, nowMs)}
-                  </span>
-                </div>
-                {revealAnswer ? (
-                  <div className="mt-8 rounded-3xl border border-emerald-400/15 bg-emerald-500/8 p-5">
-                    <div className="text-xs uppercase tracking-wide text-emerald-100/70">Rueckseite</div>
-                    <div className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-white">
-                      {currentReviewCard.back}
+      <section className="space-y-6 px-6 pt-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <FlashcardStat label="Karten gesamt" value={flashcards.length} />
+          <FlashcardStat label="Faellig" value={dueCards.length} />
+          <FlashcardStat
+            label="Kapitel mit Karten"
+            value={new Set(flashcards.map((card) => card.chapterId).filter(Boolean)).size}
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilter('all')}
+            className={`rounded-full border px-4 py-2 text-sm ${
+              filter === 'all'
+                ? 'border-white bg-white text-black'
+                : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+            }`}
+          >
+            Alle
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilter('due')}
+            className={`rounded-full border px-4 py-2 text-sm ${
+              filter === 'due'
+                ? 'border-white bg-white text-black'
+                : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
+            }`}
+          >
+            Faellig
+          </button>
+        </div>
+
+        {curriculumError ? (
+          <div className="rounded-3xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+            {curriculumError}
+          </div>
+        ) : null}
+        {error ? (
+          <div className="rounded-3xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+            {error}
+          </div>
+        ) : null}
+        {loading || curriculumLoading ? (
+          <div className="rounded-4xl border border-white/8 bg-white/4 p-6 text-sm text-white/60">
+            Karteikarten werden geladen…
+          </div>
+        ) : sections.length === 0 ? (
+          <div className="rounded-4xl border border-white/8 bg-white/4 p-6 text-sm text-white/60">
+            Fuer dieses Thema gibt es noch keine gespeicherten Karteikarten.
+          </div>
+        ) : (
+          sections.map((section) => (
+            <section key={section.key} className="rounded-4xl border border-white/8 bg-white/4 p-5">
+              <div className="text-xs uppercase tracking-wide text-white/45">{section.chapterLabel}</div>
+              <div className="mt-2 text-xl font-semibold text-white">{section.requirementLabel}</div>
+              <div className="mt-4 space-y-3">
+                {section.cards.map((card) => {
+                  const isEditing = editingId === card.id;
+                  return (
+                    <div key={card.id} className="rounded-3xl border border-white/8 bg-white/5 p-4">
+                      {isEditing ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={editFront}
+                            onChange={(event) => setEditFront(event.currentTarget.value)}
+                            rows={3}
+                            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                            placeholder="Vorderseite"
+                          />
+                          <textarea
+                            value={editBack}
+                            onChange={(event) => setEditBack(event.currentTarget.value)}
+                            rows={4}
+                            className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                            placeholder="Rueckseite"
+                          />
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <select
+                              value={editChapterId}
+                              onChange={(event) => {
+                                const nextChapterId = event.currentTarget.value;
+                                setEditChapterId(nextChapterId);
+                                if (
+                                  editRequirementId &&
+                                  !(
+                                    requirementsByChapterId
+                                      .get(nextChapterId)
+                                      ?.some((requirement) => requirement.id === editRequirementId)
+                                  )
+                                ) {
+                                  setEditRequirementId('');
+                                }
+                              }}
+                              className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                            >
+                              <option value="">Ohne Kapitel</option>
+                              {chapters.map((chapter) => (
+                                <option key={chapter.id} value={chapter.id}>
+                                  {chapter.name}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={editRequirementId}
+                              onChange={(event) => setEditRequirementId(event.currentTarget.value)}
+                              className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
+                            >
+                              <option value="">Ohne Requirement</option>
+                              {requirementOptions.map((requirement) => (
+                                <option key={requirement.id} value={requirement.id}>
+                                  {requirement.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <PrimaryButton
+                              onClick={() => void handleSaveEdit()}
+                              disabled={!editFront.trim() || !editBack.trim() || savingId === card.id}
+                            >
+                              Speichern
+                            </PrimaryButton>
+                            <SecondaryButton onClick={cancelEditing}>Abbrechen</SecondaryButton>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-white/45">
+                                Vorderseite
+                              </div>
+                              <div className="mt-1 whitespace-pre-wrap text-white">{card.front}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-white/45">
+                                Rueckseite
+                              </div>
+                              <div className="mt-1 whitespace-pre-wrap text-sm text-white/75">
+                                {card.back}
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs text-white/60">
+                              <span className="rounded-full border border-white/10 px-2 py-1">
+                                {formatFlashcardDueLabel(card.dueAtMs, nowMs)}
+                              </span>
+                              <span className="rounded-full border border-white/10 px-2 py-1">
+                                {card.source === 'ai_requirement' ? 'KI-generiert' : 'Manuell'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <SecondaryButton onClick={() => startEditing(card)}>Bearbeiten</SecondaryButton>
+                            <SecondaryButton
+                              onClick={() => void handleDelete(card)}
+                              disabled={savingId === card.id}
+                            >
+                              Loeschen
+                            </SecondaryButton>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : null}
+                  );
+                })}
               </div>
-              <div className="flex flex-wrap gap-3">
-                {!revealAnswer ? (
-                  <PrimaryButton onClick={() => setRevealAnswer(true)}>Antwort aufdecken</PrimaryButton>
-                ) : (
-                  <>
-                    <SecondaryButton
-                      onClick={() => void handleReview('unknown')}
-                      disabled={savingId === currentReviewCard.id}
-                    >
-                      Nicht gewusst
-                    </SecondaryButton>
-                    <PrimaryButton
-                      onClick={() => void handleReview('known')}
-                      disabled={savingId === currentReviewCard.id}
-                    >
-                      Gewusst
-                    </PrimaryButton>
-                  </>
-                )}
-                <SecondaryButton onClick={() => setViewMode('library')}>Review beenden</SecondaryButton>
-              </div>
-            </div>
-          )}
-        </section>
-      ) : (
-        <section className="space-y-6 px-6 pt-6">
-          <div className="grid gap-4 md:grid-cols-3">
-            <FlashcardStat label="Karten gesamt" value={flashcards.length} />
-            <FlashcardStat label="Faellig" value={dueCards.length} />
-            <FlashcardStat label="Kapitel mit Karten" value={new Set(flashcards.map((card) => card.chapterId).filter(Boolean)).size} />
-          </div>
+            </section>
+          ))
+        )}
+      </section>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setFilter('all')}
-              className={`rounded-full border px-4 py-2 text-sm ${
-                filter === 'all'
-                  ? 'border-white bg-white text-black'
-                  : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
-              }`}
+      <Modal
+        open={createOpen}
+        onClose={() => {
+          if (createSaving) return;
+          setCreateOpen(false);
+          resetCreate();
+        }}
+        footer={
+          <>
+            <SecondaryButton
+              onClick={() => {
+                if (createSaving) return;
+                setCreateOpen(false);
+                resetCreate();
+              }}
+              disabled={createSaving}
             >
-              Alle
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('due')}
-              className={`rounded-full border px-4 py-2 text-sm ${
-                filter === 'due'
-                  ? 'border-white bg-white text-black'
-                  : 'border-white/10 bg-white/5 text-white hover:bg-white/10'
-              }`}
+              Abbrechen
+            </SecondaryButton>
+            <PrimaryButton
+              onClick={() => void handleCreateSave()}
+              disabled={createSaving || !newFront.trim() || !newBack.trim()}
             >
-              Faellig
-            </button>
+              {createSaving ? 'Speichern…' : 'Hinzufuegen'}
+            </PrimaryButton>
+          </>
+        }
+      >
+        <div className="space-y-4 text-sm text-slate-300">
+          <div className="text-lg font-semibold text-white">Neue Karteikarte</div>
+          <textarea
+            value={newFront}
+            onChange={(e) => setNewFront(e.target.value)}
+            rows={3}
+            placeholder="Vorderseite"
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white outline-none placeholder:text-white/40"
+          />
+          <textarea
+            value={newBack}
+            onChange={(e) => setNewBack(e.target.value)}
+            rows={4}
+            placeholder="Rueckseite"
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white outline-none placeholder:text-white/40"
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            <select
+              value={newChapterId}
+              onChange={(event) => {
+                const nextChapterId = event.currentTarget.value;
+                setNewChapterId(nextChapterId);
+                if (
+                  newRequirementId &&
+                  !(
+                    requirementsByChapterId
+                      .get(nextChapterId)
+                      ?.some((requirement) => requirement.id === newRequirementId)
+                  )
+                ) {
+                  setNewRequirementId('');
+                }
+              }}
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white outline-none"
+            >
+              <option value="">Ohne Kapitel</option>
+              {chapters.map((chapter) => (
+                <option key={chapter.id} value={chapter.id}>
+                  {chapter.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={newRequirementId}
+              onChange={(event) => setNewRequirementId(event.currentTarget.value)}
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-white outline-none"
+            >
+              <option value="">Ohne Requirement</option>
+              {newRequirementOptions.map((requirement) => (
+                <option key={requirement.id} value={requirement.id}>
+                  {requirement.name}
+                </option>
+              ))}
+            </select>
           </div>
-
-          {curriculumError ? (
-            <div className="rounded-3xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
-              {curriculumError}
-            </div>
-          ) : null}
-          {error ? (
-            <div className="rounded-3xl border border-rose-900/60 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
-              {error}
-            </div>
-          ) : null}
-          {loading || curriculumLoading ? (
-            <div className="rounded-4xl border border-white/8 bg-white/4 p-6 text-sm text-white/60">
-              Karteikarten werden geladen…
-            </div>
-          ) : sections.length === 0 ? (
-            <div className="rounded-4xl border border-white/8 bg-white/4 p-6 text-sm text-white/60">
-              Fuer dieses Thema gibt es noch keine gespeicherten Karteikarten.
-            </div>
-          ) : (
-            sections.map((section) => (
-              <section key={section.key} className="rounded-4xl border border-white/8 bg-white/4 p-5">
-                <div className="text-xs uppercase tracking-wide text-white/45">{section.chapterLabel}</div>
-                <div className="mt-2 text-xl font-semibold text-white">{section.requirementLabel}</div>
-                <div className="mt-4 space-y-3">
-                  {section.cards.map((card) => {
-                    const isEditing = editingId === card.id;
-                    return (
-                      <div key={card.id} className="rounded-3xl border border-white/8 bg-white/5 p-4">
-                        {isEditing ? (
-                          <div className="space-y-3">
-                            <textarea
-                              value={editFront}
-                              onChange={(event) => setEditFront(event.currentTarget.value)}
-                              rows={3}
-                              className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-                              placeholder="Vorderseite"
-                            />
-                            <textarea
-                              value={editBack}
-                              onChange={(event) => setEditBack(event.currentTarget.value)}
-                              rows={4}
-                              className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-                              placeholder="Rueckseite"
-                            />
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <select
-                                value={editChapterId}
-                                onChange={(event) => {
-                                  const nextChapterId = event.currentTarget.value;
-                                  setEditChapterId(nextChapterId);
-                                  if (
-                                    editRequirementId &&
-                                    !(
-                                      requirementsByChapterId
-                                        .get(nextChapterId)
-                                        ?.some((requirement) => requirement.id === editRequirementId)
-                                    )
-                                  ) {
-                                    setEditRequirementId('');
-                                  }
-                                }}
-                                className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-                              >
-                                <option value="">Ohne Kapitel</option>
-                                {chapters.map((chapter) => (
-                                  <option key={chapter.id} value={chapter.id}>
-                                    {chapter.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                value={editRequirementId}
-                                onChange={(event) => setEditRequirementId(event.currentTarget.value)}
-                                className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-                              >
-                                <option value="">Ohne Requirement</option>
-                                {requirementOptions.map((requirement) => (
-                                  <option key={requirement.id} value={requirement.id}>
-                                    {requirement.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <PrimaryButton
-                                onClick={() => void handleSaveEdit()}
-                                disabled={!editFront.trim() || !editBack.trim() || savingId === card.id}
-                              >
-                                Speichern
-                              </PrimaryButton>
-                              <SecondaryButton onClick={cancelEditing}>Abbrechen</SecondaryButton>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap items-start justify-between gap-4">
-                            <div className="min-w-0 flex-1 space-y-3">
-                              <div>
-                                <div className="text-xs uppercase tracking-wide text-white/45">
-                                  Vorderseite
-                                </div>
-                                <div className="mt-1 whitespace-pre-wrap text-white">{card.front}</div>
-                              </div>
-                              <div>
-                                <div className="text-xs uppercase tracking-wide text-white/45">
-                                  Rueckseite
-                                </div>
-                                <div className="mt-1 whitespace-pre-wrap text-sm text-white/75">
-                                  {card.back}
-                                </div>
-                              </div>
-                              <div className="flex flex-wrap gap-2 text-xs text-white/60">
-                                <span className="rounded-full border border-white/10 px-2 py-1">
-                                  {formatFlashcardDueLabel(card.dueAtMs, nowMs)}
-                                </span>
-                                <span className="rounded-full border border-white/10 px-2 py-1">
-                                  {card.source === 'ai_requirement' ? 'KI-generiert' : 'Manuell'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <SecondaryButton onClick={() => startEditing(card)}>Bearbeiten</SecondaryButton>
-                              <SecondaryButton
-                                onClick={() => void handleDelete(card)}
-                                disabled={savingId === card.id}
-                              >
-                                Loeschen
-                              </SecondaryButton>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            ))
-          )}
-        </section>
-      )}
+        </div>
+      </Modal>
     </div>
   );
-}
-
-function FlashcardStat(props: { label: string; value: number }) {
-  return (
-    <div className="rounded-4xl border border-white/8 bg-white/4 p-5">
-      <div className="text-sm text-white/55">{props.label}</div>
-      <div className="mt-2 text-3xl font-semibold text-white">{props.value}</div>
-    </div>
-  );
-}
-
-function buildFlashcardSections(
-  flashcards: Flashcard[],
-  chapters: Chapter[],
-  chapterById: Map<string, Chapter>,
-  requirementById: Map<string, Requirement>,
-) {
-  const chapterOrder = new Map(chapters.map((chapter, index) => [chapter.id, index]));
-  const sections = new Map<
-    string,
-    { key: string; chapterLabel: string; requirementLabel: string; sortKey: [number, string, string]; cards: Flashcard[] }
-  >();
-
-  for (const card of flashcards) {
-    const chapter = card.chapterId ? chapterById.get(card.chapterId) : undefined;
-    const requirement = card.requirementId ? requirementById.get(card.requirementId) : undefined;
-    const chapterLabel = chapter?.name ?? 'Ohne Kapitel';
-    const requirementLabel = requirement?.name ?? 'Ohne Requirement';
-    const key = `${chapter?.id ?? 'none'}:${requirement?.id ?? 'none'}`;
-    const current = sections.get(key) ?? {
-      key,
-      chapterLabel,
-      requirementLabel,
-      sortKey: [chapter ? (chapterOrder.get(chapter.id) ?? 9999) : 10000, chapterLabel, requirementLabel],
-      cards: [],
-    };
-    current.cards.push(card);
-    sections.set(key, current);
-  }
-
-  return Array.from(sections.values())
-    .map((section) => ({
-      ...section,
-      cards: section.cards.sort((a, b) => a.dueAtMs - b.dueAtMs || b.updatedAtMs - a.updatedAtMs),
-    }))
-    .sort((a, b) => {
-      if (a.sortKey[0] !== b.sortKey[0]) return a.sortKey[0] - b.sortKey[0];
-      if (a.sortKey[1] !== b.sortKey[1]) return a.sortKey[1].localeCompare(b.sortKey[1]);
-      return a.sortKey[2].localeCompare(b.sortKey[2]);
-    });
 }

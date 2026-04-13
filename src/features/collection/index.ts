@@ -1,7 +1,10 @@
 export { SubjectPage } from './subject/SubjectPage'
+export { SubjectFlashcardsPage } from './subject/SubjectFlashcardsPage'
+export { SubjectFlashcardReviewPage } from './subject/SubjectFlashcardReviewPage'
 export { TopicPage } from './topic/TopicPage'
 export { TopicLearnPathPage } from './topic/TopicLearnPathPage'
 export { TopicFlashcardsPage } from './topic/TopicFlashcardsPage'
+export { TopicFlashcardReviewPage } from './topic/flashcards/TopicFlashcardReviewPage'
 export { CollectionPage } from './CollectionPage'
 export { AssetPage } from './asset/pages/AssetPage'
 

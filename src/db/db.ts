@@ -649,6 +649,121 @@ export class AbiDb extends Dexie {
       plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
       scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
     });
+
+    this.version(21).stores({
+      subjects: 'id, name',
+      topics: 'id, subjectId, orderIndex',
+      folders: 'id, topicId, parentFolderId, orderIndex',
+      assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+      assetFiles: 'assetId',
+
+      curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+      chapters: 'id, topicId, orderIndex',
+      requirements: 'id, chapterId, difficulty, mastery',
+      learnPathProgress:
+        'id, topicId, chapterId, requirementId, mode, status, updatedAtMs, [topicId+requirementId+mode]',
+      learnPathSessionRequirements:
+        'id, studySessionId, topicId, chapterId, requirementId, status, updatedAtMs, [studySessionId+requirementId]',
+      flashcards:
+        'id, subjectId, topicId, chapterId, requirementId, state, dueAtMs, updatedAtMs, [topicId+dueAtMs], [topicId+requirementId]',
+
+      studySessions: 'id, subjectId, topicId, source, startedAtMs, endedAtMs',
+      exercises: 'id, assetId, status',
+      problems: 'id, [exerciseId+idx], exerciseId, idx',
+      subproblems: 'id, [problemId+label], problemId, label',
+      subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+      attempts:
+        'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+      attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+      attemptAiReviews: 'id, attemptId, result, createdAtMs',
+      attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+      inkStrokes:
+        'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+      openAiPdfFileCache: 'pdfSha256, updatedAtMs',
+
+      plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+      scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+    });
+
+    this.version(22)
+      .stores({
+        subjects: 'id, name',
+        topics: 'id, subjectId, orderIndex',
+        folders: 'id, topicId, parentFolderId, orderIndex',
+        assets: 'id, subjectId, topicId, folderId, type, createdAtMs',
+        assetFiles: 'assetId',
+
+        curriculumDocuments: 'id, subjectId, uploadedAtMs, status',
+        chapters: 'id, topicId, orderIndex',
+        requirements: 'id, chapterId, difficulty, mastery',
+        learnPathProgress:
+          'id, topicId, chapterId, requirementId, mode, status, updatedAtMs, [topicId+requirementId+mode]',
+        learnPathSessionRequirements:
+          'id, studySessionId, topicId, chapterId, requirementId, status, updatedAtMs, [studySessionId+requirementId]',
+        flashcards:
+          'id, subjectId, topicId, chapterId, requirementId, state, dueAtMs, updatedAtMs, [topicId+dueAtMs], [topicId+requirementId]',
+
+        studySessions: 'id, subjectId, topicId, source, startedAtMs, endedAtMs',
+        exercises: 'id, assetId, status',
+        problems: 'id, [exerciseId+idx], exerciseId, idx',
+        subproblems: 'id, [problemId+label], problemId, label',
+        subsubproblems: 'id, [subproblemId+label], subproblemId, label',
+        attempts:
+          'id, studySessionId, subproblemId, subsubproblemId, startedAtMs, endedAtMs, result, reviewStatus',
+        attemptRequirementLinks: 'id, attemptId, requirementId, [attemptId+requirementId]',
+        attemptAiReviews: 'id, attemptId, result, createdAtMs',
+        attemptReviewJobs: 'id, attemptId, assetId, topicId, subjectId, status, requestedAtMs',
+
+        inkStrokes:
+          'id, [studySessionId+assetId], studySessionId, assetId, attemptId, createdAtMs, updatedAtMs',
+        openAiPdfFileCache: 'pdfSha256, updatedAtMs',
+
+        plannedItems: 'id, type, topicId, subjectId, startAtMs, durationMs, createdAtMs',
+        scheduledReviews: 'id, subjectId, topicId, assetId, requirementId, dueAtMs, status',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('requirements')
+          .toCollection()
+          .modify(
+            (row: {
+              materialSnippets?: Array<{ text?: unknown; sourceAssetId?: unknown; sourceName?: unknown }>;
+              materialContext?: unknown;
+              materialContextSources?: unknown;
+            }) => {
+              if (typeof row.materialContext !== 'string' || !row.materialContext.trim()) {
+                const snippets = Array.isArray(row.materialSnippets) ? row.materialSnippets : [];
+                const contextParts = snippets
+                  .map((snippet) => (typeof snippet.text === 'string' ? snippet.text.trim() : ''))
+                  .filter(Boolean);
+                row.materialContext = contextParts.length > 0 ? contextParts.join('\n\n') : undefined;
+              }
+              if (!Array.isArray(row.materialContextSources)) {
+                const snippets = Array.isArray(row.materialSnippets) ? row.materialSnippets : [];
+                row.materialContextSources = snippets
+                  .map((snippet) => {
+                    const sourceAssetId =
+                      typeof snippet.sourceAssetId === 'string' ? snippet.sourceAssetId : null;
+                    const sourceName =
+                      typeof snippet.sourceName === 'string' ? snippet.sourceName.trim() : '';
+                    const appendedText =
+                      typeof snippet.text === 'string' ? snippet.text.trim() : '';
+                    if (!sourceAssetId || !sourceName || !appendedText) return null;
+                    return {
+                      id: crypto.randomUUID(),
+                      sourceAssetId,
+                      sourceName,
+                      appendedText,
+                      appendedAtMs: Date.now(),
+                    };
+                  })
+                  .filter(Boolean);
+              }
+              if ('materialSnippets' in row) delete row.materialSnippets;
+            },
+          );
+      });
   }
 }
 

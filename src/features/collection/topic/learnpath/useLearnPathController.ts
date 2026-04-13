@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Chapter, LearnPathMode, LearnPathProgress, Requirement } from '../../../../domain/models';
+import type {
+  Chapter,
+  LearnPathMode,
+  LearnPathProgress,
+  Requirement,
+} from '../../../../domain/models';
 import { newId } from '../../../../lib/id';
 import {
   flashcardRepo,
@@ -12,9 +17,11 @@ import {
 import { useCurriculumStore } from '../../../../stores/curriculumStore';
 import { useActiveSessionStore } from '../../../../stores/activeSessionStore';
 import { useNotificationsStore } from '../../../../stores/notificationsStore';
+import { useAssetsStore } from '../../../../stores/assetsStore';
 import { useStudyStore } from '../../../session/stores/studyStore';
 import { createInitialFlashcardSchedule } from '../flashcards/flashcardSrs';
 import { generateRequirementFlashcards } from './ai/requirementFlashcardAiClient';
+import { scanRequirementMaterial } from './ai/requirementMaterialScanAiClient';
 import { requestRequirementPlanTurn } from './ai/requirementRailAiClient';
 import { reduceLearnPathState } from './learnPathReducer';
 import {
@@ -59,6 +66,12 @@ type GeneratedRequirementFlashcard = {
   requirementId?: string;
 };
 
+type MaterialScanResult = {
+  requirementId: string;
+  summary: string;
+  sourceName?: string;
+};
+
 export function useLearnPathController(props: {
   subjectId: string;
   topicId: string;
@@ -72,6 +85,8 @@ export function useLearnPathController(props: {
   const curriculumLoading = useCurriculumStore((s) => s.loadingByTopic[props.topicId] ?? false);
   const curriculumError = useCurriculumStore((s) => s.errorByTopic[props.topicId]);
   const pushNotification = useNotificationsStore((s) => s.push);
+  const uploadAssetWithFile = useAssetsStore((s) => s.createWithFile);
+  const refreshAssetsByTopic = useAssetsStore((s) => s.refreshByTopic);
   const activeSession = useActiveSessionStore((s) => s.active);
   const startActiveSession = useActiveSessionStore((s) => s.start);
   const endActiveSession = useActiveSessionStore((s) => s.end);
@@ -87,6 +102,9 @@ export function useLearnPathController(props: {
   const [generatedFlashcards, setGeneratedFlashcards] = useState<GeneratedRequirementFlashcard[]>([]);
   const [completionBusy, setCompletionBusy] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [materialLastMatches, setMaterialLastMatches] = useState<MaterialScanResult[]>([]);
+  const [materialBusy, setMaterialBusy] = useState(false);
+  const [materialError, setMaterialError] = useState<string | null>(null);
   const [state, dispatch] = useReducer(
     (currentState: LearnPathState, action: LearnPathAction) =>
       reduceLearnPathState(currentState, action),
@@ -140,6 +158,9 @@ export function useLearnPathController(props: {
     setGeneratedFlashcards([]);
     setCompletionBusy(false);
     setCompletionError(null);
+    setMaterialLastMatches([]);
+    setMaterialBusy(false);
+    setMaterialError(null);
     dispatch({ type: 'RESET_TO_OVERVIEW' });
 
     const store = useCurriculumStore.getState();
@@ -326,6 +347,8 @@ export function useLearnPathController(props: {
     setGeneratedFlashcards([]);
     setCompletionBusy(false);
     setCompletionError(null);
+    setMaterialLastMatches([]);
+    setMaterialError(null);
     dispatch({ type: 'RESET_TO_OVERVIEW' });
     void loadProgress();
   }, [loadProgress]);
@@ -345,10 +368,14 @@ export function useLearnPathController(props: {
         if (!snapshot.started || !snapshot.mode || !group || !requirement) return;
 
         const history = buildRequirementHistory(snapshot.messages, group.chapter.id, requirement.id);
+        const requirementContext = {
+          materialContext: requirement.materialContext?.trim() || undefined,
+        };
         const response = await requestRequirementPlanTurn({
           mode: snapshot.activePlan ? 'turn' : 'plan',
           learningMode: snapshot.mode,
           requirementGoal: buildRequirementGoal(requirement),
+          requirementContext,
           history,
           chapterContext: {
             subjectName: props.subjectName,
@@ -770,6 +797,9 @@ export function useLearnPathController(props: {
       const snapshot = stateRef.current;
       const drafts = await generateRequirementFlashcards({
         requirementGoal: buildRequirementGoal(currentRequirement),
+        requirementContext: {
+          materialContext: currentRequirement.materialContext?.trim() || undefined,
+        },
         history: buildRequirementHistory(snapshot.messages, currentChapter.id, currentRequirement.id),
         chapterContext: {
           subjectName: props.subjectName,
@@ -871,6 +901,127 @@ export function useLearnPathController(props: {
     }
   }, [generatedFlashcards, props.subjectId, props.topicId, pushNotification]);
 
+  const handleScanMaterialFiles = useCallback(
+    async (files: File[]) => {
+      const pdfFiles = files.filter(
+        (file) =>
+          file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'),
+      );
+      if (pdfFiles.length === 0) {
+        setMaterialError('Bitte mindestens eine PDF-Datei auswählen.');
+        return;
+      }
+      setMaterialBusy(true);
+      setMaterialError(null);
+      try {
+        const matches = await scanRequirementMaterial({
+          subjectName: props.subjectName,
+          topicName: props.topicName,
+          files: pdfFiles,
+          targets: groupedRequirementsRef.current.flatMap((group) =>
+            group.requirements.map((requirement) => ({
+              requirementId: requirement.id,
+              requirementName: requirement.name,
+              chapterName: group.chapter.name,
+              description: requirement.description,
+            })),
+          ),
+        });
+
+        const sourceAssetIdByName = new Map<string, string>();
+        for (const file of pdfFiles) {
+          const createdAsset = await uploadAssetWithFile({
+            subjectId: props.subjectId,
+            topicId: props.topicId,
+            type: 'file',
+            title: `Unterrichtsmaterial: ${file.name}`,
+            file,
+          });
+          sourceAssetIdByName.set(file.name, createdAsset.id);
+        }
+
+        const requirementById = new Map(
+          groupedRequirementsRef.current.flatMap((group) => group.requirements.map((item) => [item.id, item])),
+        );
+
+        const appliedMatches: MaterialScanResult[] = [];
+        for (const match of matches) {
+          const requirement = requirementById.get(match.requirementId);
+          if (!requirement) continue;
+          const sourceName = match.sourceName?.trim() || 'unbekannte PDF';
+          const sourceAssetId = sourceAssetIdByName.get(sourceName);
+          if (!sourceAssetId) continue;
+          const appendedText = match.summary.trim();
+          if (!appendedText) continue;
+
+          const existingSources = requirement.materialContextSources ?? [];
+          const alreadyExists = existingSources.some(
+            (entry) => entry.sourceName === sourceName && entry.appendedText === appendedText,
+          );
+          if (alreadyExists) continue;
+
+          const nextMaterialContext = appendMaterialContext(requirement.materialContext, {
+            sourceName,
+            appendedText,
+          });
+          const nextSourceEntry = {
+            id: newId(),
+            sourceAssetId,
+            sourceName,
+            appendedText,
+            appendedAtMs: Date.now(),
+          };
+
+          await requirementRepo.update(requirement.id, {
+            materialContext: nextMaterialContext,
+            materialContextSources: [...existingSources, nextSourceEntry],
+          });
+
+          requirementById.set(requirement.id, {
+            ...requirement,
+            materialContext: nextMaterialContext,
+            materialContextSources: [...existingSources, nextSourceEntry],
+          });
+          appliedMatches.push({
+            requirementId: requirement.id,
+            summary: appendedText,
+            sourceName,
+          });
+        }
+
+        await refreshTopicCurriculum(props.topicId);
+        await refreshAssetsByTopic(props.topicId);
+        setMaterialLastMatches(appliedMatches);
+        pushNotification({
+          tone: 'success',
+          title: 'Unterrichtsmaterial verarbeitet',
+          message:
+            appliedMatches.length > 0
+              ? `${appliedMatches.length} Requirement-Kontexte wurden erweitert.`
+              : 'Es wurden keine neuen Requirement-Kontexte ergänzt.',
+        });
+      } catch (scanError) {
+        setMaterialError(
+          scanError instanceof Error
+            ? scanError.message
+            : 'Unterrichtsmaterial konnte nicht analysiert werden',
+        );
+      } finally {
+        if (mountedRef.current) setMaterialBusy(false);
+      }
+    },
+    [
+      props.subjectId,
+      props.subjectName,
+      props.topicId,
+      props.topicName,
+      pushNotification,
+      refreshAssetsByTopic,
+      refreshTopicCurriculum,
+      uploadAssetWithFile,
+    ],
+  );
+
   const handleCompletionContinue = useCallback(() => {
     if (!currentRequirement || !state.mode) return;
     setGeneratedFlashcards([]);
@@ -930,6 +1081,9 @@ export function useLearnPathController(props: {
     currentRequirementGoal,
     nextRequirementAvailable,
     generatedFlashcards,
+    materialLastMatches,
+    materialBusy,
+    materialError,
     completionBusy,
     completionError,
     leaveDialogOpen,
@@ -942,6 +1096,7 @@ export function useLearnPathController(props: {
     handleResumeLatest,
     handleStartOverviewItem,
     handleGenerateFlashcards,
+    handleScanMaterialFiles,
     updateGeneratedFlashcard,
     handleSaveGeneratedFlashcards,
     handleCompletionContinue,
@@ -968,6 +1123,15 @@ function findRequirementPosition(groups: LearnPathGroup[], requirementId: string
     }
   }
   return null;
+}
+
+function appendMaterialContext(
+  existing: string | undefined,
+  input: { sourceName: string; appendedText: string },
+) {
+  const base = existing?.trim();
+  const block = `[Quelle: ${input.sourceName}]\n${input.appendedText.trim()}`;
+  return base ? `${base}\n\n${block}` : block;
 }
 
 function buildLearnPathProgressId(topicId: string, requirementId: string, mode: LearnPathMode) {

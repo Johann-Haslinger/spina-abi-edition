@@ -94,6 +94,12 @@ export function SubjectPage() {
               Lehrplan hochladen
             </GhostButton>
             <GhostButton
+              onClick={() => navigate(`/subjects/${subjectId}/flashcards`)}
+              className="text-sm"
+            >
+              Karteikarten
+            </GhostButton>
+            <GhostButton
               onClick={async () => {
                 const due = await scheduledReviewRepo.listDueBySubject(subjectId, Date.now());
                 if (!due.length) {

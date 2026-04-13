@@ -64,6 +64,7 @@ type ReqBody = {
   requirementGoal?: unknown;
   history?: unknown;
   chapterContext?: unknown;
+  requirementContext?: unknown;
   plan?: unknown;
   currentStepId?: unknown;
 };
@@ -83,6 +84,7 @@ serve(async (req) => {
 
     const history = normalizeHistory(body.history);
     const chapterContext = normalizeChapterContext(body.chapterContext);
+    const requirementContext = normalizeRequirementContext(body.requirementContext);
     const plan = normalizePlan(body.plan);
     const currentStepId =
       typeof body.currentStepId === 'string' && body.currentStepId.trim()
@@ -104,6 +106,7 @@ serve(async (req) => {
       learningMode,
       requirementGoal,
       chapterContext,
+      requirementContext,
       history,
       plan,
       currentStepId,
@@ -364,6 +367,7 @@ function buildPrompt(input: {
   learningMode: 'learn' | 'review';
   requirementGoal: string;
   chapterContext: ReturnType<typeof normalizeChapterContext>;
+  requirementContext: ReturnType<typeof normalizeRequirementContext>;
   history: HistoryMessage[];
   plan: RequirementPlan | null;
   currentStepId?: string;
@@ -379,6 +383,7 @@ function buildPrompt(input: {
     'Allgemeine Regeln:',
     '- Schreibe auf Deutsch, klar, freundlich, substanziell und lernorientiert.',
     '- Vermeide generische Meta-Rueckfragen wie "Soll ich tiefer gehen?", "Ist das nachvollziehbar?" oder "Soll ich noch ein Beispiel geben?".',
+    '- Prioritaet hat der Unterrichtsmaterial-Kontext. Erklaere, frage und uebe zuerst entlang dieser Inhalte.',
     '- Wenn du fachlich etwas erklaerst, endet die Nachricht mit genau EINER kurzen Verstaendnisfrage, die sich direkt auf den gerade erklaerten Inhalt bezieht.',
     '- Die Verstaendnisfrage soll kurz sein und eher an den erklaerten Inhalt anschliessen als neue Themen aufmachen.',
     '- Wechsle Schritt oder Interaktionsform, sobald es didaktisch sinnvoll ist. Bleibe nicht kuenstlich zu lange im selben Schritt.',
@@ -394,6 +399,7 @@ function buildPrompt(input: {
     `Requirement-Ziel: ${input.requirementGoal}`,
     `Lernmodus: ${input.learningMode}`,
     `Kapitelkontext: ${JSON.stringify(input.chapterContext)}`,
+    `Unterrichtsmaterial-Kontext: ${safeSnippet(input.requirementContext.materialContext ?? '', 2600)}`,
     `Bisheriger Verlauf: ${safeSnippet(JSON.stringify(input.history), 3200)}`,
   ];
 
@@ -846,6 +852,14 @@ function normalizeChapterContext(input: unknown) {
     topicName: asNonEmptyString(row.topicName),
     chapterName: asNonEmptyString(row.chapterName),
     requirementName: asNonEmptyString(row.requirementName),
+  };
+}
+
+function normalizeRequirementContext(input: unknown) {
+  const row = (input ?? null) as Record<string, unknown> | null;
+  const materialContext = asNonEmptyString(row?.materialContext);
+  return {
+    materialContext,
   };
 }
 

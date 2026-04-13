@@ -5,6 +5,7 @@ import type {
   Flashcard,
   LearnPathProgress,
   Requirement,
+  RequirementMaterialContextSource,
   ScheduledReview,
 } from '../../domain/models';
 import { newId } from '../../lib/id';
@@ -118,6 +119,8 @@ export class LocalRequirementRepository implements RequirementRepository {
       chapterId: input.chapterId,
       name: input.name.trim(),
       description: input.description?.trim() || undefined,
+      materialContext: normalizeMaterialContext(input.materialContext),
+      materialContextSources: normalizeMaterialContextSources(input.materialContextSources),
       difficulty: input.difficulty,
       mastery: clampMastery(input.mastery ?? 0),
     };
@@ -133,6 +136,12 @@ export class LocalRequirementRepository implements RequirementRepository {
       ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
       ...(patch.description !== undefined
         ? { description: patch.description?.trim() || undefined }
+        : {}),
+      ...(patch.materialContext !== undefined
+        ? { materialContext: normalizeMaterialContext(patch.materialContext) }
+        : {}),
+      ...(patch.materialContextSources !== undefined
+        ? { materialContextSources: normalizeMaterialContextSources(patch.materialContextSources) }
         : {}),
       ...(patch.difficulty !== undefined ? { difficulty: patch.difficulty } : {}),
       ...(patch.mastery !== undefined ? { mastery: clampMastery(patch.mastery) } : {}),
@@ -209,6 +218,11 @@ export class LocalFlashcardRepository implements FlashcardRepository {
       .equals(topicId)
       .reverse()
       .sortBy('updatedAtMs');
+  }
+
+  async listBySubject(subjectId: string): Promise<Flashcard[]> {
+    const rows = await db.flashcards.where('subjectId').equals(subjectId).toArray();
+    return rows.sort((a, b) => b.updatedAtMs - a.updatedAtMs);
   }
 
   async listDueByTopic(topicId: string, nowMs: number): Promise<Flashcard[]> {
@@ -292,4 +306,30 @@ function clampMastery(mastery: number) {
 function clampIntervalDays(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(365, value));
+}
+
+function normalizeMaterialContext(value: Requirement['materialContext']) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeMaterialContextSources(value: Requirement['materialContextSources']) {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const normalized = value
+    .map<RequirementMaterialContextSource | null>((entry) => {
+      const sourceName = entry.sourceName?.trim();
+      const appendedText = entry.appendedText?.trim();
+      if (!entry.sourceAssetId || !sourceName || !appendedText) return null;
+      return {
+        id: entry.id,
+        sourceAssetId: entry.sourceAssetId,
+        sourceName,
+        appendedText,
+        appendedAtMs:
+          typeof entry.appendedAtMs === 'number' && Number.isFinite(entry.appendedAtMs)
+            ? entry.appendedAtMs
+            : Date.now(),
+      };
+    })
+    .filter((entry): entry is RequirementMaterialContextSource => entry != null);
+  return normalized.length > 0 ? normalized : undefined;
 }

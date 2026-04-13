@@ -94,8 +94,18 @@ export type Requirement = {
   chapterId: Id;
   name: string;
   description?: string;
+  materialContext?: string;
+  materialContextSources?: RequirementMaterialContextSource[];
   difficulty: 1 | 2 | 3 | 4 | 5;
   mastery: number;
+};
+
+export type RequirementMaterialContextSource = {
+  id: Id;
+  sourceAssetId: Id;
+  sourceName: string;
+  appendedText: string;
+  appendedAtMs: number;
 };
 
 export type LearnPathMode = 'learn' | 'review';

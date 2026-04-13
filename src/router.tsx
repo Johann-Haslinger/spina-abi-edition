@@ -4,7 +4,10 @@ import { LastVisitedRedirect } from './app/LastVisitedRedirect';
 import {
   AssetPage,
   CollectionPage,
+  SubjectFlashcardReviewPage,
+  SubjectFlashcardsPage,
   SubjectPage,
+  TopicFlashcardReviewPage,
   TopicFlashcardsPage,
   TopicLearnPathPage,
   TopicPage,
@@ -24,6 +27,16 @@ export const router = createBrowserRouter([
       { path: '/collection', element: <CollectionPage />, handle: { crumb: 'collection' } },
       { path: '/subjects/:subjectId', element: <SubjectPage />, handle: { crumb: 'subject' } },
       {
+        path: '/subjects/:subjectId/flashcards/review/:scope',
+        element: <SubjectFlashcardReviewPage />,
+        handle: { crumb: 'subject' },
+      },
+      {
+        path: '/subjects/:subjectId/flashcards',
+        element: <SubjectFlashcardsPage />,
+        handle: { crumb: 'subject' },
+      },
+      {
         path: '/subjects/:subjectId/topics/:topicId',
         element: <TopicPage />,
         handle: { crumb: 'topic' },
@@ -31,6 +44,11 @@ export const router = createBrowserRouter([
       {
         path: '/subjects/:subjectId/topics/:topicId/learnpath',
         element: <TopicLearnPathPage />,
+        handle: { crumb: 'topic' },
+      },
+      {
+        path: '/subjects/:subjectId/topics/:topicId/flashcards/review/:scope',
+        element: <TopicFlashcardReviewPage />,
         handle: { crumb: 'topic' },
       },
       {

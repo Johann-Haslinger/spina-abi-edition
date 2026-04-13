@@ -10,6 +10,9 @@ export type RequirementFlashcardAiRequest = {
     chapterName: string;
     requirementName: string;
   };
+  requirementContext?: {
+    materialContext?: string;
+  };
 };
 
 export type RequirementFlashcardDraft = {
@@ -26,6 +29,7 @@ export async function generateRequirementFlashcards(
       requirementGoal: input.requirementGoal,
       history: input.history,
       chapterContext: input.chapterContext,
+      requirementContext: input.requirementContext,
     },
   });
 

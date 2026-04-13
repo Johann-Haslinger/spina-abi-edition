@@ -62,6 +62,10 @@ export function TopicKnowledgePathView(props: {
             firstOpenRequirement={controller.firstOpenRequirement}
             onResumeLatest={controller.handleResumeLatest}
             onStartRequirement={controller.handleStartOverviewItem}
+            materialLastMatches={controller.materialLastMatches}
+            materialBusy={controller.materialBusy}
+            materialError={controller.materialError}
+            onScanMaterialFiles={controller.handleScanMaterialFiles}
           />
         </div>
       </>

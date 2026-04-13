@@ -18,6 +18,7 @@ type ReqBody = {
   requirementGoal?: unknown;
   history?: unknown;
   chapterContext?: unknown;
+  requirementContext?: unknown;
 };
 
 serve(async (req) => {
@@ -31,6 +32,7 @@ serve(async (req) => {
     if (!requirementGoal) return json(400, { error: 'requirementGoal fehlt' });
 
     const chapterContext = normalizeChapterContext(body.chapterContext);
+    const requirementContext = normalizeRequirementContext(body.requirementContext);
     const history = normalizeHistory(body.history);
     const model = Deno.env.get('OPENAI_MODEL') || 'gpt-5.2';
     const apiKey = assertEnv('OPENAI_API_KEY');
@@ -38,6 +40,7 @@ serve(async (req) => {
     const prompt = buildPrompt({
       requirementGoal,
       chapterContext,
+      requirementContext,
       history,
     });
 
@@ -82,6 +85,9 @@ function buildPrompt(input: {
     chapterName?: string;
     requirementName?: string;
   };
+  requirementContext: {
+    materialSnippets: string[];
+  };
   history: Array<{ role: 'user' | 'assistant'; content: string }>;
 }) {
   const contextLines = [
@@ -92,19 +98,26 @@ function buildPrompt(input: {
       ? `Requirement: ${input.chapterContext.requirementName}`
       : null,
     `Lernziel: ${input.requirementGoal}`,
+    input.requirementContext.materialSnippets.length > 0
+      ? `Unterrichtsmaterial: ${input.requirementContext.materialSnippets.join(' | ')}`
+      : null,
   ].filter(Boolean);
 
   const historyBlock =
     input.history.length > 0
       ? input.history
           .slice(-10)
-          .map((message) => `${message.role === 'assistant' ? 'Tutor' : 'Lernende Person'}: ${message.content}`)
+          .map(
+            (message) =>
+              `${message.role === 'assistant' ? 'Tutor' : 'Lernende Person'}: ${message.content}`,
+          )
           .join('\n\n')
       : 'Keine weitere Lernhistorie vorhanden.';
 
   return [
     'Erzeuge 4 bis 6 hochwertige Karteikarten fuer ein abgeschlossenes Requirement.',
     'Die Karten muessen knapp, fachlich korrekt und fuer aktives Erinnern geeignet sein.',
+    'Wenn Unterrichtsmaterial angegeben ist, priorisiere dessen Begriffe und Inhalte.',
     'Nutze Vorderseite fuer die Frage oder den Begriff, Rueckseite fuer die praezise Antwort.',
     'Vermeide triviale Duplikate und formuliere die Rueckseiten konkret.',
     'Antworte ausschliesslich als JSON im Format {"flashcards":[{"front":"...","back":"..."}]}.',
@@ -133,6 +146,17 @@ function normalizeChapterContext(value: unknown) {
   };
 }
 
+function normalizeRequirementContext(value: unknown) {
+  const row = (value ?? null) as { materialSnippets?: unknown } | null;
+  const materialSnippets = Array.isArray(row?.materialSnippets)
+    ? row.materialSnippets
+        .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+        .filter(Boolean)
+        .slice(0, 12)
+    : [];
+  return { materialSnippets };
+}
+
 function normalizeHistory(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
@@ -148,7 +172,9 @@ function normalizeHistory(value: unknown) {
       }
       return { role: row.role, content: row.content.trim() };
     })
-    .filter((message): message is { role: 'user' | 'assistant'; content: string } => message != null);
+    .filter(
+      (message): message is { role: 'user' | 'assistant'; content: string } => message != null,
+    );
 }
 
 function normalizeFlashcards(value: unknown) {
